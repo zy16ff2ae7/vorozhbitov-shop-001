@@ -844,6 +844,19 @@ class BotTests(unittest.TestCase):
                 everything = [product["image"], *product["images"], *product["spin"]]
                 self.assertFalse([a for a in everything if "pack" in a], "упаковка попала в карточку")
 
+    def test_welcome_screen_always_shows_on_launch(self):
+        """Приветствие — визитка бренда, оно не должно пропадать после входа."""
+        app_js = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
+        index = (Path(__file__).with_name("miniapp") / "index.html").read_text(encoding="utf-8")
+        # Флаг «уже заходил» в Telegram переживает перезапуск Mini App,
+        # из-за него заставка переставала показываться совсем.
+        self.assertNotIn("vorozhbitov_entered", app_js)
+        self.assertIn('id="welcome"', index)
+        self.assertIn('id="enterShop"', index)
+        # Заставка обязана подниматься над магазином и уметь закрываться.
+        self.assertIn("welcome.classList.remove(\"hidden\")", app_js)
+        self.assertIn("function enterShop", app_js)
+
     def test_rate_limiter_blocks_burst_and_recovers(self):
         limiter = RateLimiter(limit=3, window_seconds=60)
         self.assertTrue(all(limiter.allow("user:1", now=100.0) for _ in range(3)))

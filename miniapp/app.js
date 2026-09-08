@@ -1102,28 +1102,31 @@
   }
 
   function enterShop() {
-    sessionStorage.setItem("vorozhbitov_entered", "1");
-    $("#welcome").classList.add("hidden");
+    const welcome = $("#welcome");
+    if (welcome.classList.contains("is-leaving")) return;
+    // Заставка уходит вверх, а не пропадает рывком.
+    welcome.classList.add("is-leaving");
     document.body.classList.remove("welcoming", "booting");
-    stopWelcomeVideo();
     haptic("medium");
+    window.setTimeout(() => {
+      welcome.classList.add("hidden");
+      welcome.classList.remove("is-leaving");
+      stopWelcomeVideo();
+    }, 520);
   }
 
   function startExperience() {
     const boot = $("#boot");
     const welcome = $("#welcome");
-    const skipWelcome = sessionStorage.getItem("vorozhbitov_entered") === "1";
+    // Приветствие — визитка бренда, показываем его при каждом запуске.
+    // Раньше здесь стоял флаг в sessionStorage, но в Telegram он переживает
+    // перезапуск Mini App, и заставка переставала появляться совсем.
     window.setTimeout(() => {
       document.body.classList.remove("booting");
       if (boot) boot.classList.add("hidden");
-      if (skipWelcome) {
-        welcome.classList.add("hidden");
-        document.body.classList.remove("welcoming");
-      } else {
-        welcome.classList.remove("hidden");
-        document.body.classList.add("welcoming");
-      }
-    }, 1400);
+      welcome.classList.remove("hidden");
+      document.body.classList.add("welcoming");
+    }, 1100);
   }
 
   async function loadCatalog() {
