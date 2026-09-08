@@ -3301,7 +3301,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                     ],
                     "categories": catalog.categories,
                     "lookbook": catalog.data.get("lookbook", []),
-                    "media": catalog.data.get("media", {}),
+                    "media": self._stamp_media(catalog.data.get("media", {})),
                 }
             self._write(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
@@ -3344,6 +3344,27 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         else:
             cache = "no-cache"
         self._write(body, content_type, 200, cache)
+
+    def _stamp_media(self, media: dict[str, Any]) -> dict[str, Any]:
+        """Добавить ?v=<время правки> к роликам и постерам из блока media.
+
+        Видео отдаётся с ``max-age=86400``, а имя файла не меняется: заменив
+        ``teaser.mp4``, мы сутки показывали бы всем старую копию из кеша
+        браузера. Версия в адресе делает подмену мгновенной.
+        """
+        stamped: dict[str, Any] = {}
+        for key, value in media.items():
+            if not isinstance(value, str) or not value or "?" in value or "://" in value:
+                stamped[key] = value
+                continue
+            candidate = self.static_root / value.lstrip("/")
+            try:
+                version = int(candidate.stat().st_mtime)
+            except OSError:
+                stamped[key] = value
+                continue
+            stamped[key] = f"{value}?v={version}"
+        return stamped
 
     def _stamp_assets(self, body: bytes) -> bytes:
         """Добавить ?v=<время правки> к app.js и styles.css в index.html."""

@@ -891,6 +891,28 @@ class BotTests(unittest.TestCase):
         for selector in (".welcome-lede", ".welcome-drop", ".welcome-facts", ".welcome-close"):
             self.assertIn(selector, styles, f"нет стилей для {selector}")
 
+    def test_media_urls_carry_a_version_so_new_cuts_are_not_cached(self):
+        """Видео кешируется на сутки по неизменному имени — без версии в адресе
+        пользователь после замены ролика ещё сутки видит старый монтаж."""
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        server = start_health_server(0, catalog, None, None, None)
+        port = server.server_address[1]
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/catalog", timeout=5) as response:
+                media = json.loads(response.read().decode("utf-8"))["media"]
+            for key in ("teaser", "teaser_poster", "welcome_loop", "welcome_poster"):
+                with self.subTest(key=key):
+                    self.assertRegex(media[key], r"\?v=\d+$", f"{key} без версии — попадёт в кеш")
+            # Подписи в media — не адреса, версией их портить нельзя.
+            self.assertNotIn("?v=", media.get("teaser_title", ""))
+            # Адрес с версией обязан вести к настоящему файлу, а не в 404.
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/{media['teaser']}", timeout=5) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers.get("Content-Type"), "video/mp4")
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_teaser_video_is_the_film_cut(self):
         """В модалке — плёночный монтаж v2: вертикаль, со звуком, не тяжелее 6 МБ."""
         video = Path(__file__).with_name("miniapp") / "assets" / "video" / "teaser.mp4"
