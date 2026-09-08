@@ -22,17 +22,24 @@
   </div>
 
   <section class="welcome hidden" id="welcome" aria-label="Приветствие">
-    <img class="welcome-media" src="assets/welcome.jpg" alt="ВОРОЖБИТОВ — приветствие">
+    <video class="welcome-media" id="welcomeVideo" muted loop playsinline preload="none"
+           poster="assets/video/welcome-poster.jpg" aria-hidden="true"></video>
+    <img class="welcome-media" id="welcomeFallback" src="assets/video/welcome-poster.jpg" alt="ВОРОЖБИТОВ — приветствие">
     <div class="welcome-shade"></div>
     <div class="welcome-frame">
-      <div class="welcome-kicker"><span class="pulse-dot"></span> ВЫПУСК · ДЛЯ СВОИХ</div>
+      <div class="welcome-kicker"><span class="pulse-dot"></span> ВЫПУСК 001 · ДЛЯ СВОИХ</div>
       <h1>ВОРОЖ<br>БИТОВ</h1>
       <p class="welcome-copy" id="welcomeCopy">Брат. Ты зашёл на закрытую территорию. Здесь не витрина для всех — здесь форма для своих. Плотная ткань. Честная посадка. Тираж маленький. Сила и честь. Бери размер, пока он есть.</p>
+      <div class="welcome-count">
+        <span class="welcome-count-label">ДО КОНЦА ВЫПУСКА</span>
+        <strong id="welcomeTimer">—</strong>
+      </div>
       <button class="button button-primary punch" id="enterShop" type="button">ВОЙТИ В МАГАЗИН <span>↗</span></button>
+      <button class="text-button welcome-skip" id="watchTeaser" type="button">Сначала посмотреть ролик <span>▶</span></button>
       <div class="welcome-meta">
         <b>СИЛА И ЧЕСТЬ</b>
         <span>1993</span>
-        <span>ЛИМИТ</span>
+        <span id="welcomeStock">ЛИМИТ</span>
       </div>
     </div>
   </section>
@@ -72,10 +79,7 @@
     <main>
       <section class="hero" id="home">
         <div class="hero-media">
-          <video class="hero-video hidden" id="heroVideo" muted loop playsinline preload="none"
-                 poster="assets/video/hero-poster.jpg" aria-label="Никита Ворожбитов — выпуск 001"></video>
-          <img src="assets/welcome.jpg" alt="Приветственное фото ВОРОЖБИТОВ" fetchpriority="high" id="heroFallback">
-          <button class="hero-play hidden" id="heroPlay" type="button" aria-label="Включить видео">▶</button>
+          <img src="assets/drop/tee-night.jpg" alt="Никита Ворожбитов — выпуск 001" fetchpriority="high" id="heroFallback">
           <div class="hero-shade"></div>
           <div class="hero-bout" aria-hidden="true">
             <svg class="bout-svg" viewBox="0 0 140 260">
@@ -140,6 +144,7 @@
             <button class="button button-primary punch" data-scroll="catalog" type="button">СМОТРЕТЬ ВЫПУСК <span>↗</span></button>
             <button class="text-button" data-scroll="store" type="button">Магазин <span>↓</span></button>
           </div>
+          <div class="hero-drop" id="heroDrop" aria-label="Что в выпуске"></div>
           <div class="hero-specs">
             <div><strong>400</strong><span>Г/М²</span></div>
             <div><strong>СЕЙЧАС</strong><span>ЛИМИТ</span></div>

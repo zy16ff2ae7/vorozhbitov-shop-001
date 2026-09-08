@@ -777,7 +777,7 @@ class BotTests(unittest.TestCase):
                 with self.subTest(asset=asset):
                     self.assertTrue((root / asset).is_file(), f"нет файла {asset}")
         media = catalog.data.get("media", {})
-        for key in ("hero_loop", "hero_poster", "teaser", "teaser_poster"):
+        for key in ("welcome_loop", "welcome_poster", "teaser", "teaser_poster"):
             with self.subTest(key=key):
                 self.assertTrue((root / media[key]).is_file(), f"нет медиа {media[key]}")
 
@@ -788,7 +788,7 @@ class BotTests(unittest.TestCase):
             server = start_health_server(0, catalog, None, None, None)
             port = server.server_address[1]
             try:
-                base = f"http://127.0.0.1:{port}/assets/video/hero-loop.mp4"
+                base = f"http://127.0.0.1:{port}/assets/video/welcome-loop.mp4"
                 request = urllib.request.Request(base, headers={"Range": "bytes=0-1"})
                 with urllib.request.urlopen(request, timeout=5) as response:
                     self.assertEqual(response.status, 206)

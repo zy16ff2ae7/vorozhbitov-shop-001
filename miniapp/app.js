@@ -1059,10 +1059,12 @@
 
   function tickDrop() {
     const node = $("#dropTimer");
-    if (!node) return;
+    const welcomeNode = $("#welcomeTimer");
+    if (!node && !welcomeNode) return;
     const diff = DROP_END - Date.now();
     if (diff <= 0) {
-      node.textContent = "ВЫПУСК";
+      if (node) node.textContent = "ВЫПУСК";
+      if (welcomeNode) welcomeNode.textContent = "ВЫПУСК ЗАКРЫТ";
       return;
     }
     const days = Math.floor(diff / 86400000);
@@ -1070,7 +1072,13 @@
     const mins = Math.floor((diff % 3600000) / 60000);
     const secs = Math.floor((diff % 60000) / 1000);
     const pad = value => String(value).padStart(2, "0");
-    node.textContent = days > 0 ? `${days}д ${pad(hours)}:${pad(mins)}` : `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    const short = days > 0 ? `${days}д ${pad(hours)}:${pad(mins)}` : `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    if (node) node.textContent = short;
+    if (welcomeNode) {
+      welcomeNode.textContent = days > 0
+        ? `${days} д ${pad(hours)} ч ${pad(mins)} мин`
+        : `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    }
   }
 
   function configureTelegram() {
@@ -1097,6 +1105,7 @@
     sessionStorage.setItem("vorozhbitov_entered", "1");
     $("#welcome").classList.add("hidden");
     document.body.classList.remove("welcoming", "booting");
+    stopWelcomeVideo();
     haptic("medium");
   }
 
@@ -1150,8 +1159,8 @@
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
     return {
-      heroLoop: media.hero_loop || "assets/video/hero-loop.mp4",
-      heroPoster: media.hero_poster || "assets/video/hero-poster.jpg",
+      welcomeLoop: media.welcome_loop || "assets/video/welcome-loop.mp4",
+      welcomePoster: media.welcome_poster || "assets/video/welcome-poster.jpg",
       teaser: media.teaser || "assets/video/teaser.mp4",
       teaserPoster: media.teaser_poster || "assets/video/teaser-poster.jpg",
       title: media.teaser_title || "СИЛА И ЧЕСТЬ",
@@ -1179,67 +1188,80 @@
     if ($("#teaserCaption")) $("#teaserCaption").textContent = media.caption;
     const teaserVideo = $("#teaserVideo");
     if (teaserVideo) teaserVideo.poster = media.teaserPoster;
-    setupHeroVideo(media);
+    setupWelcomeVideo(media);
+    renderHeroDrop();
+    // Тираж на заставке берём из каталога, а не пишем руками.
+    const stock = $("#welcomeStock");
+    const lead = (state.data.products || []).find(p => p.real_photos && p.stock_label);
+    if (stock && lead) stock.textContent = String(lead.stock_label).toUpperCase();
   }
 
-  function setupHeroVideo(media) {
-    const video = $("#heroVideo");
-    const fallback = $("#heroFallback");
-    const playButton = $("#heroPlay");
+  function setupWelcomeVideo(media) {
+    const video = $("#welcomeVideo");
+    const fallback = $("#welcomeFallback");
     if (!video) return;
-    video.poster = media.heroPoster;
-    if (saverMode() || reducedMotion()) {
-      // Показываем постер съёмки вместо анимации.
-      if (fallback) fallback.src = media.heroPoster;
-      return;
-    }
+    video.poster = media.welcomePoster;
+    if (fallback) fallback.src = media.welcomePoster;
+    // При экономии трафика и «меньше движения» оставляем неподвижный кадр.
+    if (saverMode() || reducedMotion()) return;
     if (!video.dataset.src) {
-      video.dataset.src = media.heroLoop;
-      video.src = media.heroLoop;
+      video.dataset.src = media.welcomeLoop;
+      video.src = media.welcomeLoop;
       video.load();
     }
-    video.classList.remove("hidden");
-    if (fallback) fallback.classList.add("hidden");
-
     const tryPlay = () => {
       const attempt = video.play();
+      // Если автоплей отклонён (iOS), просто остаётся постер — кнопка не нужна.
       if (attempt && typeof attempt.catch === "function") {
-        // iOS WKWebView может отклонить автоплей — тогда показываем кнопку.
-        attempt.then(() => playButton && playButton.classList.add("hidden"))
-               .catch(() => playButton && playButton.classList.remove("hidden"));
+        attempt.then(() => video.classList.add("is-playing")).catch(() => {});
+      } else {
+        video.classList.add("is-playing");
       }
     };
     tryPlay();
-
-    if (playButton && !playButton.dataset.bound) {
-      playButton.dataset.bound = "1";
-      playButton.addEventListener("click", () => {
-        tryPlay();
-        haptic("light");
-      });
-    }
-    // Не крутим видео за пределами экрана и в свёрнутом приложении.
-    if ("IntersectionObserver" in window && !video.dataset.observed) {
-      video.dataset.observed = "1";
-      const observer = new IntersectionObserver(entries => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) tryPlay();
-          else video.pause();
-        });
-      }, { threshold: 0.15 });
-      observer.observe(video);
+    if (!video.dataset.bound) {
+      video.dataset.bound = "1";
       document.addEventListener("visibilitychange", () => {
         if (document.hidden) video.pause();
-        else if (!state.modalStack.includes("teaserModal")) tryPlay();
+        else if (!$("#welcome").classList.contains("hidden")) tryPlay();
       });
     }
+  }
+
+  /** Останавливает фон заставки — после входа он больше не нужен. */
+  function stopWelcomeVideo() {
+    const video = $("#welcomeVideo");
+    if (!video) return;
+    video.pause();
+    video.classList.remove("is-playing");
+    video.removeAttribute("src");
+    video.load();
+  }
+
+  /** Два лота выпуска прямо в шапке — сразу видно, что продаётся. */
+  function renderHeroDrop() {
+    const box = $("#heroDrop");
+    if (!box) return;
+    const picks = (state.data.products || []).filter(p => p.real_photos).slice(0, 2);
+    if (!picks.length) { box.innerHTML = ""; return; }
+    box.innerHTML = picks.map(product => `
+      <button class="hero-drop-card" type="button" data-open-product="${escapeHTML(product.id)}">
+        <img src="${escapeHTML(product.image)}" alt="" loading="lazy">
+        <span class="hero-drop-text">
+          <b>${escapeHTML(product.name)}</b>
+          <span>${escapeHTML(product.price)}</span>
+        </span>
+      </button>`).join("");
+    box.querySelectorAll("[data-open-product]").forEach(button => {
+      button.addEventListener("click", () => openProduct(button.dataset.openProduct));
+    });
   }
 
   function openTeaser() {
     const media = mediaConfig();
     const video = $("#teaserVideo");
-    const hero = $("#heroVideo");
-    if (hero) hero.pause();
+    const welcome = $("#welcomeVideo");
+    if (welcome) welcome.pause();
     if (video) {
       if (!video.src) video.src = media.teaser;
       video.currentTime = 0;
@@ -1261,9 +1283,10 @@
       video.pause();
       video.currentTime = 0;
     }
-    const hero = $("#heroVideo");
-    if (hero && !saverMode() && !reducedMotion()) {
-      const attempt = hero.play();
+    const welcome = $("#welcomeVideo");
+    // Фон заставки оживает только если сама заставка ещё на экране.
+    if (welcome && !saverMode() && !reducedMotion() && !$("#welcome").classList.contains("hidden")) {
+      const attempt = welcome.play();
       if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
     }
   }
@@ -1284,6 +1307,13 @@
 
   function bindEvents() {
     $("#enterShop").addEventListener("click", enterShop);
+    const watchTeaser = $("#watchTeaser");
+    if (watchTeaser) {
+      watchTeaser.addEventListener("click", () => {
+        enterShop();
+        openTeaser();
+      });
+    }
 
     if ($("#teaserCard")) $("#teaserCard").addEventListener("click", openTeaser);
     if ($("#teaserToStory")) $("#teaserToStory").addEventListener("click", shareTeaserToStory);

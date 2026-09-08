@@ -515,8 +515,8 @@
     }
   ],
   "media": {
-    "hero_loop": "assets/video/hero-loop.mp4",
-    "hero_poster": "assets/video/hero-poster.jpg",
+    "welcome_loop": "assets/video/welcome-loop.mp4",
+    "welcome_poster": "assets/video/welcome-poster.jpg",
     "teaser": "assets/video/teaser.mp4",
     "teaser_poster": "assets/video/teaser-poster.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",
