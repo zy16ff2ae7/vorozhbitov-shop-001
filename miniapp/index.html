@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#070708">
+  <meta name="description" content="ВОРОЖБИТОВ — официальная витрина. Сила и честь. Закрытый выпуск.">
+  <title>ВОРОЖБИТОВ</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body class="booting">
+  <div class="noise" aria-hidden="true"></div>
+  <div class="scan" aria-hidden="true"></div>
+
+  <div class="boot" id="boot" aria-hidden="true">
+    <div class="boot-year">1993</div>
+    <p class="boot-stamp">СИЛА<br><em>И ЧЕСТЬ</em></p>
+    <small>ВОРОЖБИТОВ</small>
+  </div>
+
+  <section class="welcome hidden" id="welcome" aria-label="Приветствие">
+    <img class="welcome-media" src="assets/welcome.jpg" alt="ВОРОЖБИТОВ — приветствие">
+    <div class="welcome-shade"></div>
+    <div class="welcome-frame">
+      <div class="welcome-kicker"><span class="pulse-dot"></span> ВЫПУСК · ДЛЯ СВОИХ</div>
+      <h1>ВОРОЖ<br>БИТОВ</h1>
+      <p class="welcome-copy" id="welcomeCopy">Брат. Ты зашёл на закрытую территорию. Здесь не витрина для всех — здесь форма для своих. Плотная ткань. Честная посадка. Тираж маленький. Сила и честь. Бери размер, пока он есть.</p>
+      <button class="button button-primary punch" id="enterShop" type="button">ВОЙТИ В МАГАЗИН <span>↗</span></button>
+      <div class="welcome-meta">
+        <b>СИЛА И ЧЕСТЬ</b>
+        <span>1993</span>
+        <span>ЛИМИТ</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="app-shell" id="app">
+    <header class="topbar">
+      <a class="brand-lockup" href="#home" data-scroll="home" aria-label="Ворожбитов — в начало">
+        <span class="brand-mark">V</span>
+        <span class="brand-type"><strong>ВОРОЖБИТОВ</strong><small>СИЛА И ЧЕСТЬ</small></span>
+      </a>
+      <div class="top-actions">
+        <button class="icon-button" id="searchToggle" type="button" aria-label="Поиск"><span class="icon" data-icon="search"></span></button>
+        <button class="icon-button" id="profileButton" type="button" aria-label="Профиль"><span class="icon" data-icon="user"></span></button>
+        <button class="icon-button" id="savedButton" type="button" aria-label="Сохранённые">
+          <span class="icon" data-icon="bookmark"></span><span class="counter hidden" id="savedCount">0</span>
+        </button>
+        <button class="icon-button cart-trigger" id="cartButton" type="button" aria-label="Заявка">
+          <span class="icon" data-icon="bag"></span><span class="counter hidden" id="cartCount">0</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="search-overlay hidden" id="searchOverlay">
+      <label class="search-big">
+        <span class="icon" data-icon="search"></span>
+        <input id="searchInput" type="search" placeholder="Худи, карго, кепка…" autocomplete="off">
+        <button id="clearSearch" class="clear-search hidden" type="button" aria-label="Очистить">×</button>
+      </label>
+      <div class="search-hints">
+        <button type="button" data-hint="худи">худи</button>
+        <button type="button" data-hint="футболка">футболка</button>
+        <button type="button" data-hint="карго">карго</button>
+        <button type="button" data-hint="кепка">кепка</button>
+      </div>
+    </div>
+
+    <main>
+      <section class="hero" id="home">
+        <div class="hero-media">
+          <img src="assets/welcome.jpg" alt="Приветственное фото ВОРОЖБИТОВ" fetchpriority="high">
+          <div class="hero-shade"></div>
+          <div class="hero-bout" aria-hidden="true">
+            <svg class="bout-svg" viewBox="0 0 140 260">
+              <defs>
+                <linearGradient id="bagSkin" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#0a0908"/>
+                  <stop offset=".18" stop-color="#2c2622"/>
+                  <stop offset=".42" stop-color="#4a4038"/>
+                  <stop offset=".68" stop-color="#1c1916"/>
+                  <stop offset="1" stop-color="#090808"/>
+                </linearGradient>
+                <linearGradient id="bagCap" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#5a5248"/>
+                  <stop offset="1" stop-color="#1a1816"/>
+                </linearGradient>
+                <radialGradient id="hitGlow" cx=".5" cy=".5" r=".5">
+                  <stop offset="0" stop-color="#e10600" stop-opacity=".95"/>
+                  <stop offset=".55" stop-color="#e10600" stop-opacity=".35"/>
+                  <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
+                </radialGradient>
+              </defs>
+              <ellipse class="bout-floor" cx="70" cy="250" rx="42" ry="7" fill="#000"/>
+              <g class="bout-chain">
+                <rect x="58" y="2" width="24" height="5" rx=".5" fill="#d8d0c4"/>
+                <rect x="66" y="7" width="8" height="4" fill="#9a9388"/>
+                <ellipse cx="70" cy="18" rx="5.5" ry="8" fill="none" stroke="#cfc6ba" stroke-width="2"/>
+                <ellipse cx="70" cy="32" rx="5.5" ry="8" fill="none" stroke="#a8a096" stroke-width="2"/>
+                <ellipse cx="70" cy="46" rx="5.5" ry="8" fill="none" stroke="#cfc6ba" stroke-width="2"/>
+              </g>
+              <g class="bout-bag">
+                <ellipse cx="70" cy="58" rx="28" ry="8" fill="url(#bagCap)"/>
+                <path d="M46 58h48v18H46z" fill="#2a2622"/>
+                <path d="M52 62v10M70 62v10M88 62v10" stroke="#cfc6ba" stroke-width="1.4"/>
+                <rect x="42" y="72" width="56" height="148" rx="26" fill="url(#bagSkin)"/>
+                <ellipse cx="70" cy="220" rx="28" ry="10" fill="#0c0b0a"/>
+                <path d="M48 88c8 4 36 4 44 0" stroke="#efe6d8" stroke-opacity=".18" stroke-width="1.2"/>
+                <path d="M46 110v88M94 110v88" stroke="#efe6d8" stroke-opacity=".12" stroke-width=".8" stroke-dasharray="3 4"/>
+                <g transform="translate(70 148) skewX(-12)">
+                  <path d="M-16 -28 L0 22 L16 -28 h-9 L0 6 L-7 -28z" fill="#e10600"/>
+                </g>
+                <ellipse cx="56" cy="120" rx="8" ry="28" fill="#fff" opacity=".06"/>
+              </g>
+              <g class="bout-hit">
+                <circle cx="42" cy="148" r="22" fill="url(#hitGlow)"/>
+                <path d="M36 148H18M40 136l-12-12M40 160l-12 12" stroke="#d6ff3c" stroke-width="2.2" stroke-linecap="square"/>
+              </g>
+              <g class="bout-dust">
+                <circle cx="38" cy="140" r="2.2" fill="#cfc6ba"/>
+                <circle cx="30" cy="152" r="1.6" fill="#9a958c"/>
+                <circle cx="44" cy="162" r="1.4" fill="#efe6d8"/>
+                <circle cx="26" cy="136" r="1.2" fill="#e10600"/>
+              </g>
+            </svg>
+          </div>
+          <div class="hero-live"><span class="pulse-dot"></span> ВЫПУСК СЕЙЧАС</div>
+        </div>
+        <div class="hero-copy">
+          <div class="eyebrow"><span>ЛИМИТ</span><span id="dropTimer">—:—:—</span></div>
+          <h1>НЕ ДЛЯ<br><em>ВСЕХ.</em></h1>
+          <p class="hero-lead">Городская форма. Плотная ткань. Честный крой. Вещи для тех, кто сам выбирает, с кем стоять.</p>
+          <div class="hero-actions">
+            <button class="button button-primary punch" data-scroll="catalog" type="button">СМОТРЕТЬ ВЫПУСК <span>↗</span></button>
+            <button class="text-button" data-scroll="store" type="button">Магазин <span>↓</span></button>
+          </div>
+          <div class="hero-specs">
+            <div><strong>400</strong><span>Г/М²</span></div>
+            <div><strong>СЕЙЧАС</strong><span>ЛИМИТ</span></div>
+            <div><strong>1993</strong><span>СИЛА И ЧЕСТЬ</span></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="ticker" aria-hidden="true">
+        <div class="ticker-track">
+          <span>СИЛА И ЧЕСТЬ</span><i>✳</i><span>МАЛАЯ ПАРТИЯ</span><i>✳</i><span>НЕ ДЛЯ ВСЕХ</span><i>✳</i><span>ДЛЯ ТЕХ, КТО ПОНЯЛ</span><i>✳</i>
+          <span>СИЛА И ЧЕСТЬ</span><i>✳</i><span>МАЛАЯ ПАРТИЯ</span><i>✳</i><span>НЕ ДЛЯ ВСЕХ</span><i>✳</i><span>ДЛЯ ТЕХ, КТО ПОНЯЛ</span><i>✳</i>
+        </div>
+      </div>
+
+      <section class="section-pad catalog-section" id="catalog">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">01 / ВИТРИНА</span>
+            <h2>СМОТРИ,<br><em>ЧТО ОСТАЛОСЬ.</em></h2>
+          </div>
+          <span class="item-count" id="productCount">— ВЕЩИ</span>
+        </div>
+
+        <div class="category-row" id="categoryChips" role="tablist" aria-label="Категории"></div>
+
+        <div class="catalog-tools">
+          <button class="filter-button" type="button" id="filterToggle">
+            <span class="icon" data-icon="sliders"></span> ФИЛЬТРЫ
+            <span class="tool-count hidden" id="filterCount">0</span>
+          </button>
+          <div class="sort-wrap">
+            <label class="sort-label" for="sortSelect">РЯД</label>
+            <select id="sortSelect">
+              <option value="featured">Сначала выпуск</option>
+              <option value="limited">Лимит</option>
+              <option value="price-asc">Цена ↑</option>
+              <option value="price-desc">Цена ↓</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="filter-panel hidden" id="filterPanel">
+          <div class="filter-panel-head">
+            <strong>БЫСТРЫЙ ФИЛЬТР</strong>
+            <button class="text-button" id="resetFilters" type="button">Сбросить</button>
+          </div>
+          <p class="filter-caption">Наличие</p>
+          <div class="filter-options" id="filterOptions">
+            <button class="filter-chip active" data-stock="all" type="button">Все</button>
+            <button class="filter-chip" data-stock="limited" type="button">Лимит</button>
+            <button class="filter-chip" data-stock="available" type="button">В наличии</button>
+          </div>
+          <p class="filter-caption">Размер</p>
+          <div class="filter-options" id="sizeFilters">
+            <button class="filter-chip active" data-size-filter="all" type="button">Любой</button>
+            <button class="filter-chip" data-size-filter="S" type="button">S</button>
+            <button class="filter-chip" data-size-filter="M" type="button">M</button>
+            <button class="filter-chip" data-size-filter="L" type="button">L</button>
+            <button class="filter-chip" data-size-filter="XL" type="button">XL</button>
+          </div>
+        </div>
+
+        <div class="view-banner hidden" id="viewBanner">
+          <strong id="viewBannerTitle">СОХРАНЁННЫЕ</strong>
+          <button class="text-button" id="clearView" type="button">Показать всё</button>
+        </div>
+
+        <div class="product-grid" id="productGrid" aria-live="polite"></div>
+        <div class="empty-state hidden" id="emptyState">
+          <span class="empty-mark">∅</span>
+          <h3>Ничего не нашлось</h3>
+          <p>Другой запрос или сброс фильтров.</p>
+          <button class="button button-dark" id="emptyReset" type="button">ПОКАЗАТЬ ВСЁ</button>
+        </div>
+      </section>
+
+      <section class="store-section" id="store">
+        <div class="section-pad store-head">
+          <div>
+            <span class="section-kicker">02 / МАГАЗИН</span>
+            <h2>БЕТОН.<br><em>НЕОН.</em><br>ВЕЩЬ.</h2>
+          </div>
+          <p class="store-lead">Не зал для селфи. Подвал, вешалка, красный свет. Сюда приходят свои — забрать выпуск после заявки или просто посмотреть, как сидит ткань.</p>
+        </div>
+        <figure class="store-hero" id="storeHero" data-lightbox="assets/store.jpg" data-caption="МАГАЗИН / ВОРОЖБИТОВ">
+          <img src="assets/store.jpg" alt="Магазин ВОРОЖБИТОВ — бетон, неон, вешалки">
+          <figcaption>
+            <span>МАГАЗИН</span>
+            <strong>ВОРОЖБИТОВ</strong>
+            <small>Самовывоз после подтверждения · Могилёв / СПб</small>
+          </figcaption>
+        </figure>
+        <div class="section-pad store-grid">
+          <figure class="store-shot" data-lightbox="assets/store-rack.jpg" data-caption="ВЕШАЛКА">
+            <img src="assets/store-rack.jpg" alt="Вешалка с худи">
+            <figcaption>ВЕШАЛКА</figcaption>
+          </figure>
+          <figure class="store-shot" data-lightbox="assets/look-ring.jpg" data-caption="РИНГ / 400">
+            <img src="assets/look-ring.jpg" alt="Худи на ринге">
+            <figcaption>РИНГ / 400</figcaption>
+          </figure>
+          <div class="store-facts">
+            <div><span>01</span><strong>САМОВЫВОЗ</strong><small>После оплаты менеджер скажет, когда забирать</small></div>
+            <div><span>02</span><strong>ДОСТАВКА</strong><small>СДЭК / Яндекс — считаем по городу</small></div>
+            <div><span>03</span><strong>ВЫПУСК</strong><small>Сначала здесь. Повторов не будет</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="manifesto section-pad" id="manifesto">
+        <div class="manifesto-label">
+          <span class="section-kicker">03 / КОНЦЕПЦИЯ</span>
+          <span class="vertical-label">ВОРОЖБИТОВ / 1993</span>
+        </div>
+        <div class="manifesto-body">
+          <h2>ОДЕЖДА,<br>КОТОРАЯ<br>ДЕРЖИТ <em>ТЕМП.</em></h2>
+          <p>Это не костюм для чужого мнения. Это базовая форма: плотная, собранная, честная. Маленькая партия — чтобы вещь оставалась своей. Сила и честь носятся, а не пишутся на биллборде.</p>
+          <div class="manifesto-lines">
+            <div><span>01</span><strong>ПЛОТНО</strong><small>Ткань, которую чувствуешь</small></div>
+            <div><span>02</span><strong>ПРЯМО</strong><small>Без лишнего на вещах</small></div>
+            <div><span>03</span><strong>СВОИМ</strong><small>Для тех, кто понял сигнал</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-section section-pad" id="lookbook">
+        <div class="section-heading compact">
+          <div>
+            <span class="section-kicker">04 / ПОЛЕ</span>
+            <h2>В ПОЛЕ.</h2>
+          </div>
+          <span class="item-count">ЗАМЕТКИ</span>
+        </div>
+        <div class="lookbook-grid" id="lookbookGrid"></div>
+      </section>
+
+      <section class="join-banner section-pad" id="join">
+        <div>
+          <span class="section-kicker">05 / ЗАКРЫТЫЙ СИГНАЛ</span>
+          <h2>УЗНАЙ<br><em>ПЕРВЫМ.</em></h2>
+          <p>Новые выпуски, возвраты размеров и закрытые показы — одно сообщение. Без спама.</p>
+        </div>
+        <div class="join-actions">
+          <button class="button button-primary punch" id="channelButton" type="button">ОТКРЫТЬ КАНАЛ <span>↗</span></button>
+          <button class="button button-ghost" id="shareButton" type="button"><span class="icon" data-icon="share"></span> ПРИГЛАСИТЬ СВОИХ</button>
+        </div>
+      </section>
+
+      <section class="faq-section section-pad" id="faq">
+        <div class="section-heading compact">
+          <div>
+            <span class="section-kicker">06 / БЕЗ ЛИШНИХ ВОПРОСОВ</span>
+            <h2>КАК ЭТО<br><em>РАБОТАЕТ.</em></h2>
+          </div>
+        </div>
+        <div class="faq-list">
+          <details open>
+            <summary><span>01</span> Как заказать?</summary>
+            <p>Выбери вещь и размер, добавь в заявку. Имя, телефон, город и адрес можно сохранить в профиле — подставятся сами. Дальше сразу оплата: карта / СБП, крипта или звёзды Telegram.</p>
+          </details>
+          <details>
+            <summary><span>02</span> Как платить?</summary>
+            <p>Деньги списываются сразу. Карта и СБП — обычным переводом. Крипта — отдельным счётом. Звёзды — внутри Telegram. Если размера нет — возврат через менеджера.</p>
+          </details>
+          <details>
+            <summary><span>03</span> Есть доставка и самовывоз?</summary>
+            <p>Да. СДЭК, Яндекс или самовывоз из магазина после оплаты. Стоимость и срок зависят от города — менеджер посчитает в ответе.</p>
+          </details>
+          <details>
+            <summary><span>04</span> Что с размером?</summary>
+            <p>В карточке есть сетка и подсказка по росту. Если нужного нет — «Ждать размер»: напишем, когда вернётся, раньше канала.</p>
+          </details>
+          <details>
+            <summary><span>05</span> Как смотреть вещь с разных сторон?</summary>
+            <p>Открой карточку — вкладка «Обзор». Тяни влево-вправо: вещь поворачивается обычными фото. «Фото» — отдельные кадры, если они есть.</p>
+          </details>
+          <details>
+            <summary><span>06</span> Можно вернуть?</summary>
+            <p>Возврат и обмен — по правилам продавца и закону. Если вещь не села или размера не оказалось — пиши менеджеру, разберём. Брак меняем без разговоров.</p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer section-pad">
+      <div class="footer-brand">
+        <span class="brand-mark">V</span>
+        <div><strong>ВОРОЖБИТОВ</strong><small>СИЛА И ЧЕСТЬ / 1993</small></div>
+      </div>
+      <div class="footer-meta">
+        <span>© 2026 / ВСЕ ПРАВА ЗАЩИЩЕНЫ</span>
+        <span>ДЛЯ ТЕХ, КТО ПОНЯЛ</span>
+      </div>
+    </footer>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Навигация">
+    <button class="bottom-link active" data-scroll="home" type="button"><span class="icon" data-icon="home"></span><small>Главная</small></button>
+    <button class="bottom-link" data-scroll="catalog" type="button"><span class="icon" data-icon="grid"></span><small>Выпуск</small></button>
+    <button class="bottom-link" data-scroll="store" type="button"><span class="icon" data-icon="pin"></span><small>Магазин</small></button>
+    <button class="bottom-link" id="bottomSaved" type="button"><span class="icon" data-icon="bookmark"></span><small>Сохр.</small></button>
+    <button class="bottom-link bottom-cart" id="bottomCartButton" type="button"><span class="icon" data-icon="bag"></span><small>Заявка</small><b class="nav-badge hidden" id="bottomCartCount">0</b></button>
+  </nav>
+
+  <div class="modal-backdrop hidden" id="productModal" role="dialog" aria-modal="true" aria-label="Карточка товара">
+    <div class="product-sheet">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <button class="sheet-close" data-close="productModal" type="button" aria-label="Закрыть">×</button>
+      <div class="sheet-image image-frame">
+        <div class="stage-switch" role="tablist" aria-label="Просмотр">
+          <button class="stage-btn active" id="stage3d" data-stage="3d" type="button">ОБЗОР</button>
+          <button class="stage-btn" id="stagePhoto" data-stage="photo" type="button">ФОТО</button>
+        </div>
+        <div class="view3d" id="view3d" aria-label="Обзор вещи с разных сторон"></div>
+        <img id="sheetImage" class="sheet-photo hidden" alt="">
+        <span class="sheet-badge" id="sheetBadge"></span>
+        <button class="save-product" id="sheetSave" type="button" aria-label="Сохранить"><span class="icon" data-icon="bookmark"></span></button>
+        <p class="view3d-hint" id="view3dHint">ТЯНИ В СТОРОНЫ</p>
+        <div class="gallery-dots hidden" id="galleryDots"></div>
+      </div>
+      <div class="sheet-content">
+        <div class="sheet-kicker" id="sheetKicker">БАЗА</div>
+        <h2 id="sheetTitle">—</h2>
+        <blockquote class="sign-block" id="sheetSign">—</blockquote>
+        <div class="sheet-price" id="sheetPrice">—</div>
+        <p class="sheet-description" id="sheetDescription">—</p>
+        <div class="sheet-facts" id="sheetFacts"></div>
+        <div class="size-block">
+          <div class="size-heading">
+            <strong>РАЗМЕР</strong>
+            <button class="text-button" id="sizeGuideButton" type="button">Таблица ↗</button>
+          </div>
+          <div class="size-list" id="sizeList"></div>
+          <p class="size-hint" id="sizeHint">Выбери размер.</p>
+        </div>
+        <div class="qty-row">
+          <span>КОЛ-ВО</span>
+          <div class="qty-control" id="sheetQty">
+            <button data-sheet-qty="minus" type="button" aria-label="Меньше">−</button>
+            <span id="qtyValue">1</span>
+            <button data-sheet-qty="plus" type="button" aria-label="Больше">+</button>
+          </div>
+        </div>
+        <button class="button button-primary full-button punch" id="addToCartButton" type="button">ДОБАВИТЬ В ЗАЯВКУ <span>+</span></button>
+        <button class="button button-ghost full-button" id="waitlistButton" type="button">ЖДАТЬ РАЗМЕР</button>
+        <div class="sheet-details" id="sheetDetails"></div>
+        <div class="related" id="related"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="profileModal" role="dialog" aria-modal="true" aria-label="Профиль">
+    <div class="profile-sheet">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-header">
+        <div><span class="section-kicker">ПРОФИЛЬ</span><h2>ТЫ.</h2></div>
+        <button class="sheet-close" data-close="profileModal" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div class="profile-body">
+        <div class="profile-hero">
+          <div class="profile-avatar" id="profileAvatar">V</div>
+          <div>
+            <strong id="profileHello">Свой</strong>
+            <small id="profileHandle">Данные для заявки и доставки</small>
+          </div>
+          <span class="profile-fill" id="profileFill">0 / 5</span>
+        </div>
+
+        <p class="profile-caption">Контакт</p>
+        <label class="field-label">ИМЯ<input id="profileName" type="text" placeholder="Как к тебе обращаться?" autocomplete="name"></label>
+        <label class="field-label">ТЕЛЕФОН<input id="profilePhone" type="tel" placeholder="+7 900 000-00-00" inputmode="tel" autocomplete="tel"></label>
+
+        <p class="profile-caption">Куда везти</p>
+        <label class="field-label">ГОРОД<input id="profileCity" type="text" placeholder="Могилёв, СПб, Москва…" autocomplete="address-level2"></label>
+        <label class="field-label">АДРЕС<input id="profileAddress" type="text" placeholder="Улица, дом, квартира" autocomplete="street-address"></label>
+        <label class="field-label">ПОДЪЕЗД / ДОМОФОН<input id="profileEntrance" type="text" placeholder="Подъезд 3, домофон 12"></label>
+        <div class="deliver-row" id="profileDeliver">
+          <button class="filter-chip active" data-profile-deliver="СДЭК" type="button">СДЭК</button>
+          <button class="filter-chip" data-profile-deliver="Яндекс" type="button">Яндекс</button>
+          <button class="filter-chip" data-profile-deliver="Самовывоз" type="button">Самовывоз</button>
+        </div>
+
+        <p class="profile-caption">Посадка</p>
+        <div class="deliver-row" id="profileSizeRow">
+          <button class="filter-chip" data-profile-size="S" type="button">S</button>
+          <button class="filter-chip" data-profile-size="M" type="button">M</button>
+          <button class="filter-chip" data-profile-size="L" type="button">L</button>
+          <button class="filter-chip" data-profile-size="XL" type="button">XL</button>
+        </div>
+        <label class="field-label">РОСТ, СМ<input id="profileHeight" type="number" inputmode="numeric" placeholder="178" min="140" max="220"></label>
+        <label class="field-label">КОММЕНТАРИЙ<input id="profileNote" type="text" placeholder="Время, нюанс по размеру"></label>
+
+        <button class="button button-primary full-button punch" id="saveProfile" type="button">СОХРАНИТЬ <span>✓</span></button>
+        <p class="form-note">Сохраняется на этом устройстве и подставляется в заявку: имя, телефон, город, адрес.</p>
+
+        <div class="profile-stats">
+          <button type="button" id="profileSavedBtn"><strong id="profileSavedN">0</strong><span>сохранённые</span></button>
+          <button type="button" id="profileCartBtn"><strong id="profileCartN">0</strong><span>в заявке</span></button>
+        </div>
+        <div class="profile-orders" id="profileOrders"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="cartModal" role="dialog" aria-modal="true" aria-label="Заявка">
+    <div class="cart-sheet">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-header">
+        <div><span class="section-kicker">ЗАЯВКА</span><h2>ТВОИ ВЕЩИ.</h2></div>
+        <button class="sheet-close" data-close="cartModal" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div class="cart-content" id="cartContent"></div>
+      <div class="cart-checkout hidden" id="checkoutForm">
+        <div class="form-rule"></div>
+        <div class="checkout-total"><span>ИТОГО</span><strong id="cartTotal">0 ₽</strong></div>
+        <label class="field-label">ИМЯ<input id="checkoutName" type="text" placeholder="Как к тебе обращаться?" autocomplete="name"></label>
+        <label class="field-label">ТЕЛЕФОН<input id="checkoutPhone" type="tel" placeholder="+7 900 000-00-00" inputmode="tel" autocomplete="tel"></label>
+        <label class="field-label">ГОРОД<input id="checkoutCity" type="text" placeholder="Могилёв, СПб, Москва…" autocomplete="address-level2"></label>
+        <label class="field-label">АДРЕС<input id="checkoutAddress" type="text" placeholder="Улица, дом, квартира" autocomplete="street-address"></label>
+        <div class="deliver-row" id="deliverRow">
+          <button class="filter-chip active" data-deliver="СДЭК" type="button">СДЭК</button>
+          <button class="filter-chip" data-deliver="Яндекс" type="button">Яндекс</button>
+          <button class="filter-chip" data-deliver="Самовывоз" type="button">Самовывоз</button>
+        </div>
+        <label class="field-label">КОММЕНТАРИЙ<input id="checkoutNote" type="text" placeholder="Подъезд, время, нюанс по размеру"></label>
+        <label class="consent-check"><input id="checkoutConsent" type="checkbox"><span>Соглашаюсь на обработку данных для связи по заявке. <a id="privacyLink" class="privacy-link hidden" href="#" target="_blank" rel="noopener noreferrer">Политика</a></span></label>
+        <button class="button button-primary full-button punch" id="submitOrder" type="button">ПЕРЕЙТИ К ОПЛАТЕ <span>↗</span></button>
+        <p class="form-note">Деньги списываются сразу. Если размера нет — возврат через менеджера.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="sizeGuideModal" role="dialog" aria-modal="true" aria-label="Таблица размеров">
+    <div class="info-sheet">
+      <div class="sheet-header">
+        <div><span class="section-kicker">ПОДСКАЗКА</span><h2>РАЗМЕРЫ.</h2></div>
+        <button class="sheet-close" data-close="sizeGuideModal" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <p class="info-lead">Посадка свободная. Между двумя — бери больший, если хочешь объём.</p>
+      <div class="size-advisor">
+        <label class="field-label">РОСТ, СМ<input id="heightInput" type="number" inputmode="numeric" placeholder="178" min="150" max="210"></label>
+        <button class="button button-outline" id="adviseSize" type="button">ПОДСКАЗАТЬ</button>
+        <p class="size-hint" id="adviseResult"></p>
+      </div>
+      <div class="size-table">
+        <div><span>РАЗМЕР</span><span>ГРУДЬ</span><span>ДЛИНА</span><span>РОСТ</span></div>
+        <div><b>S</b><span>112</span><span>70</span><span>164–172</span></div>
+        <div><b>M</b><span>118</span><span>72</span><span>172–178</span></div>
+        <div><b>L</b><span>124</span><span>74</span><span>178–186</span></div>
+        <div><b>XL</b><span>130</span><span>76</span><span>186–194</span></div>
+      </div>
+      <p class="form-note">Замеры ориентировочные. Точно скажет менеджер.</p>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="lightbox" role="dialog" aria-modal="true" aria-label="Фото">
+    <div class="lightbox-sheet">
+      <button class="sheet-close" data-close="lightbox" type="button" aria-label="Закрыть">×</button>
+      <img id="lightboxImage" alt="">
+      <p id="lightboxCaption"></p>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="payModal" role="dialog" aria-modal="true" aria-label="Оплата">
+    <div class="pay-sheet">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-header">
+        <div><span class="section-kicker">ОПЛАТА</span><h2>СЧЁТ.</h2></div>
+        <button class="sheet-close" data-close="payModal" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div class="pay-body">
+        <div class="pay-hero">
+          <span class="pay-stamp">1993</span>
+          <p class="pay-kicker">К оплате</p>
+          <p class="pay-amount" id="payAmount">—</p>
+        </div>
+        <ul class="pay-lines" id="payLines"></ul>
+        <p class="pay-lead">Выбери способ. Деньги списываются сразу. Если размера нет — возврат через менеджера.</p>
+        <div class="pay-methods" id="payMethods"></div>
+        <p class="form-note" id="payNote">Статус обновится сам. Можно закрыть и доплатить из профиля.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="success-toast hidden" id="successToast">
+    <span class="success-icon">✓</span>
+    <div><strong>ОПЛАТА.</strong><small>Статус появится в профиле, когда деньги пройдут.</small></div>
+    <button type="button" id="closeToast" aria-label="Закрыть">×</button>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="viewer3d.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

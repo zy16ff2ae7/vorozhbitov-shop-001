@@ -1,0 +1,396 @@
+{
+  "brand": {
+    "name": "ВОРОЖБИТОВ",
+    "descriptor": "сила и честь / городская форма",
+    "drop": "ВЫПУСК",
+    "welcome_image": "assets/welcome.jpg",
+    "store_image": "assets/store.jpg"
+  },
+  "categories": [
+    {
+      "id": "drop",
+      "name": "Выпуск"
+    },
+    {
+      "id": "hoodie",
+      "name": "Худи"
+    },
+    {
+      "id": "tee",
+      "name": "Футболки"
+    },
+    {
+      "id": "bottom",
+      "name": "Низ"
+    },
+    {
+      "id": "access",
+      "name": "Аксессуары"
+    }
+  ],
+  "products": [
+    {
+      "id": "honor-hoodie",
+      "category": "drop",
+      "name": "СИЛА И ЧЕСТЬ",
+      "price": "11 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "Главный сигнал выпуска. Тяжёлый футер, принт «Сила и честь» на груди, красная V на кромке. Кто понял — носит. Кто нет — проходит мимо.",
+      "signature": "Сила и честь. Это не слоган на витрине — это то, с чем выходишь из дома.",
+      "print": "СИЛА И\nЧЕСТЬ",
+      "shape": "hoodie",
+      "photo_url": "",
+      "image": "assets/honor-hoodie.jpg",
+      "images": [
+        "assets/honor-hoodie.jpg",
+        "assets/look-ring.jpg"
+      ],
+      "badge": "ВЫПУСК",
+      "material": "100% хлопок · 400 г/м²",
+      "fit": "Объёмный крой",
+      "details": [
+        "Принт СИЛА И ЧЕСТЬ",
+        "Красная V на кромке",
+        "Капюшон с двойной строчкой"
+      ],
+      "stock_label": "Осталось мало",
+      "active": true,
+      "spin": [
+        "assets/honor-hoodie.jpg",
+        "assets/spin/honor-01.jpg",
+        "assets/spin/honor-02.jpg",
+        "assets/spin/honor-03.jpg",
+        "assets/spin/honor-04.jpg",
+        "assets/spin/honor-05.jpg",
+        "assets/spin/honor-06.jpg",
+        "assets/spin/honor-07.jpg"
+      ]
+    },
+    {
+      "id": "year-tee-1993",
+      "category": "drop",
+      "name": "1993",
+      "price": "4 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "Год, с которого всё началось. Плотный свободный крой, цифра 1993 на груди. Не юбилей — метка.",
+      "signature": "1993. Носи как дату, не как принт.",
+      "print": "1993",
+      "shape": "tee",
+      "photo_url": "",
+      "image": "assets/year-tee.jpg",
+      "images": [
+        "assets/year-tee.jpg"
+      ],
+      "badge": "ЛИМИТ",
+      "material": "100% хлопок · 240 г/м²",
+      "fit": "Свободный крой",
+      "details": [
+        "Крупный 1993",
+        "Красная бирка",
+        "Усиленная горловина"
+      ],
+      "stock_label": "Последний тираж",
+      "active": true,
+      "spin": [
+        "assets/year-tee.jpg",
+        "assets/spin/year-01.jpg",
+        "assets/spin/year-02.jpg",
+        "assets/spin/year-04.jpg"
+      ]
+    },
+    {
+      "id": "drop-hoodie-001",
+      "category": "drop",
+      "name": "ХУДИ",
+      "price": "9 900 ₽",
+      "sizes": [
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "Тяжёлое полотно, объёмный силуэт, двойная строчка. Увидел — забирай: партия ограничена.",
+      "signature": "Тяжёлая. Как надо. Партия маленькая — потом не будет.",
+      "print": "V",
+      "shape": "hoodie",
+      "photo_url": "",
+      "image": "assets/hero-drop.jpg",
+      "images": [
+        "assets/hero-drop.jpg",
+        "assets/look-ring.jpg",
+        "assets/heavy-hoodie.jpg"
+      ],
+      "badge": "ЛИМИТ",
+      "material": "100% хлопок · 400 г/м²",
+      "fit": "Объёмный крой",
+      "details": [
+        "Футер 3-нитка",
+        "Капюшон с двойной строчкой",
+        "Металлические наконечники"
+      ],
+      "stock_label": "Последний тираж",
+      "active": true,
+      "spin": [
+        "assets/hero-drop.jpg",
+        "assets/spin/honor-02.jpg",
+        "assets/spin/honor-04.jpg",
+        "assets/spin/honor-06.jpg"
+      ]
+    },
+    {
+      "id": "drop-tee-001",
+      "category": "drop",
+      "name": "ФУТБОЛКА",
+      "price": "4 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "Плотный хлопок, свободный крой, минимальный сигнал на груди. Первый тираж — один раз и без повторов.",
+      "signature": "База. Без крика. Свой считывает.",
+      "print": "V",
+      "shape": "tee",
+      "photo_url": "",
+      "image": "assets/base-tee.jpg",
+      "images": [
+        "assets/base-tee.jpg"
+      ],
+      "badge": "ВЫПУСК",
+      "material": "100% хлопок · 240 г/м²",
+      "fit": "Свободный крой",
+      "details": [
+        "Плотный хлопок",
+        "Усиленная горловина",
+        "Бирка-сигнал внутри"
+      ],
+      "stock_label": "Осталось мало",
+      "active": true,
+      "spin": [
+        "assets/base-tee.jpg",
+        "assets/spin/year-02.jpg",
+        "assets/spin/year-04.jpg"
+      ]
+    },
+    {
+      "id": "field-tee-001",
+      "category": "tee",
+      "name": "ОДИН В ПОЛЕ",
+      "price": "4 400 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "Один в поле. Даже если все разошлись. Плотная футболка, прямой принт, без лишнего.",
+      "signature": "Один в поле. Даже если все разошлись.",
+      "print": "ОДИН\nВ ПОЛЕ",
+      "shape": "tee",
+      "photo_url": "",
+      "image": "assets/field-tee.jpg",
+      "images": [
+        "assets/field-tee.jpg"
+      ],
+      "badge": "СИГНАЛ",
+      "material": "100% хлопок · 240 г/м²",
+      "fit": "Свободный крой",
+      "details": [
+        "Принт ОДИН В ПОЛЕ",
+        "Плотная горловина",
+        "Красный кант по свету"
+      ],
+      "stock_label": "В наличии",
+      "active": true,
+      "spin": [
+        "assets/field-tee.jpg",
+        "assets/spin/year-02.jpg",
+        "assets/spin/year-04.jpg"
+      ]
+    },
+    {
+      "id": "hoodie-heavy-002",
+      "category": "hoodie",
+      "name": "ТЯЖЁЛОЕ ХУДИ",
+      "price": "10 500 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "400 г/м². Держит форму и темп города. Никакой лишней графики — только посадка и вес.",
+      "signature": "400 грамм. Держит форму, когда город не держит.",
+      "print": "V",
+      "shape": "hoodie",
+      "photo_url": "",
+      "image": "assets/heavy-hoodie.jpg",
+      "images": [
+        "assets/heavy-hoodie.jpg",
+        "assets/look-ring.jpg"
+      ],
+      "badge": "БАЗА",
+      "material": "100% хлопок · 400 г/м²",
+      "fit": "Свободный крой",
+      "details": [
+        "Мягкий начес",
+        "Плотные манжеты",
+        "Карман-кенгуру"
+      ],
+      "stock_label": "В наличии",
+      "active": true,
+      "spin": [
+        "assets/heavy-hoodie.jpg",
+        "assets/spin/honor-02.jpg",
+        "assets/spin/honor-04.jpg",
+        "assets/spin/honor-06.jpg"
+      ]
+    },
+    {
+      "id": "tee-basic-002",
+      "category": "tee",
+      "name": "НА КАЖДЫЙ ДЕНЬ",
+      "price": "3 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "База на каждый день: плотная ткань, спокойная форма, вещь, которую не хочется снимать.",
+      "signature": "На каждый день. Снимать не хочется.",
+      "print": "V",
+      "shape": "tee",
+      "photo_url": "",
+      "image": "assets/base-tee.jpg",
+      "images": [
+        "assets/base-tee.jpg"
+      ],
+      "badge": "ДЕНЬ",
+      "material": "100% хлопок · 240 г/м²",
+      "fit": "Свободный крой",
+      "details": [
+        "Гладкая фактура",
+        "Плотная горловина",
+        "Стирается без сюрпризов"
+      ],
+      "stock_label": "В наличии",
+      "active": true,
+      "spin": [
+        "assets/base-tee.jpg",
+        "assets/spin/year-02.jpg",
+        "assets/spin/year-04.jpg"
+      ]
+    },
+    {
+      "id": "cargo-city-001",
+      "category": "bottom",
+      "name": "КАРГО",
+      "price": "8 500 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L"
+      ],
+      "description": "Свободные карго с регулируемой посадкой и усиленными карманами. Город не бережёт — эти выдержат.",
+      "signature": "Карманы не для красоты. Город не бережёт.",
+      "print": "V",
+      "shape": "cargo",
+      "photo_url": "",
+      "image": "assets/city-cargo.jpg",
+      "images": [
+        "assets/city-cargo.jpg",
+        "assets/look-street.jpg"
+      ],
+      "badge": "ГОРОД",
+      "material": "Плотный хлопок",
+      "fit": "Свободная посадка",
+      "details": [
+        "6 функциональных карманов",
+        "Регулировка низа",
+        "Усиленные швы"
+      ],
+      "stock_label": "Мало размеров",
+      "active": true,
+      "spin": [
+        "assets/city-cargo.jpg",
+        "assets/look-street.jpg"
+      ]
+    },
+    {
+      "id": "cap-logo-001",
+      "category": "access",
+      "name": "КЕПКА V",
+      "price": "3 200 ₽",
+      "sizes": [
+        "ОДИН"
+      ],
+      "description": "Чёрная шестиклинка, красная V. Никаких громких логотипов — свой узнает.",
+      "signature": "V на лбу. Свой узнает. Чужой не обязан.",
+      "print": "V",
+      "shape": "cap",
+      "photo_url": "",
+      "image": "assets/v-cap.jpg",
+      "images": [
+        "assets/v-cap.jpg",
+        "assets/logo-cap.jpg"
+      ],
+      "badge": "СИГНАЛ",
+      "material": "100% хлопок",
+      "fit": "Регулируемый размер",
+      "details": [
+        "Вышитая красная V",
+        "Металлическая застежка",
+        "Плотный козырёк"
+      ],
+      "stock_label": "В наличии",
+      "active": true,
+      "spin": [
+        "assets/v-cap.jpg",
+        "assets/logo-cap.jpg"
+      ]
+    }
+  ],
+  "lookbook": [
+    {
+      "image": "assets/honor-hoodie.jpg",
+      "photo_url": "",
+      "caption": "СИЛА И ЧЕСТЬ"
+    },
+    {
+      "image": "assets/look-street.jpg",
+      "photo_url": "",
+      "caption": "ГОРОД"
+    },
+    {
+      "image": "assets/year-tee.jpg",
+      "photo_url": "",
+      "caption": "1993"
+    },
+    {
+      "image": "assets/field-tee.jpg",
+      "photo_url": "",
+      "caption": "ОДИН В ПОЛЕ"
+    },
+    {
+      "image": "assets/v-cap.jpg",
+      "photo_url": "",
+      "caption": "КЕПКА V"
+    },
+    {
+      "image": "assets/store.jpg",
+      "photo_url": "",
+      "caption": "МАГАЗИН"
+    }
+  ]
+}
