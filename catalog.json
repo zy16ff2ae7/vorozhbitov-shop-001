@@ -44,15 +44,14 @@
       "description": "Чёрная футболка первого тиража. Уставная надпись «Сила и честь» на груди, меч по позвоночнику и монограмма ВВ у ворота. Плотная шелкография, которая не трескается.",
       "signature": "Первый тираж. Один раз и без повторов.",
       "photo_url": "",
-      "image": "assets/drop/tee-night.jpg",
+      "image": "assets/spin/tee-sich-01.jpg",
       "images": [
+        "assets/spin/tee-sich-01.jpg",
+        "assets/spin/tee-sich-05.jpg",
+        "assets/drop/tee-flatlay.jpg",
         "assets/drop/tee-night.jpg",
         "assets/drop/tee-back.jpg",
-        "assets/drop/tee-flatlay.jpg",
-        "assets/drop/tee-gym.jpg",
-        "assets/drop/tee-crew.jpg",
-        "assets/drop/tee-roof.jpg",
-        "assets/drop/pack.jpg"
+        "assets/drop/tee-gym.jpg"
       ],
       "badge": "ВЫПУСК 001",
       "material": "100% хлопок · 240 г/м²",
@@ -68,12 +67,14 @@
       "real_photos": true,
       "active": true,
       "spin": [
-        "assets/drop/tee-night.jpg",
-        "assets/drop/tee-back.jpg",
-        "assets/drop/tee-flatlay.jpg",
-        "assets/drop/tee-gym.jpg",
-        "assets/drop/tee-crew.jpg",
-        "assets/drop/tee-roof.jpg"
+        "assets/spin/tee-sich-01.jpg",
+        "assets/spin/tee-sich-02.jpg",
+        "assets/spin/tee-sich-03.jpg",
+        "assets/spin/tee-sich-04.jpg",
+        "assets/spin/tee-sich-05.jpg",
+        "assets/spin/tee-sich-06.jpg",
+        "assets/spin/tee-sich-07.jpg",
+        "assets/spin/tee-sich-08.jpg"
       ]
     },
     {
@@ -87,12 +88,13 @@
       "description": "Армейский жетон из нержавеющей стали. Лицо — монограмма ВВ с мечом, оборот — «Сила и честь» и твой личный номер тиража. Номер не повторяется ни у кого.",
       "signature": "Сто штук на весь мир. Дальше — только у своих.",
       "photo_url": "",
-      "image": "assets/drop/tag-front.jpg",
+      "image": "assets/spin/tag-sich-01.jpg",
       "images": [
+        "assets/spin/tag-sich-01.jpg",
+        "assets/spin/tag-sich-02.jpg",
         "assets/drop/tag-front.jpg",
         "assets/drop/tag-back.jpg",
-        "assets/drop/tag-studio.jpg",
-        "assets/drop/pack.jpg"
+        "assets/drop/tag-studio.jpg"
       ],
       "badge": "ТИРАЖ 100",
       "material": "Нержавеющая сталь · лазерная гравировка",
@@ -108,9 +110,8 @@
       "real_photos": true,
       "active": true,
       "spin": [
-        "assets/drop/tag-front.jpg",
-        "assets/drop/tag-back.jpg",
-        "assets/drop/tag-studio.jpg"
+        "assets/spin/tag-sich-01.jpg",
+        "assets/spin/tag-sich-02.jpg"
       ],
       "personalization": {
         "label": "НОМЕР ЖЕТОНА",

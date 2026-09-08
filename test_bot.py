@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -807,6 +808,41 @@ class BotTests(unittest.TestCase):
             finally:
                 server.shutdown()
                 server.server_close()
+
+    def test_index_stamps_asset_versions(self):
+        """Без метки версии WebView Telegram показывает старый app.js."""
+        with tempfile.TemporaryDirectory():
+            catalog = Catalog(Path(__file__).with_name("catalog.json"))
+            server = start_health_server(0, catalog, None, None, None)
+            port = server.server_address[1]
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as response:
+                    page = response.read().decode("utf-8")
+                self.assertRegex(page, r'src="app\.js\?v=\d+"')
+                self.assertRegex(page, r'href="styles\.css\?v=\d+"')
+                # Файл с меткой должен нормально отдаваться.
+                stamped = re.search(r'src="(app\.js\?v=\d+)"', page).group(1)
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/{stamped}", timeout=5) as response:
+                    self.assertEqual(response.status, 200)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_real_products_show_the_garment_itself(self):
+        """В обзоре должна крутиться вещь, а не упаковка и не лайфстайл."""
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        root = Path(__file__).with_name("miniapp")
+        for product_id, minimum in (("tee-sila-i-chest", 8), ("tag-sila-i-chest", 2)):
+            with self.subTest(product=product_id):
+                product = catalog.get(product_id)
+                self.assertGreaterEqual(len(product["spin"]), minimum)
+                # Обзор — только студийные кадры товара.
+                for frame in product["spin"]:
+                    self.assertIn("assets/spin/", frame)
+                    self.assertTrue((root / frame).is_file(), f"нет кадра {frame}")
+                # Упаковке в карточке товара не место.
+                everything = [product["image"], *product["images"], *product["spin"]]
+                self.assertFalse([a for a in everything if "pack" in a], "упаковка попала в карточку")
 
     def test_rate_limiter_blocks_burst_and_recovers(self):
         limiter = RateLimiter(limit=3, window_seconds=60)

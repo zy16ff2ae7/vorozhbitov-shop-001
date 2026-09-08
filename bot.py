@@ -3332,6 +3332,10 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
         if content_type.startswith("text/") or content_type in {"application/javascript", "image/svg+xml"}:
             content_type += "; charset=utf-8"
+        if candidate.name == "index.html":
+            # WebView Telegram держит app.js и styles.css в кеше и после правок
+            # показывает старую версию. Клеим метку версии по времени файла.
+            body = self._stamp_assets(body)
         if suffix in {".jpg", ".jpeg", ".png", ".webp", ".svg"}:
             cache = "public, max-age=3600"
         elif suffix in {".woff2", ".woff", ".ttf"}:
@@ -3340,6 +3344,19 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         else:
             cache = "no-cache"
         self._write(body, content_type, 200, cache)
+
+    def _stamp_assets(self, body: bytes) -> bytes:
+        """Добавить ?v=<время правки> к app.js и styles.css в index.html."""
+        text = body.decode("utf-8", "replace")
+        for name in ("app.js", "styles.css"):
+            asset = self.static_root / name
+            try:
+                version = int(asset.stat().st_mtime)
+            except OSError:
+                continue
+            text = text.replace(f'href="{name}"', f'href="{name}?v={version}"')
+            text = text.replace(f'src="{name}"', f'src="{name}?v={version}"')
+        return text.encode("utf-8")
 
     def _serve_video(self, candidate: Path) -> None:
         """Отдать видео с поддержкой HTTP Range.
