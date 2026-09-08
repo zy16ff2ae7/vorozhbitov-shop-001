@@ -36,10 +36,12 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from payments import (
+    PriceError,
     create_crypto_invoice,
     create_lava_invoice,
     format_rub,
     parse_price_rub,
+    parse_price_strict,
     stars_amount,
     verify_crypto_webhook,
     verify_lava_webhook,
@@ -48,6 +50,42 @@ from payments import (
 BASE_DIR = Path(__file__).resolve().parent
 LOG = logging.getLogger("brand_bot")
 STOP_EVENT = threading.Event()
+
+
+class RateLimiter:
+    """Скользящее окно на память процесса.
+
+    Хватает для одного инстанса за реверс-прокси: защищает от заваливания
+    заявками и от перебора отмен по украденному initData. Для нескольких
+    инстансов счётчик нужно вынести в общее хранилище.
+    """
+
+    def __init__(self, limit: int, window_seconds: float) -> None:
+        self.limit = limit
+        self.window = window_seconds
+        self.hits: dict[str, list[float]] = {}
+        self.lock = threading.Lock()
+
+    def allow(self, key: str, now: float | None = None) -> bool:
+        stamp = now if now is not None else time.monotonic()
+        edge = stamp - self.window
+        with self.lock:
+            recent = [hit for hit in self.hits.get(key, ()) if hit > edge]
+            allowed = len(recent) < self.limit
+            if allowed:
+                recent.append(stamp)
+            self.hits[key] = recent
+            if len(self.hits) > 4096:
+                # Не даём словарю расти бесконечно от разовых посетителей.
+                for stale_key in [k for k, v in self.hits.items() if not v]:
+                    self.hits.pop(stale_key, None)
+            return allowed
+
+
+# Заявка — дорогая операция (счёт у провайдера, сообщения). Чтение своих
+# заявок опрашивается витриной раз в 4 секунды, поэтому лимит выше.
+CHECKOUT_LIMITER = RateLimiter(limit=8, window_seconds=60)
+READ_LIMITER = RateLimiter(limit=60, window_seconds=60)
 PHONE_RE = re.compile(r"^\+?[0-9]{10,15}$")
 REF_RE = re.compile(r"^ref(\d{3,15})$")
 WELCOME_PHOTO = BASE_DIR / "miniapp" / "assets" / "welcome.jpg"
@@ -180,12 +218,14 @@ class Settings:
     def from_env(cls) -> "Settings":
         load_dotenv(BASE_DIR / ".env")
         token = os.getenv("BOT_TOKEN", "").strip()
+        # Никаких боевых ID по умолчанию: без .env бот не должен молча раздавать
+        # админские права и слать чужие телефоны с адресами в захардкоженный чат.
         admin_ids = frozenset(
             int(item.strip())
-            for item in os.getenv("ADMIN_IDS", "6040375660,900161382").split(",")
+            for item in os.getenv("ADMIN_IDS", "").split(",")
             if item.strip().isdigit()
         )
-        manager_raw = os.getenv("MANAGER_CHAT_ID", "5527514919").strip()
+        manager_raw = os.getenv("MANAGER_CHAT_ID", "").strip()
         try:
             stars_rate = float(os.getenv("STARS_RUB_PER_STAR", "2") or "2")
         except ValueError:
@@ -218,6 +258,9 @@ class Catalog:
         self.path = path
         self.data: dict[str, Any] = {}
         self.products_by_id: dict[str, dict[str, Any]] = {}
+        # /reload и мастер /add подменяют каталог из потока опроса Telegram,
+        # пока потоки HTTP отдают /api/catalog и проверяют заявки.
+        self.lock = threading.RLock()
         self.reload()
 
     def reload(self) -> None:
@@ -257,10 +300,23 @@ class Catalog:
             photo_url = str(product.get("photo_url", ""))
             if photo_url and not photo_url.startswith(("https://", "http://")):
                 raise ValueError(f"photo_url must be HTTP(S) for {product_id}")
+            try:
+                parse_price_strict(product["price"])
+            except PriceError:
+                # Не роняем каталог целиком: товар покажем, но счёт по нему не
+                # выставится (parse_price_rub вернёт 0), поэтому шумим в лог.
+                LOG.error(
+                    "Цена товара %s не разбирается: %r — оплата по нему работать не будет",
+                    product_id,
+                    product["price"],
+                )
             products[product_id] = product
         raw.setdefault("lookbook", [])
-        self.data = raw
-        self.products_by_id = products
+        # Обе структуры собраны целиком — подменяем их разом, чтобы читатель
+        # никогда не увидел новый data со старым индексом товаров.
+        with self.lock:
+            self.data = raw
+            self.products_by_id = products
 
     @property
     def categories(self) -> list[dict[str, str]]:
@@ -281,7 +337,8 @@ class Catalog:
         return self.products_by_id.get(product_id)
 
     def save(self) -> None:
-        payload = json.dumps(self.data, ensure_ascii=False, indent=2) + "\n"
+        with self.lock:
+            payload = json.dumps(self.data, ensure_ascii=False, indent=2) + "\n"
         tmp = self.path.with_name(self.path.name + ".tmp")
         tmp.write_text(payload, encoding="utf-8")
         os.replace(tmp, self.path)
@@ -296,23 +353,25 @@ class Catalog:
         return candidate
 
     def add_product(self, product: dict[str, Any]) -> dict[str, Any]:
-        product = dict(product)
-        product["id"] = self.unique_id(str(product["name"]))
-        product.setdefault("active", True)
-        product.setdefault("photo_url", "")
-        self.data["products"].append(product)
-        self.save()
-        self.reload()
-        return product
+        with self.lock:
+            product = dict(product)
+            product["id"] = self.unique_id(str(product["name"]))
+            product.setdefault("active", True)
+            product.setdefault("photo_url", "")
+            self.data["products"].append(product)
+            self.save()
+            self.reload()
+            return product
 
     def set_active(self, product_id: str, active: bool) -> bool:
-        for product in self.data["products"]:
-            if str(product.get("id")) == product_id:
-                product["active"] = active
-                self.save()
-                self.reload()
-                return True
-        return False
+        with self.lock:
+            for product in self.data["products"]:
+                if str(product.get("id")) == product_id:
+                    product["active"] = active
+                    self.save()
+                    self.reload()
+                    return True
+            return False
 
 
 class Database:
@@ -332,6 +391,23 @@ class Database:
             conn.execute("PRAGMA busy_timeout=30000")
             self.local.conn = conn
         return conn
+
+    def close_current(self) -> None:
+        """Закрыть соединение текущего потока.
+
+        ``ThreadingHTTPServer`` создаёт поток на каждый запрос, а соединение
+        живёт в ``threading.local``. Без явного закрытия дескрипторы копятся до
+        ближайшей сборки мусора: 300 коротких потоков давали 254 открытых fd.
+        Долгоживущие потоки (опрос Telegram) свои соединения не трогают.
+        """
+        conn = getattr(self.local, "conn", None)
+        if conn is None:
+            return
+        self.local.conn = None
+        try:
+            conn.close()
+        except sqlite3.Error:
+            LOG.debug("Не удалось закрыть соединение SQLite", exc_info=True)
 
     def _initialize(self) -> None:
         conn = self.connection()
@@ -1141,7 +1217,9 @@ ORDER_STATUS_MESSAGES = {
     "cancelled": "Заявка отменена. Если это ошибка — собери новую из карточки вещи.",
 }
 
-WEBAPP_INIT_MAX_AGE = 60 * 60 * 48
+# Витрину открывают и оформляют заказ за один заход. Сутки — запас на «свернул
+# и вернулся»; двое суток давали слишком длинное окно для перехваченного initData.
+WEBAPP_INIT_MAX_AGE = 60 * 60 * 24
 
 
 def webapp_user_from_init_data(token: str, init_data: str, now: int | None = None) -> dict[str, Any] | None:
@@ -2218,13 +2296,14 @@ class BrandBot:
             base = slugify(name, "category")
             category_id = base
             index = 2
-            existing = {category["id"] for category in self.catalog.categories}
-            while category_id in existing:
-                category_id = f"{base}-{index}"
-                index += 1
-            self.catalog.data["categories"].append({"id": category_id, "name": name})
-            self.catalog.save()
-            self.catalog.reload()
+            with self.catalog.lock:
+                existing = {category["id"] for category in self.catalog.categories}
+                while category_id in existing:
+                    category_id = f"{base}-{index}"
+                    index += 1
+                self.catalog.data["categories"].append({"id": category_id, "name": name})
+                self.catalog.save()
+                self.catalog.reload()
             data = {"step": "name", "category": category_id}
             self.db.set_state(user_id, "admin_add", data)
             self.api.send_message(chat_id, f"Категория «{esc(name)}» создана.\n\n{ADD_STEPS[0][1]}")
@@ -2241,6 +2320,23 @@ class BrandBot:
         elif not value:
             self.api.send_message(chat_id, "Пусто не подойдёт. Напиши ещё раз или «Отмена».")
             return True
+        if step == "price":
+            # Цена уходит прямо в счёт, поэтому неоднозначный ввод отклоняем
+            # здесь, а не превращаем в случайную сумму на этапе оплаты.
+            try:
+                rubles = parse_price_strict(value)
+            except PriceError:
+                self.api.send_message(
+                    chat_id,
+                    "Не понял цену. Нужно одно число, например: <code>9 900 ₽</code>\n\n"
+                    "Диапазоны («1 200 - 1 500»), скидки в скобках и текст не подойдут — "
+                    "из такой строки нельзя посчитать сумму счёта.",
+                )
+                return True
+            if rubles <= 0:
+                self.api.send_message(chat_id, "Цена должна быть больше нуля. Напиши ещё раз.")
+                return True
+            value = format_rub(rubles)
         if step == "sizes":
             sizes = [item.strip() for item in re.split(r"[,;/]", value) if item.strip()]
             if not sizes:
@@ -2328,20 +2424,61 @@ class BrandBot:
         text = str(state[1].get("text", "")).strip()
         segment = str(state[1].get("segment", "all"))
         self.db.clear_state(user_id)
+        audience = self.db.broadcast_audience(segment)
+        if not audience:
+            self.api.send_message(chat_id, "В этом сегменте никого нет.")
+            return
+        # Рассылка идёт в отдельном потоке: раньше она выполнялась прямо в
+        # цикле опроса и на 10 000 получателей морозила бота примерно на 7 минут.
+        thread = threading.Thread(
+            target=self._run_broadcast,
+            args=(chat_id, user_id, text, segment, audience),
+            name="broadcast",
+            daemon=True,
+        )
+        thread.start()
+        self.api.send_message(
+            chat_id,
+            f"Рассылка пошла: {len(audience)} получателей.\n"
+            "Бот продолжает отвечать — отчёт придёт сюда, когда закончим.",
+        )
+
+    def _run_broadcast(
+        self,
+        chat_id: int,
+        user_id: int,
+        text: str,
+        segment: str,
+        audience: list[int],
+    ) -> None:
         delivered = 0
         failed = 0
-        for recipient in self.db.broadcast_audience(segment):
+        try:
+            for recipient in audience:
+                if STOP_EVENT.is_set():
+                    LOG.warning("Рассылка прервана остановкой бота: доставлено %s", delivered)
+                    break
+                try:
+                    self.api.send_message(recipient, esc(text), self.main_menu())
+                    delivered += 1
+                    time.sleep(0.04)
+                except Exception as exc:
+                    failed += 1
+                    if "blocked" in str(exc).lower() or "chat not found" in str(exc).lower():
+                        self.db.mark_blocked(recipient)
+                    LOG.warning("Broadcast failed for %s: %s", recipient, exc)
+            self.db.event(
+                user_id,
+                "broadcast_sent",
+                {"delivered": delivered, "failed": failed, "segment": segment},
+            )
             try:
-                self.api.send_message(recipient, esc(text), self.main_menu())
-                delivered += 1
-                time.sleep(0.04)
-            except Exception as exc:
-                failed += 1
-                if "blocked" in str(exc).lower() or "chat not found" in str(exc).lower():
-                    self.db.mark_blocked(recipient)
-                LOG.warning("Broadcast failed for %s: %s", recipient, exc)
-        self.db.event(user_id, "broadcast_sent", {"delivered": delivered, "failed": failed, "segment": segment})
-        self.api.send_message(chat_id, f"Готово. Доставлено: {delivered}. Ошибок: {failed}.")
+                self.api.send_message(chat_id, f"Готово. Доставлено: {delivered}. Ошибок: {failed}.")
+            except Exception:
+                LOG.warning("Не удалось отправить отчёт о рассылке", exc_info=True)
+        finally:
+            # Поток рассылки живёт долго и держит собственное соединение SQLite.
+            self.db.close_current()
 
     # ------------------------------------------------------------------ miniapp + input
 
@@ -2810,12 +2947,38 @@ class StorefrontHandler(BaseHTTPRequestHandler):
     api: TelegramAPI | None = None
     static_root = BASE_DIR / "miniapp"
 
+    # Витрина живёт внутри Telegram и подключает только свои файлы плюс SDK
+    # telegram.org. CSP — второй рубеж: в app.js много innerHTML, и если где-то
+    # однажды забудут escapeHTML, инлайновый скрипт всё равно не выполнится.
+    CSP_BASE = (
+        "default-src 'self'; "
+        "script-src 'self' https://telegram.org; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "base-uri 'none'; "
+        "form-action 'none'"
+    )
+    # Боевой режим пускает витрину в рамку только Telegram. В предпросмотре без
+    # токена рамку не ограничиваем, иначе локальный iframe покажет пустоту.
+    CSP_FRAME_TELEGRAM = "frame-ancestors https://web.telegram.org https://*.telegram.org"
+
+    def _csp(self) -> str:
+        settings = self.settings
+        if settings and settings.token:
+            return f"{self.CSP_BASE}; {self.CSP_FRAME_TELEGRAM}"
+        return self.CSP_BASE
+
     def _write(self, body: bytes, content_type: str, status: int = 200, cache_control: str = "no-cache") -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache_control)
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", self._csp())
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()")
         self.end_headers()
         if not getattr(self, "_head_only", False):
             self.wfile.write(body)
@@ -2830,6 +2993,25 @@ class StorefrontHandler(BaseHTTPRequestHandler):
 
     def _not_found(self) -> None:
         self._write(b"Not found", "text/plain; charset=utf-8", 404, "no-store")
+
+    def _client_key(self) -> str:
+        """Ключ лимитера: за прокси доверяем первому адресу X-Forwarded-For."""
+        forwarded = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+        if forwarded:
+            return forwarded[:64]
+        return str(self.client_address[0]) if self.client_address else "unknown"
+
+    def _too_many(self) -> None:
+        self._json({"error": "Слишком часто. Подожди немного и попробуй ещё раз."}, 429)
+
+    def _rate_ok(self, limiter: RateLimiter, scope: str, user: dict[str, Any] | None = None) -> bool:
+        """Считаем по user_id, если он подписан, иначе по адресу клиента."""
+        who = f"user:{user['id']}" if user else f"ip:{self._client_key()}"
+        if limiter.allow(f"{scope}:{who}"):
+            return True
+        LOG.warning("Превышен лимит %s для %s", scope, who)
+        self._too_many()
+        return False
 
     def _webapp_user(self) -> dict[str, Any] | None:
         raw = self.headers.get("X-Telegram-Init-Data") or ""
@@ -2864,6 +3046,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if not user:
             self._json({"error": "Открой витрину из бота — тогда подтянутся заявки."}, 401)
             return
+        if not self._rate_ok(READ_LIMITER, "my-orders", user):
+            return
         rows = self.db.orders_for_user(int(user["id"]), 20)
         self._json({"orders": [public_order_payload(row) for row in rows], "source": "bot"})
 
@@ -2874,6 +3058,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         user = self._webapp_user()
         if not user:
             self._json({"error": "Открой витрину из бота."}, 401)
+            return
+        if not self._rate_ok(CHECKOUT_LIMITER, "cancel", user):
             return
         payload = self._read_json_body() or {}
         try:
@@ -2936,6 +3122,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if not user:
             self._json({"error": "Открой витрину из бота."}, 401)
             return
+        if not self._rate_ok(CHECKOUT_LIMITER, "pay", user):
+            return
         payload = self._read_json_body() or {}
         payment_id = str(payload.get("payment_id") or "")[:32]
         bot = self._bot()
@@ -2955,6 +3143,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         user = self._webapp_user()
         if not user:
             self._json({"error": "Открой витрину из бота — тогда можно оплатить."}, 401)
+            return
+        if not self._rate_ok(CHECKOUT_LIMITER, "checkout", user):
             return
         payload = self._read_json_body()
         if not payload:
@@ -3057,14 +3247,19 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             if not catalog:
                 self._not_found()
                 return
-            payload = {
-                "brand": catalog.data.get("brand", {"name": settings.brand_name if settings else "ВОРОЖБИТОВ"}),
-                "channel_url": settings.channel_url if settings else "",
-                "privacy_url": settings.privacy_url if settings else "",
-                "products": [product for product in catalog.data.get("products", []) if product.get("active", True)],
-                "categories": catalog.categories,
-                "lookbook": catalog.data.get("lookbook", []),
-            }
+            if not self._rate_ok(READ_LIMITER, "catalog"):
+                return
+            with catalog.lock:
+                payload = {
+                    "brand": catalog.data.get("brand", {"name": settings.brand_name if settings else "ВОРОЖБИТОВ"}),
+                    "channel_url": settings.channel_url if settings else "",
+                    "privacy_url": settings.privacy_url if settings else "",
+                    "products": [
+                        product for product in catalog.data.get("products", []) if product.get("active", True)
+                    ],
+                    "categories": catalog.categories,
+                    "lookbook": catalog.data.get("lookbook", []),
+                }
             self._write(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
 
@@ -3114,7 +3309,20 @@ class StorefrontHandler(BaseHTTPRequestHandler):
 
     def do_HEAD(self) -> None:
         self._head_only = True
-        self.do_GET()
+        try:
+            self.do_GET()
+        finally:
+            # Флаг обязан жить ровно один запрос: если когда-нибудь включат
+            # HTTP/1.1 с keep-alive, иначе следующий ответ уйдёт без тела.
+            self._head_only = False
+
+    def finish(self) -> None:
+        """Отдать соединение SQLite до того, как поток запроса умрёт."""
+        try:
+            super().finish()
+        finally:
+            if self.db is not None:
+                self.db.close_current()
 
     def log_message(self, format: str, *args: Any) -> None:
         return
@@ -3185,6 +3393,10 @@ def main() -> int:
     if not settings.channel_url.startswith(("https://", "http://", "tg://")):
         LOG.error("CHANNEL_URL must be a valid HTTP(S) or tg:// URL")
         return 2
+    if not settings.admin_ids:
+        LOG.warning("ADMIN_IDS пуст — админ-панель и /add никому не доступны. Задай ID в .env")
+    if settings.manager_chat_id is None:
+        LOG.warning("MANAGER_CHAT_ID не задан — уведомления о заявках никуда не уйдут")
     try:
         ensure_catalog_exists(settings.catalog_path, BASE_DIR / "catalog.json")
         catalog = Catalog(settings.catalog_path)

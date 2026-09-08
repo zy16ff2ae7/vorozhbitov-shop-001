@@ -3,42 +3,42 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("fonts/manrope-400.ttf") format("truetype");
+  src: url("fonts/manrope-400.woff2") format("woff2");
 }
 @font-face {
   font-family: "Manrope";
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url("fonts/manrope-600.ttf") format("truetype");
+  src: url("fonts/manrope-600.woff2") format("woff2");
 }
 @font-face {
   font-family: "Manrope";
   font-style: normal;
   font-weight: 800;
   font-display: swap;
-  src: url("fonts/manrope-800.ttf") format("truetype");
+  src: url("fonts/manrope-800.woff2") format("woff2");
 }
 @font-face {
   font-family: "Unbounded";
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("fonts/unbounded-700.ttf") format("truetype");
+  src: url("fonts/unbounded-700.woff2") format("woff2");
 }
 @font-face {
   font-family: "Unbounded";
   font-style: normal;
   font-weight: 800;
   font-display: swap;
-  src: url("fonts/unbounded-900.ttf") format("truetype");
+  src: url("fonts/unbounded-900.woff2") format("woff2");
 }
 @font-face {
   font-family: "Unbounded";
   font-style: normal;
   font-weight: 900;
   font-display: swap;
-  src: url("fonts/unbounded-900.ttf") format("truetype");
+  src: url("fonts/unbounded-900.woff2") format("woff2");
 }
 
 :root {

@@ -1154,7 +1154,6 @@
     $("#bottomCartButton").addEventListener("click", openCart);
     $("#savedButton").addEventListener("click", showSaved);
     if ($("#profileButton")) $("#profileButton").addEventListener("click", openProfile);
-    if ($("#bottomProfile")) $("#bottomProfile").addEventListener("click", openProfile);
     if ($("#saveProfile")) $("#saveProfile").addEventListener("click", saveProfile);
     if ($("#profileOrders")) $("#profileOrders").addEventListener("click", event => {
       const payButton = event.target.closest("[data-pay-id]");

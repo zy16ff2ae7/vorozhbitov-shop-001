@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import tempfile
+import threading
 import time
 import unittest
 import urllib.error
@@ -17,6 +18,7 @@ from bot import (
     BrandBot,
     Catalog,
     Database,
+    RateLimiter,
     REF_RE,
     Settings,
     TelegramAPI,
@@ -26,7 +28,14 @@ from bot import (
     start_health_server,
     webapp_user_from_init_data,
 )
-from payments import parse_price_rub, stars_amount, verify_crypto_webhook, verify_lava_webhook
+from payments import (
+    PriceError,
+    parse_price_rub,
+    parse_price_strict,
+    stars_amount,
+    verify_crypto_webhook,
+    verify_lava_webhook,
+)
 
 
 def make_db(directory: str) -> Database:
@@ -233,7 +242,11 @@ class BotTests(unittest.TestCase):
     def test_webapp_order_is_validated_against_catalog_and_stored(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
+                super().__init__("test-token")
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
@@ -291,7 +304,11 @@ class BotTests(unittest.TestCase):
     def test_webapp_waitlist_is_recorded(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
+                super().__init__("test-token")
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
@@ -359,7 +376,11 @@ class BotTests(unittest.TestCase):
     def test_phone_is_not_saved_without_consent(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
+                super().__init__("test-token")
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
@@ -445,7 +466,11 @@ class BotTests(unittest.TestCase):
     def test_webapp_profile_is_stored(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
+                super().__init__("test-token")
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
@@ -508,6 +533,9 @@ class BotTests(unittest.TestCase):
             def __init__(self):
                 self.photos = []
                 self.messages = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_photo_file(self, chat_id, path, caption="", reply_markup=None):
                 self.photos.append((chat_id, Path(path), caption, reply_markup))
@@ -687,6 +715,66 @@ class BotTests(unittest.TestCase):
         self.assertEqual(stars_amount(11900, 2.0), 5950)
         self.assertEqual(stars_amount(100, 0), 50)
 
+    def test_price_parser_accepts_real_formats(self):
+        for raw, expected in [
+            ("11 900 ₽", 11900),
+            ("4900", 4900),
+            ("от 4900", 4900),
+            ("3 200 руб", 3200),
+            ("1 000 000 ₽", 1000000),
+            ("4 900,50 ₽", 4900),  # копейки округляются до рубля
+            ("4 900.49 ₽", 4900),
+        ]:
+            with self.subTest(raw=raw):
+                self.assertEqual(parse_price_strict(raw), expected)
+
+    def test_ambiguous_price_is_rejected_instead_of_overcharging(self):
+        """'1 200 - 1 500 ₽' раньше склеивалось в счёт на 12 001 500 ₽."""
+        for raw in [
+            "1 200 - 1 500 ₽",
+            "4900 (со скидкой 3900)",
+            "4.900 ₽",
+            "цена по запросу",
+            "",
+            "99999999999",
+        ]:
+            with self.subTest(raw=raw):
+                with self.assertRaises(PriceError):
+                    parse_price_strict(raw)
+                # Мягкая обёртка отдаёт 0: заявка примется, но счёт не выставится.
+                with self.assertLogs("brand_bot.pay", level="WARNING"):
+                    self.assertEqual(parse_price_rub(raw), 0)
+
+    def test_rate_limiter_blocks_burst_and_recovers(self):
+        limiter = RateLimiter(limit=3, window_seconds=60)
+        self.assertTrue(all(limiter.allow("user:1", now=100.0) for _ in range(3)))
+        self.assertFalse(limiter.allow("user:1", now=100.0))
+        # Другой ключ не задет общим счётчиком.
+        self.assertTrue(limiter.allow("user:2", now=100.0))
+        # Окно уехало — снова можно.
+        self.assertTrue(limiter.allow("user:1", now=161.0))
+
+    def test_database_connection_is_released_per_thread(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = make_db(directory)
+            seen: list[int] = []
+
+            def work() -> None:
+                try:
+                    db.connection().execute("SELECT 1").fetchone()
+                    seen.append(1)
+                finally:
+                    db.close_current()
+
+            threads = [threading.Thread(target=work) for _ in range(20)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            self.assertEqual(len(seen), 20)
+            # Повторный вызов на потоке без соединения не должен падать.
+            db.close_current()
+
     def test_payment_webhooks_verify_hmac(self):
         body = b'{"order_id":"p1","status":"success"}'
         lava_sign = hmac.new(b"hook", body, hashlib.sha256).hexdigest()
@@ -741,14 +829,15 @@ class BotTests(unittest.TestCase):
     def test_checkout_api_creates_payment_and_lava_webhook_marks_paid(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
+                super().__init__("test-token")
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
                 return {"message_id": len(self.sent)}
-
-            def create_invoice_link(self, payload):
-                return "https://t.me/invoice/test"
 
         def request_json(url, init_data=None, method="GET", body=None, extra_headers=None):
             headers = {"Accept": "application/json"}
@@ -866,6 +955,9 @@ class BotTests(unittest.TestCase):
             def __init__(self):
                 self.pre = []
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def answer_pre_checkout(self, query_id, ok=True, error_message=""):
                 self.pre.append((query_id, ok, error_message))
