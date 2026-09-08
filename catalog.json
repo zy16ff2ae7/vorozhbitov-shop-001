@@ -92,9 +92,8 @@
       "images": [
         "assets/spin/tag-sich-01.jpg",
         "assets/spin/tag-sich-02.jpg",
-        "assets/drop/tag-front.jpg",
-        "assets/drop/tag-back.jpg",
-        "assets/drop/tag-studio.jpg"
+        "assets/spin/tag-sich-03.jpg",
+        "assets/spin/tag-sich-04.jpg"
       ],
       "badge": "ТИРАЖ 100",
       "material": "Нержавеющая сталь · лазерная гравировка",
@@ -111,7 +110,9 @@
       "active": true,
       "spin": [
         "assets/spin/tag-sich-01.jpg",
-        "assets/spin/tag-sich-02.jpg"
+        "assets/spin/tag-sich-02.jpg",
+        "assets/spin/tag-sich-03.jpg",
+        "assets/spin/tag-sich-04.jpg"
       ],
       "personalization": {
         "label": "НОМЕР ЖЕТОНА",

@@ -844,6 +844,37 @@ class BotTests(unittest.TestCase):
                 everything = [product["image"], *product["images"], *product["spin"]]
                 self.assertFalse([a for a in everything if "pack" in a], "упаковка попала в карточку")
 
+    def test_product_photos_are_sharp_enough_to_sell(self):
+        """Размытые стоп-кадры из видео выглядят дёшево — в галерее только резкие снимки."""
+        try:
+            from PIL import Image
+            import numpy as np
+        except ImportError:  # pragma: no cover - зависит от окружения
+            self.skipTest("нужны Pillow и numpy")
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        root = Path(__file__).with_name("miniapp")
+        # Дисперсия лапласиана, нормированная на контраст кадра: абсолютное
+        # значение штрафует честную тёмную съёмку чёрной вещи на чёрном фоне.
+        # Стоп-кадры из видео давали 0.001-0.007, живые студийные снимки — 0.042+.
+        threshold = 0.02
+        for product_id in ("tee-sila-i-chest", "tag-sila-i-chest"):
+            product = catalog.get(product_id)
+            for shot in dict.fromkeys([product["image"], *product["images"], *product["spin"]]):
+                path = root / shot
+                if not path.is_file():
+                    continue
+                with self.subTest(shot=shot):
+                    grey = np.asarray(Image.open(path).convert("L"), dtype=float)
+                    laplacian = (
+                        grey[:-2, 1:-1] + grey[2:, 1:-1]
+                        + grey[1:-1, :-2] + grey[1:-1, 2:]
+                        - 4 * grey[1:-1, 1:-1]
+                    )
+                    detail = laplacian.var() / max(grey.var(), 1e-6)
+                    self.assertGreater(
+                        detail, threshold, f"{shot} размыт — такое фото продавать нельзя"
+                    )
+
     def test_welcome_screen_always_shows_on_launch(self):
         """Приветствие — визитка бренда, оно не должно пропадать после входа."""
         app_js = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
