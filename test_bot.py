@@ -24,6 +24,8 @@ from bot import (
     TelegramAPI,
     ensure_catalog_exists,
     normalize_phone,
+    person_label,
+    sanitize_personalization,
     slugify,
     start_health_server,
     webapp_user_from_init_data,
@@ -744,6 +746,67 @@ class BotTests(unittest.TestCase):
                 # Мягкая обёртка отдаёт 0: заявка примется, но счёт не выставится.
                 with self.assertLogs("brand_bot.pay", level="WARNING"):
                     self.assertEqual(parse_price_rub(raw), 0)
+
+    def test_personalization_is_validated_against_catalog(self):
+        """Номер жетона приходит из браузера, поэтому проверяется по каталогу."""
+        tag = {"id": "tag", "personalization": {"label": "НОМЕР ЖЕТОНА", "pattern": r"^[0-9]{1,5}$", "optional": True}}
+        plain = {"id": "tee"}
+        self.assertEqual(sanitize_personalization(tag, "00063"), "00063")
+        self.assertEqual(sanitize_personalization(tag, "  00063 "), "00063")
+        for bad in ["ABC", "<script>", "999999999", "63; DROP", ""]:
+            with self.subTest(bad=bad):
+                self.assertEqual(sanitize_personalization(tag, bad), "")
+        # У товара без персонализации поле игнорируется целиком.
+        self.assertEqual(sanitize_personalization(plain, "00063"), "")
+        self.assertEqual(person_label(tag), "НОМЕР ЖЕТОНА")
+
+    def test_real_drop_products_are_loadable(self):
+        """Оба реальных лота живы, с фото и корректной ценой."""
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        tee = catalog.get("tee-sila-i-chest")
+        tag = catalog.get("tag-sila-i-chest")
+        self.assertIsNotNone(tee)
+        self.assertIsNotNone(tag)
+        self.assertEqual(parse_price_strict(tee["price"]), 4900)
+        self.assertEqual(parse_price_strict(tag["price"]), 1900)
+        self.assertIn("XXL", tee["sizes"])
+        self.assertEqual(tag["sizes"], ["ONE SIZE"])
+        root = Path(__file__).with_name("miniapp")
+        for product in (tee, tag):
+            for asset in [product["image"], *product.get("images", []), *product.get("spin", [])]:
+                with self.subTest(asset=asset):
+                    self.assertTrue((root / asset).is_file(), f"нет файла {asset}")
+        media = catalog.data.get("media", {})
+        for key in ("hero_loop", "hero_poster", "teaser", "teaser_poster"):
+            with self.subTest(key=key):
+                self.assertTrue((root / media[key]).is_file(), f"нет медиа {media[key]}")
+
+    def test_video_is_served_with_range_support(self):
+        """Без 206 на Range плеер в iOS не стартует."""
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = Catalog(Path(__file__).with_name("catalog.json"))
+            server = start_health_server(0, catalog, None, None, None)
+            port = server.server_address[1]
+            try:
+                base = f"http://127.0.0.1:{port}/assets/video/hero-loop.mp4"
+                request = urllib.request.Request(base, headers={"Range": "bytes=0-1"})
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    self.assertEqual(response.status, 206)
+                    self.assertEqual(response.headers.get("Accept-Ranges"), "bytes")
+                    self.assertRegex(response.headers.get("Content-Range", ""), r"^bytes 0-1/\d+$")
+                    self.assertEqual(len(response.read()), 2)
+                with urllib.request.urlopen(base, timeout=5) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.headers.get("Content-Type"), "video/mp4")
+                    full = len(response.read())
+                self.assertGreater(full, 1000)
+                bad = urllib.request.Request(base, headers={"Range": f"bytes={full + 500}-"})
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(bad, timeout=5)
+                self.assertEqual(caught.exception.code, 416)
+            finally:
+                server.shutdown()
+                server.server_close()
 
     def test_rate_limiter_blocks_burst_and_recovers(self):
         limiter = RateLimiter(limit=3, window_seconds=60)

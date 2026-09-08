@@ -86,6 +86,7 @@ class RateLimiter:
 # заявок опрашивается витриной раз в 4 секунды, поэтому лимит выше.
 CHECKOUT_LIMITER = RateLimiter(limit=8, window_seconds=60)
 READ_LIMITER = RateLimiter(limit=60, window_seconds=60)
+VIDEO_SUFFIXES = {".mp4", ".m4v", ".webm", ".mov"}
 PHONE_RE = re.compile(r"^\+?[0-9]{10,15}$")
 REF_RE = re.compile(r"^ref(\d{3,15})$")
 WELCOME_PHOTO = BASE_DIR / "miniapp" / "assets" / "welcome.jpg"
@@ -1253,6 +1254,36 @@ def webapp_user_from_init_data(token: str, init_data: str, now: int | None = Non
         return None
     user["id"] = int(user["id"])
     return user
+
+
+def person_label(product: dict[str, Any]) -> str:
+    config = product.get("personalization")
+    if isinstance(config, dict) and config.get("label"):
+        return str(config["label"])
+    return "ПЕРСОНАЛИЗАЦИЯ"
+
+
+def sanitize_personalization(product: dict[str, Any], raw: Any) -> str:
+    """Проверить персонализацию (номер жетона) по правилам из каталога.
+
+    Витрине доверять нельзя: паттерн и сам факт поддержки поля берём из
+    серверного каталога, а не из присланного заказа.
+    """
+    config = product.get("personalization")
+    if not isinstance(config, dict):
+        return ""
+    value = str(raw or "").strip()[:32]
+    if not value:
+        return ""
+    pattern = str(config.get("pattern") or "")
+    if pattern:
+        try:
+            if not re.fullmatch(pattern, value):
+                return ""
+        except re.error:
+            LOG.warning("Некорректный шаблон персонализации у товара %s", product.get("id"))
+            return ""
+    return value
 
 
 def public_order_payload(row: sqlite3.Row) -> dict[str, Any]:
@@ -2544,7 +2575,7 @@ class BrandBot:
         user: dict[str, Any],
         customer: dict[str, Any],
         phone: str,
-        valid_items: list[tuple[dict[str, Any], str, int]],
+        valid_items: list[tuple[dict[str, Any], str, int, str]],
         payload: dict[str, Any],
         notify_user: int | None = None,
     ) -> dict[str, Any]:
@@ -2562,27 +2593,30 @@ class BrandBot:
             },
         )
         request_base = re.sub(r"[^a-zA-Z0-9_-]", "", str(payload.get("request_id", "")))[:80] or f"web-{user_id}-{int(time.time())}"
-        total = sum(self.line_amount(product, quantity) for product, _, quantity in valid_items)
+        total = sum(self.line_amount(product, quantity) for product, _, quantity, _ in valid_items)
         payment_id = self.new_payment_id() if total else ""
         status = "awaiting_payment" if total else "new"
-        created_orders: list[tuple[int, dict[str, Any], str, int]] = []
+        created_orders: list[tuple[int, dict[str, Any], str, int, str]] = []
         note = self.customer_note(customer)
-        for index, (product, size, quantity) in enumerate(valid_items, start=1):
+        for index, (product, size, quantity, person) in enumerate(valid_items, start=1):
             line_sum = self.line_amount(product, quantity)
+            # Номер жетона уникален для позиции, поэтому входит и в примечание,
+            # и в request_id — иначе два разных номера схлопнутся в один заказ.
+            line_note = f"{note} · {person_label(product)}: {person}" if person else note
             order_id, created = self.db.create_order(
-                f"{request_base}-{index}-{product['id']}-{size}",
+                f"{request_base}-{index}-{product['id']}-{size}{('-' + person) if person else ''}",
                 user_id,
                 product,
                 size,
                 phone,
                 quantity,
-                note,
+                line_note,
                 status=status,
                 payment_id=payment_id,
                 amount_rub=line_sum,
             )
             if created:
-                created_orders.append((order_id, product, size, quantity))
+                created_orders.append((order_id, product, size, quantity, person))
         if not created_orders:
             return {"ok": False, "error": "Эта заявка уже была принята."}
         stars = stars_amount(total, self.settings.stars_rub_per_star) if total and self.settings.stars_enabled else 0
@@ -2590,9 +2624,10 @@ class BrandBot:
             self.db.create_payment(payment_id, user_id, total, stars)
         order_lines = [
             f"• {esc(product['name'])} · {esc(size)} · {quantity} шт."
-            for _, product, size, quantity in created_orders
+            + (f" · {esc(person_label(product))} {esc(person)}" if person else "")
+            for _, product, size, quantity, person in created_orders
         ]
-        description = f"{self.settings.brand_name}: {', '.join(product['name'] for _, product, _, _ in created_orders)[:180]}"
+        description = f"{self.settings.brand_name}: {', '.join(product['name'] for _, product, _, _, _ in created_orders)[:180]}"
         methods = self.build_pay_methods(payment_id, total, description) if payment_id else []
         if notify_user:
             self.offer_payment(int(notify_user), payment_id, total, order_lines, source="витрины")
@@ -2621,8 +2656,13 @@ class BrandBot:
             "order_ids": [order_id for order_id, *_ in created_orders],
             "status": status,
             "lines": [
-                {"name": str(product["name"]), "size": str(size), "quantity": int(quantity)}
-                for _, product, size, quantity in created_orders
+                {
+                    "name": str(product["name"]),
+                    "size": str(size),
+                    "quantity": int(quantity),
+                    **({"person": person, "person_label": person_label(product)} if person else {}),
+                }
+                for _, product, size, quantity, person in created_orders
             ],
         }
 
@@ -2669,7 +2709,7 @@ class BrandBot:
         raw_items = payload.get("items")
         if not isinstance(raw_items, list) or not raw_items or len(raw_items) > 20:
             return {"ok": False, "error": "В заявке нет вещей или их слишком много. Проверь корзину."}
-        valid_items: list[tuple[dict[str, Any], str, int]] = []
+        valid_items: list[tuple[dict[str, Any], str, int, str]] = []
         for raw_item in raw_items:
             if not isinstance(raw_item, dict):
                 continue
@@ -2681,7 +2721,8 @@ class BrandBot:
                 quantity = max(1, min(int(raw_item.get("quantity", 1)), 20))
             except (TypeError, ValueError):
                 quantity = 1
-            valid_items.append((product, size, quantity))
+            person = sanitize_personalization(product, raw_item.get("person"))
+            valid_items.append((product, size, quantity, person))
         if not valid_items:
             return {"ok": False, "error": "Некоторые вещи уже закончились. Обнови витрину и выбери снова."}
         self.db.upsert_user(user)
@@ -2726,7 +2767,7 @@ class BrandBot:
             self.api.send_message(chat_id, "В заявке нет вещей или их слишком много. Проверь корзину.", self.main_menu())
             return
 
-        valid_items: list[tuple[dict[str, Any], str, int]] = []
+        valid_items: list[tuple[dict[str, Any], str, int, str]] = []
         for raw_item in raw_items:
             if not isinstance(raw_item, dict):
                 continue
@@ -2738,7 +2779,8 @@ class BrandBot:
                 quantity = max(1, min(int(raw_item.get("quantity", 1)), 20))
             except (TypeError, ValueError):
                 quantity = 1
-            valid_items.append((product, size, quantity))
+            person = sanitize_personalization(product, raw_item.get("person"))
+            valid_items.append((product, size, quantity, person))
         if not valid_items:
             self.api.send_message(chat_id, "Некоторые вещи уже закончились. Обнови витрину и выбери снова.", self.main_menu())
             return
@@ -3259,6 +3301,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                     ],
                     "categories": catalog.categories,
                     "lookbook": catalog.data.get("lookbook", []),
+                    "media": catalog.data.get("media", {}),
                 }
             self._write(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
@@ -3277,6 +3320,10 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if not candidate.is_file():
             self._not_found()
             return
+        suffix = candidate.suffix.lower()
+        if suffix in VIDEO_SUFFIXES:
+            self._serve_video(candidate)
+            return
         try:
             body = candidate.read_bytes()
         except OSError:
@@ -3285,8 +3332,84 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
         if content_type.startswith("text/") or content_type in {"application/javascript", "image/svg+xml"}:
             content_type += "; charset=utf-8"
-        cache = "public, max-age=3600" if candidate.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".svg"} else "no-cache"
+        if suffix in {".jpg", ".jpeg", ".png", ".webp", ".svg"}:
+            cache = "public, max-age=3600"
+        elif suffix in {".woff2", ".woff", ".ttf"}:
+            # Шрифты неизменяемы и весят больше всего — держим их в кеше долго.
+            cache = "public, max-age=31536000, immutable"
+        else:
+            cache = "no-cache"
         self._write(body, content_type, 200, cache)
+
+    def _serve_video(self, candidate: Path) -> None:
+        """Отдать видео с поддержкой HTTP Range.
+
+        Без 206 ``<video>`` в iOS/Safari не стартует: первый запрос там —
+        ``Range: bytes=0-1``. Тело читается кусками, чтобы ролик не оседал
+        в памяти целиком на каждый запрос.
+        """
+        try:
+            size = candidate.stat().st_size
+        except OSError:
+            self._not_found()
+            return
+        content_type = mimetypes.guess_type(candidate.name)[0] or "video/mp4"
+        cache = "public, max-age=86400"
+        start, end = 0, size - 1
+        partial = False
+        raw_range = (self.headers.get("Range") or "").strip()
+        if raw_range.startswith("bytes="):
+            spec = raw_range[6:].split(",")[0].strip()
+            first, _, last = spec.partition("-")
+            try:
+                if not first:
+                    # Суффиксный диапазон: последние N байт.
+                    length = int(last)
+                    if length <= 0:
+                        raise ValueError
+                    start = max(0, size - length)
+                else:
+                    start = int(first)
+                    if last:
+                        end = min(int(last), size - 1)
+                if start > end or start >= size:
+                    raise ValueError
+                partial = True
+            except ValueError:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+        length = end - start + 1
+        self.send_response(206 if partial else 200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(length))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", cache)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", self._csp())
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        if partial:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        if getattr(self, "_head_only", False):
+            return
+        remaining = length
+        try:
+            with candidate.open("rb") as handle:
+                handle.seek(start)
+                while remaining > 0:
+                    chunk = handle.read(min(262144, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            # Обычное дело: плеер перемотал и оборвал текущий запрос.
+            LOG.debug("Клиент закрыл соединение при отдаче видео")
+        except OSError:
+            LOG.warning("Не удалось отдать видео %s", candidate.name, exc_info=True)
 
     def do_POST(self) -> None:
         path = urllib.parse.urlparse(self.path).path

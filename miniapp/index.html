@@ -72,7 +72,10 @@
     <main>
       <section class="hero" id="home">
         <div class="hero-media">
-          <img src="assets/welcome.jpg" alt="Приветственное фото ВОРОЖБИТОВ" fetchpriority="high">
+          <video class="hero-video hidden" id="heroVideo" muted loop playsinline preload="none"
+                 poster="assets/video/hero-poster.jpg" aria-label="Никита Ворожбитов — выпуск 001"></video>
+          <img src="assets/welcome.jpg" alt="Приветственное фото ВОРОЖБИТОВ" fetchpriority="high" id="heroFallback">
+          <button class="hero-play hidden" id="heroPlay" type="button" aria-label="Включить видео">▶</button>
           <div class="hero-shade"></div>
           <div class="hero-bout" aria-hidden="true">
             <svg class="bout-svg" viewBox="0 0 140 260">
@@ -271,6 +274,15 @@
           </div>
           <span class="item-count">ЗАМЕТКИ</span>
         </div>
+        <button class="teaser-card" id="teaserCard" type="button" aria-label="Смотреть тизер выпуска">
+          <img id="teaserPoster" src="assets/video/teaser-poster.jpg" alt="Тизер выпуска 001" loading="lazy" decoding="async">
+          <span class="teaser-shade" aria-hidden="true"></span>
+          <span class="teaser-play" aria-hidden="true">▶</span>
+          <span class="teaser-meta">
+            <b id="teaserTitle">СИЛА И ЧЕСТЬ</b>
+            <small id="teaserCaption">Выпуск 001 · Никита Ворожбитов</small>
+          </span>
+        </button>
         <div class="lookbook-grid" id="lookbookGrid"></div>
       </section>
 
@@ -372,6 +384,11 @@
           </div>
           <div class="size-list" id="sizeList"></div>
           <p class="size-hint" id="sizeHint">Выбери размер.</p>
+        </div>
+        <div class="person-row hidden" id="personRow">
+          <label class="person-label" for="personInput" id="personLabel">НОМЕР ЖЕТОНА</label>
+          <input class="person-input" id="personInput" type="text" inputmode="numeric" autocomplete="off" placeholder="например, 00063">
+          <p class="person-hint" id="personHint"></p>
         </div>
         <div class="qty-row">
           <span>КОЛ-ВО</span>
@@ -490,6 +507,17 @@
         <div><b>XL</b><span>130</span><span>76</span><span>186–194</span></div>
       </div>
       <p class="form-note">Замеры ориентировочные. Точно скажет менеджер.</p>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="teaserModal" role="dialog" aria-modal="true" aria-label="Тизер выпуска">
+    <div class="teaser-sheet">
+      <button class="sheet-close" data-close="teaserModal" type="button" aria-label="Закрыть">×</button>
+      <video id="teaserVideo" controls playsinline preload="none" poster="assets/video/teaser-poster.jpg"></video>
+      <div class="teaser-actions">
+        <button class="button button-primary punch" id="teaserToShop" type="button">СМОТРЕТЬ ВЫПУСК <span>↗</span></button>
+        <button class="text-button hidden" id="teaserToStory" type="button">В сторис <span>↗</span></button>
+      </div>
     </div>
   </div>
 

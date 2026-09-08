@@ -621,6 +621,75 @@ h1, h2 {
 .manifesto-lines small { color: #6f6b64; font-size: 12px; }
 
 .feature-section { padding-top: 64px; padding-bottom: 64px; }
+/* --- Персонализация: номер жетона --- */
+.person-row { padding: 0 16px 4px; display: flex; flex-direction: column; gap: 6px; }
+.person-label { font-size: 10px; letter-spacing: .18em; color: var(--muted); }
+.person-input {
+  width: 100%; padding: 12px 14px; background: var(--surface-2);
+  border: 1px solid var(--line); color: var(--ink);
+  font-family: var(--font-ui); font-size: 15px; letter-spacing: .06em;
+}
+.person-input:focus { outline: none; border-color: var(--red); }
+.person-input.error { border-color: var(--red-hot); background: rgba(225, 6, 0, .08); }
+.person-input.error + .person-hint, .person-row .person-hint.error { color: var(--red-hot); }
+.person-hint { margin: 0; font-size: 11px; line-height: 1.4; color: var(--dim); }
+
+/* --- Тизер выпуска: настоящая съёмка бренда --- */
+.teaser-card {
+  position: relative; display: block; width: 100%; margin: 0 0 8px;
+  padding: 0; border: 1px solid var(--line); background: #0c0c0e;
+  overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.teaser-card img {
+  display: block; width: 100%; aspect-ratio: 16/10; object-fit: cover; object-position: 50% 28%;
+  filter: contrast(1.05) saturate(.72); transition: transform .5s ease;
+}
+.teaser-card:hover img, .teaser-card:focus-visible img { transform: scale(1.03); }
+.teaser-shade {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(7,7,8,.05) 30%, rgba(7,7,8,.85));
+}
+.teaser-play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 58px; height: 58px; display: grid; place-items: center;
+  font-size: 17px; color: var(--bone); padding-left: 4px;
+  background: rgba(225, 6, 0, .92); border-radius: 50%;
+  box-shadow: 0 10px 34px rgba(0,0,0,.5);
+}
+.teaser-card:hover .teaser-play { background: var(--red-hot); }
+.teaser-meta {
+  position: absolute; left: 14px; right: 14px; bottom: 12px;
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+}
+.teaser-meta b {
+  font-family: var(--font-display); font-weight: 900; font-size: 20px;
+  letter-spacing: -.04em; color: var(--bone);
+}
+.teaser-meta small { font-size: 10px; letter-spacing: .18em; color: var(--muted); text-transform: uppercase; }
+
+.teaser-sheet { background: #050505; padding: 48px 0 20px; }
+.teaser-sheet video { width: 100%; max-height: 72vh; background: #000; display: block; }
+.teaser-actions { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 0; }
+
+/* --- Видео в hero --- */
+.hero-video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; min-height: 420px;
+  filter: contrast(1.05) saturate(.72);
+}
+.hero-play {
+  position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%);
+  width: 56px; height: 56px; display: grid; place-items: center;
+  font-size: 16px; padding-left: 4px; color: var(--bone);
+  background: rgba(225, 6, 0, .92); border: 0; border-radius: 50%;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5); cursor: pointer; z-index: 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-video { display: none; }
+  .teaser-card img { transition: none; }
+}
+
 .lookbook-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .lookbook-card { margin: 0; position: relative; overflow: hidden; background: #101012; cursor: zoom-in; }
 .lookbook-card img {

@@ -380,6 +380,7 @@
     if (!state.modalStack.length) document.body.classList.remove("modal-open");
     if (id === "productModal") stop3D();
     if (id === "payModal") stopPayPoll();
+    if (id === "teaserModal") closeTeaser();
     syncBackButton();
     syncMainButton();
   }
@@ -548,6 +549,7 @@
     $("#sizeHint").textContent = state.selectedSize ? `Размер ${state.selectedSize} выбран.` : "Выбери размер.";
     $("#sizeHint").classList.remove("error");
     $("#sheetDetails").innerHTML = `<strong>ДЕТАЛИ</strong><br>${(product.details || []).map(escapeHTML).join(" · ")}`;
+    renderPersonalization(product);
     const saved = state.saved.includes(product.id);
     $("#sheetSave").classList.toggle("saved", saved);
     $("#sheetSave").setAttribute("aria-label", saved ? "Удалить из сохранённых" : "Сохранить");
@@ -601,6 +603,48 @@
     scrollToId("catalog");
   }
 
+  function renderPersonalization(product) {
+    const row = $("#personRow");
+    if (!row) return;
+    const config = product && product.personalization;
+    if (!config) {
+      row.classList.add("hidden");
+      if ($("#personInput")) $("#personInput").value = "";
+      return;
+    }
+    row.classList.remove("hidden");
+    if ($("#personLabel")) $("#personLabel").textContent = config.label || "ПЕРСОНАЛИЗАЦИЯ";
+    const input = $("#personInput");
+    if (input) {
+      input.value = "";
+      input.placeholder = config.placeholder || "";
+      input.classList.remove("error");
+    }
+    if ($("#personHint")) $("#personHint").textContent = config.hint || "";
+  }
+
+  /** Значение персонализации: строка, "" если не нужно, false если ввод неверный. */
+  function personValue(product) {
+    const config = product && product.personalization;
+    const input = $("#personInput");
+    if (!config || !input) return "";
+    const value = String(input.value || "").trim();
+    if (!value) {
+      if (config.optional) return "";
+      $("#personHint").textContent = "Заполни это поле.";
+      input.classList.add("error");
+      haptic("error");
+      return false;
+    }
+    if (config.pattern && !new RegExp(config.pattern).test(value)) {
+      $("#personHint").textContent = "Только цифры, до пяти знаков.";
+      input.classList.add("error");
+      haptic("error");
+      return false;
+    }
+    return value;
+  }
+
   function addToCart() {
     const product = state.currentProduct;
     if (!product) return;
@@ -610,10 +654,13 @@
       haptic("error");
       return;
     }
-    const key = `${product.id}::${state.selectedSize}`;
+    const person = personValue(product);
+    if (person === false) return;
+    // Разные номера жетона — разные строки заявки, поэтому номер входит в ключ.
+    const key = `${product.id}::${state.selectedSize}${person ? `::${person}` : ""}`;
     const existing = state.cart.find(item => item.key === key);
     if (existing) existing.qty += state.qty;
-    else state.cart.push({ key, id: product.id, size: state.selectedSize, qty: state.qty });
+    else state.cart.push({ key, id: product.id, size: state.selectedSize, qty: state.qty, person: person || "" });
     saveJSON("vorozhbitov_cart", state.cart);
     updateCounters();
     closeModal("productModal");
@@ -896,7 +943,11 @@
         note
       },
       consent: true,
-      items: pairs.map(({ item, product }) => ({ product_id: product.id, size: item.size, quantity: item.qty }))
+      items: pairs.map(({ item, product }) => {
+        const line = { product_id: product.id, size: item.size, quantity: item.qty };
+        if (item.person) line.person = item.person;
+        return line;
+      })
     };
     const history = loadJSON("vorozhbitov_orders", []);
     history.unshift({ at: Date.now(), total: cartTotal(), items: payload.items });
@@ -1088,13 +1139,158 @@
     } catch (_) {
       state.data = FALLBACK_CATALOG;
     }
+    applyMedia();
     renderCategoryChips();
     renderProducts();
     renderLookbook();
   }
 
+  /* --- Видео бренда: hero-петля и тизер --- */
+
+  function mediaConfig() {
+    const media = (state.data && state.data.media) || {};
+    return {
+      heroLoop: media.hero_loop || "assets/video/hero-loop.mp4",
+      heroPoster: media.hero_poster || "assets/video/hero-poster.jpg",
+      teaser: media.teaser || "assets/video/teaser.mp4",
+      teaserPoster: media.teaser_poster || "assets/video/teaser-poster.jpg",
+      title: media.teaser_title || "СИЛА И ЧЕСТЬ",
+      caption: media.teaser_caption || "Выпуск 001 · Никита Ворожбитов",
+      storyUrl: media.teaser_story_url || ""
+    };
+  }
+
+  function saverMode() {
+    // Экономия трафика или медленная сеть — оставляем постер, видео не грузим.
+    const conn = navigator.connection || {};
+    if (conn.saveData) return true;
+    return /(^|-)2g$/.test(String(conn.effectiveType || ""));
+  }
+
+  function reducedMotion() {
+    return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function applyMedia() {
+    const media = mediaConfig();
+    const poster = $("#teaserPoster");
+    if (poster) poster.src = media.teaserPoster;
+    if ($("#teaserTitle")) $("#teaserTitle").textContent = media.title;
+    if ($("#teaserCaption")) $("#teaserCaption").textContent = media.caption;
+    const teaserVideo = $("#teaserVideo");
+    if (teaserVideo) teaserVideo.poster = media.teaserPoster;
+    setupHeroVideo(media);
+  }
+
+  function setupHeroVideo(media) {
+    const video = $("#heroVideo");
+    const fallback = $("#heroFallback");
+    const playButton = $("#heroPlay");
+    if (!video) return;
+    video.poster = media.heroPoster;
+    if (saverMode() || reducedMotion()) {
+      // Показываем постер съёмки вместо анимации.
+      if (fallback) fallback.src = media.heroPoster;
+      return;
+    }
+    if (!video.dataset.src) {
+      video.dataset.src = media.heroLoop;
+      video.src = media.heroLoop;
+      video.load();
+    }
+    video.classList.remove("hidden");
+    if (fallback) fallback.classList.add("hidden");
+
+    const tryPlay = () => {
+      const attempt = video.play();
+      if (attempt && typeof attempt.catch === "function") {
+        // iOS WKWebView может отклонить автоплей — тогда показываем кнопку.
+        attempt.then(() => playButton && playButton.classList.add("hidden"))
+               .catch(() => playButton && playButton.classList.remove("hidden"));
+      }
+    };
+    tryPlay();
+
+    if (playButton && !playButton.dataset.bound) {
+      playButton.dataset.bound = "1";
+      playButton.addEventListener("click", () => {
+        tryPlay();
+        haptic("light");
+      });
+    }
+    // Не крутим видео за пределами экрана и в свёрнутом приложении.
+    if ("IntersectionObserver" in window && !video.dataset.observed) {
+      video.dataset.observed = "1";
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) tryPlay();
+          else video.pause();
+        });
+      }, { threshold: 0.15 });
+      observer.observe(video);
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) video.pause();
+        else if (!state.modalStack.includes("teaserModal")) tryPlay();
+      });
+    }
+  }
+
+  function openTeaser() {
+    const media = mediaConfig();
+    const video = $("#teaserVideo");
+    const hero = $("#heroVideo");
+    if (hero) hero.pause();
+    if (video) {
+      if (!video.src) video.src = media.teaser;
+      video.currentTime = 0;
+    }
+    const story = $("#teaserToStory");
+    // Кнопка сторис есть только на клиентах Bot API 7.8+ и с публичным URL.
+    if (story) story.classList.toggle("hidden", !(tg && typeof tg.shareToStory === "function" && media.storyUrl));
+    openModal("teaserModal");
+    if (video) {
+      const attempt = video.play();
+      if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
+    }
+    haptic("light");
+  }
+
+  function closeTeaser() {
+    const video = $("#teaserVideo");
+    if (video) {
+      video.pause();
+      video.currentTime = 0;
+    }
+    const hero = $("#heroVideo");
+    if (hero && !saverMode() && !reducedMotion()) {
+      const attempt = hero.play();
+      if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
+    }
+  }
+
+  function shareTeaserToStory() {
+    const media = mediaConfig();
+    if (!media.storyUrl || !tg || typeof tg.shareToStory !== "function") {
+      showToast("Сторис доступны в свежем Telegram.");
+      return;
+    }
+    try {
+      tg.shareToStory(media.storyUrl, { text: `${media.title} — выпуск 001` });
+      haptic("success");
+    } catch (_) {
+      showToast("Не получилось открыть сторис.");
+    }
+  }
+
   function bindEvents() {
     $("#enterShop").addEventListener("click", enterShop);
+
+    if ($("#teaserCard")) $("#teaserCard").addEventListener("click", openTeaser);
+    if ($("#teaserToStory")) $("#teaserToStory").addEventListener("click", shareTeaserToStory);
+    if ($("#teaserToShop")) $("#teaserToShop").addEventListener("click", () => {
+      closeModal("teaserModal");
+      scrollToId("catalog");
+    });
 
     $$("[data-stage]").forEach(button => button.addEventListener("click", () => {
       setStage(button.dataset.stage);
