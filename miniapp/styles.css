@@ -3,42 +3,42 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("fonts/manrope-400.ttf") format("truetype");
+  src: url("fonts/manrope-400.woff2") format("woff2");
 }
 @font-face {
   font-family: "Manrope";
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url("fonts/manrope-600.ttf") format("truetype");
+  src: url("fonts/manrope-600.woff2") format("woff2");
 }
 @font-face {
   font-family: "Manrope";
   font-style: normal;
   font-weight: 800;
   font-display: swap;
-  src: url("fonts/manrope-800.ttf") format("truetype");
+  src: url("fonts/manrope-800.woff2") format("woff2");
 }
 @font-face {
   font-family: "Unbounded";
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("fonts/unbounded-700.ttf") format("truetype");
+  src: url("fonts/unbounded-700.woff2") format("woff2");
 }
 @font-face {
   font-family: "Unbounded";
   font-style: normal;
   font-weight: 800;
   font-display: swap;
-  src: url("fonts/unbounded-900.ttf") format("truetype");
+  src: url("fonts/unbounded-900.woff2") format("woff2");
 }
 @font-face {
   font-family: "Unbounded";
   font-style: normal;
   font-weight: 900;
   font-display: swap;
-  src: url("fonts/unbounded-900.ttf") format("truetype");
+  src: url("fonts/unbounded-900.woff2") format("woff2");
 }
 
 :root {
@@ -140,17 +140,52 @@ img { display: block; max-width: 100%; }
   display: grid; align-items: end;
   overflow: hidden;
 }
+/* Уход заставки: поднимается и растворяется, магазин уже под ней. */
+.welcome.is-leaving {
+  transform: translateY(-6%); opacity: 0;
+  transition: transform .5s cubic-bezier(.4,0,.2,1), opacity .5s ease;
+  pointer-events: none;
+}
+/* На низких экранах текст не должен уезжать под верхний край. */
+@media (max-height: 720px) {
+  .welcome h1 { font-size: clamp(44px, 13vw, 68px); margin: 10px 0 10px; }
+  .welcome-copy { margin-bottom: 16px; font-size: 13px; }
+  .welcome-lede { font-size: 15px; }
+  .welcome-drop { font-size: 18px; }
+  .welcome-facts { margin: 10px 0 9px; gap: 5px 14px; }
+  .welcome-count { margin-bottom: 14px; padding: 8px 12px; }
+  .welcome-meta { margin-top: 14px; }
+  .welcome-frame { padding-bottom: calc(22px + var(--safe-bottom)); }
+}
+@media (max-height: 620px) {
+  /* Совсем низкий экран: оставляем зачин и факты, остальное прячем —
+     кнопка «войти» важнее третьей строки текста. */
+  .welcome-copy p:not(.welcome-lede) { display: none; }
+  .welcome-facts { margin: 9px 0 0; }
+  .welcome-meta { display: none; }
+}
 .welcome-media {
   position: absolute; inset: 0;
-  width: 100%; height: 100%; object-fit: cover;
+  width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%;
   filter: contrast(1.08) saturate(.82);
   animation: ken 18s ease-in-out infinite alternate;
 }
+/* Видео лежит поверх фотографии: пока оно не готово, виден постер. */
+video.welcome-media { z-index: 1; animation: none; opacity: 0; transition: opacity .6s ease; }
+video.welcome-media.is-playing { opacity: 1; }
 .welcome-shade {
   position: absolute; inset: 0;
   background:
-    linear-gradient(180deg, rgba(7,7,8,.15) 0%, rgba(7,7,8,.2) 38%, rgba(7,7,8,.92) 78%, #070708 100%),
-    linear-gradient(90deg, rgba(225,6,0,.22), transparent 42%);
+    /* Нижняя половина уходит почти в чёрный — под текстом всегда тёмное поле,
+       иначе светлые кадры видео (лица, свет) съедают буквы. */
+    linear-gradient(180deg,
+      rgba(7,7,8,.30) 0%,
+      rgba(7,7,8,.42) 30%,
+      rgba(7,7,8,.80) 52%,
+      rgba(7,7,8,.95) 72%,
+      #070708 100%),
+    linear-gradient(90deg, rgba(7,7,8,.72), rgba(7,7,8,.18) 62%, transparent),
+    linear-gradient(90deg, rgba(225,6,0,.16), transparent 40%);
 }
 .welcome-frame {
   position: relative; z-index: 2;
@@ -159,25 +194,102 @@ img { display: block; max-width: 100%; }
 }
 .welcome-kicker {
   display: flex; align-items: center; gap: 10px;
-  font-size: 10px; letter-spacing: .18em; color: var(--muted);
+  font-size: 10px; letter-spacing: .18em; color: #cfc7bb;
+  text-shadow: 0 1px 6px rgba(0,0,0,.9);
 }
 .welcome h1 {
   margin: 16px 0 14px;
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: clamp(56px, 18vw, 108px);
+  font-size: clamp(52px, 16.5vw, 104px);
   line-height: .82;
   letter-spacing: -.07em;
+  /* Двойная тень: ближняя даёт контур, дальняя отделяет от светлых кадров. */
+  text-shadow: 0 2px 10px rgba(0,0,0,.75), 0 12px 42px rgba(0,0,0,.85);
 }
+/* Обращение к своим: не сплошной абзац, а зачин — уточнение — факты — призыв.
+   Каждый блок читается отдельно, глазу есть за что зацепиться. */
 .welcome-copy {
-  max-width: 420px; margin: 0 0 26px;
-  color: #d7d0c6; font-size: 14px; line-height: 1.55;
+  max-width: 34ch; margin: 0 0 24px;
+  color: #d8d1c6; font-size: 14px; line-height: 1.5;
+  text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 4px 18px rgba(0,0,0,.8);
 }
+.welcome-copy p { margin: 0; }
+.welcome-copy p + p { margin-top: 7px; }
+/* Первая строка — крупнее и светлее остального: с неё начинается разговор. */
+.welcome-lede {
+  color: #f4eee6; font-size: 16px; line-height: 1.42;
+  letter-spacing: -.005em;
+}
+/* «Брат.» — красная буквица тем же гротеском, что и заголовок. */
+.welcome-drop {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: 19px; letter-spacing: -.03em;
+  color: var(--red);
+  text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 24px rgba(225,6,0,.35);
+}
+/* Три факта — не перечисление через точку, а короткие строки с красной засечкой. */
+.welcome-facts {
+  list-style: none; margin: 13px 0 12px; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 6px 16px;
+  font-size: 11px; letter-spacing: .13em; text-transform: uppercase;
+  color: #cfc7bb;
+}
+.welcome-facts li { display: inline-flex; align-items: center; gap: 7px; }
+.welcome-facts li::before {
+  content: ""; width: 12px; height: 1px; background: var(--red);
+  box-shadow: 0 0 10px rgba(225,6,0,.55);
+}
+.welcome-close { color: #f4eee6; font-weight: 600; }
 .welcome-meta {
   margin-top: 22px; display: flex; gap: 18px; flex-wrap: wrap;
   font-size: 9px; letter-spacing: .18em; color: var(--muted);
 }
 .welcome-meta b { color: var(--red); font-weight: 800; }
+
+/* Счётчик и второстепенная кнопка на заставке */
+.welcome-count {
+  display: flex; align-items: baseline; gap: 10px; margin: 0 0 18px;
+  padding: 10px 14px; border: 1px solid var(--line);
+  background: rgba(7, 7, 8, .55); backdrop-filter: blur(6px);
+  width: fit-content;
+}
+.welcome-count-label { font-size: 9px; letter-spacing: .18em; color: var(--muted); }
+.welcome-count strong {
+  font-family: var(--font-display); font-weight: 900; font-size: 17px;
+  letter-spacing: -.02em; color: var(--acid); font-variant-numeric: tabular-nums;
+}
+/* Кнопки заставки идут колонкой: в строку «посмотреть ролик» уезжал за край. */
+.welcome-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.welcome-actions .button-primary { width: 100%; max-width: 340px; justify-content: center; }
+.welcome-skip {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: #cfc7bb; font-size: 12px; letter-spacing: .1em;
+  text-shadow: 0 1px 4px rgba(0,0,0,.9);
+}
+.welcome-skip span { color: var(--red); }
+.welcome-skip:hover { color: var(--ink); }
+
+/* Разворот выпуска в шапке: что именно продаётся */
+.hero-drop { display: flex; gap: 8px; margin-top: 22px; }
+.hero-drop-card {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 10px;
+  padding: 8px; border: 1px solid var(--line); background: rgba(12, 12, 14, .72);
+  backdrop-filter: blur(6px); cursor: pointer; text-align: left;
+  -webkit-tap-highlight-color: transparent; transition: border-color .25s, background .25s;
+}
+.hero-drop-card:hover, .hero-drop-card:focus-visible { border-color: var(--red); background: rgba(20, 12, 12, .82); }
+.hero-drop-card img {
+  width: 46px; height: 46px; flex: none; object-fit: cover;
+  filter: contrast(1.06) saturate(.8);
+}
+.hero-drop-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hero-drop-text b {
+  font-family: var(--font-display); font-weight: 800; font-size: 12px;
+  letter-spacing: -.01em; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hero-drop-text span { font-size: 11px; color: var(--red); font-weight: 700; }
 @keyframes ken { from { transform: scale(1.04); } to { transform: scale(1.14); } }
 @keyframes rise {
   from { opacity: 0; transform: translateY(22px); }
@@ -333,9 +445,10 @@ h1, h2 {
   background: linear-gradient(180deg, rgba(7,7,8,.1), rgba(7,7,8,.78) 70%, var(--bg));
 }
 .hero-bout {
-  position: absolute; right: 10px; top: 14px; z-index: 2;
-  width: min(38vw, 150px); pointer-events: none;
-  filter: drop-shadow(0 14px 20px rgba(0,0,0,.5));
+  position: absolute; right: 12px; top: 10px; z-index: 2;
+  width: min(19vw, 78px); pointer-events: none;
+  opacity: .82;
+  filter: drop-shadow(0 10px 16px rgba(0,0,0,.55));
 }
 .bout-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .bout-bag, .bout-hit, .bout-dust, .bout-floor, .bout-chain {
@@ -621,6 +734,61 @@ h1, h2 {
 .manifesto-lines small { color: #6f6b64; font-size: 12px; }
 
 .feature-section { padding-top: 64px; padding-bottom: 64px; }
+/* --- Персонализация: номер жетона --- */
+.person-row { padding: 0 16px 4px; display: flex; flex-direction: column; gap: 6px; }
+.person-label { font-size: 10px; letter-spacing: .18em; color: var(--muted); }
+.person-input {
+  width: 100%; padding: 12px 14px; background: var(--surface-2);
+  border: 1px solid var(--line); color: var(--ink);
+  font-family: var(--font-ui); font-size: 15px; letter-spacing: .06em;
+}
+.person-input:focus { outline: none; border-color: var(--red); }
+.person-input.error { border-color: var(--red-hot); background: rgba(225, 6, 0, .08); }
+.person-input.error + .person-hint, .person-row .person-hint.error { color: var(--red-hot); }
+.person-hint { margin: 0; font-size: 11px; line-height: 1.4; color: var(--dim); }
+
+/* --- Тизер выпуска: настоящая съёмка бренда --- */
+.teaser-card {
+  position: relative; display: block; width: 100%; margin: 0 0 8px;
+  padding: 0; border: 1px solid var(--line); background: #0c0c0e;
+  overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.teaser-card img {
+  display: block; width: 100%; aspect-ratio: 16/10; object-fit: cover; object-position: 50% 28%;
+  filter: contrast(1.05) saturate(.72); transition: transform .5s ease;
+}
+.teaser-card:hover img, .teaser-card:focus-visible img { transform: scale(1.03); }
+.teaser-shade {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(7,7,8,.05) 30%, rgba(7,7,8,.85));
+}
+.teaser-play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 58px; height: 58px; display: grid; place-items: center;
+  font-size: 17px; color: var(--bone); padding-left: 4px;
+  background: rgba(225, 6, 0, .92); border-radius: 50%;
+  box-shadow: 0 10px 34px rgba(0,0,0,.5);
+}
+.teaser-card:hover .teaser-play { background: var(--red-hot); }
+.teaser-meta {
+  position: absolute; left: 14px; right: 14px; bottom: 12px;
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+}
+.teaser-meta b {
+  font-family: var(--font-display); font-weight: 900; font-size: 20px;
+  letter-spacing: -.04em; color: var(--bone);
+}
+.teaser-meta small { font-size: 10px; letter-spacing: .18em; color: var(--muted); text-transform: uppercase; }
+
+.teaser-sheet { background: #050505; padding: 48px 0 20px; }
+.teaser-sheet video { width: 100%; max-height: 72vh; background: #000; display: block; }
+.teaser-actions { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  video.welcome-media { display: none; }
+  .teaser-card img { transition: none; }
+}
+
 .lookbook-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .lookbook-card { margin: 0; position: relative; overflow: hidden; background: #101012; cursor: zoom-in; }
 .lookbook-card img {
@@ -1075,7 +1243,7 @@ h1, h2 {
   }
   .hero-media { min-height: 100%; order: 2; }
   .hero-media img { min-height: 100%; height: 100%; }
-  .hero-bout { width: 240px; top: 28px; right: 28px; }
+  .hero-bout { width: 108px; top: 26px; right: 28px; }
   .hero-copy {
     order: 1; display: flex; flex-direction: column; justify-content: center;
     padding: 60px clamp(28px, 5vw, 78px);

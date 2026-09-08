@@ -380,6 +380,7 @@
     if (!state.modalStack.length) document.body.classList.remove("modal-open");
     if (id === "productModal") stop3D();
     if (id === "payModal") stopPayPoll();
+    if (id === "teaserModal") closeTeaser();
     syncBackButton();
     syncMainButton();
   }
@@ -548,6 +549,7 @@
     $("#sizeHint").textContent = state.selectedSize ? `Размер ${state.selectedSize} выбран.` : "Выбери размер.";
     $("#sizeHint").classList.remove("error");
     $("#sheetDetails").innerHTML = `<strong>ДЕТАЛИ</strong><br>${(product.details || []).map(escapeHTML).join(" · ")}`;
+    renderPersonalization(product);
     const saved = state.saved.includes(product.id);
     $("#sheetSave").classList.toggle("saved", saved);
     $("#sheetSave").setAttribute("aria-label", saved ? "Удалить из сохранённых" : "Сохранить");
@@ -601,6 +603,48 @@
     scrollToId("catalog");
   }
 
+  function renderPersonalization(product) {
+    const row = $("#personRow");
+    if (!row) return;
+    const config = product && product.personalization;
+    if (!config) {
+      row.classList.add("hidden");
+      if ($("#personInput")) $("#personInput").value = "";
+      return;
+    }
+    row.classList.remove("hidden");
+    if ($("#personLabel")) $("#personLabel").textContent = config.label || "ПЕРСОНАЛИЗАЦИЯ";
+    const input = $("#personInput");
+    if (input) {
+      input.value = "";
+      input.placeholder = config.placeholder || "";
+      input.classList.remove("error");
+    }
+    if ($("#personHint")) $("#personHint").textContent = config.hint || "";
+  }
+
+  /** Значение персонализации: строка, "" если не нужно, false если ввод неверный. */
+  function personValue(product) {
+    const config = product && product.personalization;
+    const input = $("#personInput");
+    if (!config || !input) return "";
+    const value = String(input.value || "").trim();
+    if (!value) {
+      if (config.optional) return "";
+      $("#personHint").textContent = "Заполни это поле.";
+      input.classList.add("error");
+      haptic("error");
+      return false;
+    }
+    if (config.pattern && !new RegExp(config.pattern).test(value)) {
+      $("#personHint").textContent = "Только цифры, до пяти знаков.";
+      input.classList.add("error");
+      haptic("error");
+      return false;
+    }
+    return value;
+  }
+
   function addToCart() {
     const product = state.currentProduct;
     if (!product) return;
@@ -610,10 +654,13 @@
       haptic("error");
       return;
     }
-    const key = `${product.id}::${state.selectedSize}`;
+    const person = personValue(product);
+    if (person === false) return;
+    // Разные номера жетона — разные строки заявки, поэтому номер входит в ключ.
+    const key = `${product.id}::${state.selectedSize}${person ? `::${person}` : ""}`;
     const existing = state.cart.find(item => item.key === key);
     if (existing) existing.qty += state.qty;
-    else state.cart.push({ key, id: product.id, size: state.selectedSize, qty: state.qty });
+    else state.cart.push({ key, id: product.id, size: state.selectedSize, qty: state.qty, person: person || "" });
     saveJSON("vorozhbitov_cart", state.cart);
     updateCounters();
     closeModal("productModal");
@@ -896,7 +943,11 @@
         note
       },
       consent: true,
-      items: pairs.map(({ item, product }) => ({ product_id: product.id, size: item.size, quantity: item.qty }))
+      items: pairs.map(({ item, product }) => {
+        const line = { product_id: product.id, size: item.size, quantity: item.qty };
+        if (item.person) line.person = item.person;
+        return line;
+      })
     };
     const history = loadJSON("vorozhbitov_orders", []);
     history.unshift({ at: Date.now(), total: cartTotal(), items: payload.items });
@@ -1008,10 +1059,12 @@
 
   function tickDrop() {
     const node = $("#dropTimer");
-    if (!node) return;
+    const welcomeNode = $("#welcomeTimer");
+    if (!node && !welcomeNode) return;
     const diff = DROP_END - Date.now();
     if (diff <= 0) {
-      node.textContent = "ВЫПУСК";
+      if (node) node.textContent = "ВЫПУСК";
+      if (welcomeNode) welcomeNode.textContent = "ВЫПУСК ЗАКРЫТ";
       return;
     }
     const days = Math.floor(diff / 86400000);
@@ -1019,7 +1072,13 @@
     const mins = Math.floor((diff % 3600000) / 60000);
     const secs = Math.floor((diff % 60000) / 1000);
     const pad = value => String(value).padStart(2, "0");
-    node.textContent = days > 0 ? `${days}д ${pad(hours)}:${pad(mins)}` : `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    const short = days > 0 ? `${days}д ${pad(hours)}:${pad(mins)}` : `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    if (node) node.textContent = short;
+    if (welcomeNode) {
+      welcomeNode.textContent = days > 0
+        ? `${days} д ${pad(hours)} ч ${pad(mins)} мин`
+        : `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    }
   }
 
   function configureTelegram() {
@@ -1043,27 +1102,31 @@
   }
 
   function enterShop() {
-    sessionStorage.setItem("vorozhbitov_entered", "1");
-    $("#welcome").classList.add("hidden");
+    const welcome = $("#welcome");
+    if (welcome.classList.contains("is-leaving")) return;
+    // Заставка уходит вверх, а не пропадает рывком.
+    welcome.classList.add("is-leaving");
     document.body.classList.remove("welcoming", "booting");
     haptic("medium");
+    window.setTimeout(() => {
+      welcome.classList.add("hidden");
+      welcome.classList.remove("is-leaving");
+      stopWelcomeVideo();
+    }, 520);
   }
 
   function startExperience() {
     const boot = $("#boot");
     const welcome = $("#welcome");
-    const skipWelcome = sessionStorage.getItem("vorozhbitov_entered") === "1";
+    // Приветствие — визитка бренда, показываем его при каждом запуске.
+    // Раньше здесь стоял флаг в sessionStorage, но в Telegram он переживает
+    // перезапуск Mini App, и заставка переставала появляться совсем.
     window.setTimeout(() => {
       document.body.classList.remove("booting");
       if (boot) boot.classList.add("hidden");
-      if (skipWelcome) {
-        welcome.classList.add("hidden");
-        document.body.classList.remove("welcoming");
-      } else {
-        welcome.classList.remove("hidden");
-        document.body.classList.add("welcoming");
-      }
-    }, 1400);
+      welcome.classList.remove("hidden");
+      document.body.classList.add("welcoming");
+    }, 1100);
   }
 
   async function loadCatalog() {
@@ -1088,13 +1151,179 @@
     } catch (_) {
       state.data = FALLBACK_CATALOG;
     }
+    applyMedia();
     renderCategoryChips();
     renderProducts();
     renderLookbook();
   }
 
+  /* --- Видео бренда: hero-петля и тизер --- */
+
+  function mediaConfig() {
+    const media = (state.data && state.data.media) || {};
+    return {
+      welcomeLoop: media.welcome_loop || "assets/video/welcome-loop.mp4",
+      welcomePoster: media.welcome_poster || "assets/video/welcome-poster.jpg",
+      teaser: media.teaser || "assets/video/teaser.mp4",
+      teaserPoster: media.teaser_poster || "assets/video/teaser-poster.jpg",
+      title: media.teaser_title || "СИЛА И ЧЕСТЬ",
+      caption: media.teaser_caption || "Выпуск 001 · Никита Ворожбитов",
+      storyUrl: media.teaser_story_url || ""
+    };
+  }
+
+  function saverMode() {
+    // Экономия трафика или медленная сеть — оставляем постер, видео не грузим.
+    const conn = navigator.connection || {};
+    if (conn.saveData) return true;
+    return /(^|-)2g$/.test(String(conn.effectiveType || ""));
+  }
+
+  function reducedMotion() {
+    return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function applyMedia() {
+    const media = mediaConfig();
+    const poster = $("#teaserPoster");
+    if (poster) poster.src = media.teaserPoster;
+    if ($("#teaserTitle")) $("#teaserTitle").textContent = media.title;
+    if ($("#teaserCaption")) $("#teaserCaption").textContent = media.caption;
+    const teaserVideo = $("#teaserVideo");
+    if (teaserVideo) teaserVideo.poster = media.teaserPoster;
+    setupWelcomeVideo(media);
+    renderHeroDrop();
+    // Тираж на заставке берём из каталога, а не пишем руками.
+    const stock = $("#welcomeStock");
+    const lead = (state.data.products || []).find(p => p.real_photos && p.stock_label);
+    if (stock && lead) stock.textContent = String(lead.stock_label).toUpperCase();
+  }
+
+  function setupWelcomeVideo(media) {
+    const video = $("#welcomeVideo");
+    const fallback = $("#welcomeFallback");
+    if (!video) return;
+    video.poster = media.welcomePoster;
+    if (fallback) fallback.src = media.welcomePoster;
+    // При экономии трафика и «меньше движения» оставляем неподвижный кадр.
+    if (saverMode() || reducedMotion()) return;
+    if (!video.dataset.src) {
+      video.dataset.src = media.welcomeLoop;
+      video.src = media.welcomeLoop;
+      video.load();
+    }
+    const tryPlay = () => {
+      const attempt = video.play();
+      // Если автоплей отклонён (iOS), просто остаётся постер — кнопка не нужна.
+      if (attempt && typeof attempt.catch === "function") {
+        attempt.then(() => video.classList.add("is-playing")).catch(() => {});
+      } else {
+        video.classList.add("is-playing");
+      }
+    };
+    tryPlay();
+    if (!video.dataset.bound) {
+      video.dataset.bound = "1";
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) video.pause();
+        else if (!$("#welcome").classList.contains("hidden")) tryPlay();
+      });
+    }
+  }
+
+  /** Останавливает фон заставки — после входа он больше не нужен. */
+  function stopWelcomeVideo() {
+    const video = $("#welcomeVideo");
+    if (!video) return;
+    video.pause();
+    video.classList.remove("is-playing");
+    video.removeAttribute("src");
+    video.load();
+  }
+
+  /** Два лота выпуска прямо в шапке — сразу видно, что продаётся. */
+  function renderHeroDrop() {
+    const box = $("#heroDrop");
+    if (!box) return;
+    const picks = (state.data.products || []).filter(p => p.real_photos).slice(0, 2);
+    if (!picks.length) { box.innerHTML = ""; return; }
+    box.innerHTML = picks.map(product => `
+      <button class="hero-drop-card" type="button" data-open-product="${escapeHTML(product.id)}">
+        <img src="${escapeHTML(product.image)}" alt="" loading="lazy">
+        <span class="hero-drop-text">
+          <b>${escapeHTML(product.name)}</b>
+          <span>${escapeHTML(product.price)}</span>
+        </span>
+      </button>`).join("");
+    box.querySelectorAll("[data-open-product]").forEach(button => {
+      button.addEventListener("click", () => openProduct(button.dataset.openProduct));
+    });
+  }
+
+  function openTeaser() {
+    const media = mediaConfig();
+    const video = $("#teaserVideo");
+    const welcome = $("#welcomeVideo");
+    if (welcome) welcome.pause();
+    if (video) {
+      if (!video.src) video.src = media.teaser;
+      video.currentTime = 0;
+    }
+    const story = $("#teaserToStory");
+    // Кнопка сторис есть только на клиентах Bot API 7.8+ и с публичным URL.
+    if (story) story.classList.toggle("hidden", !(tg && typeof tg.shareToStory === "function" && media.storyUrl));
+    openModal("teaserModal");
+    if (video) {
+      const attempt = video.play();
+      if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
+    }
+    haptic("light");
+  }
+
+  function closeTeaser() {
+    const video = $("#teaserVideo");
+    if (video) {
+      video.pause();
+      video.currentTime = 0;
+    }
+    const welcome = $("#welcomeVideo");
+    // Фон заставки оживает только если сама заставка ещё на экране.
+    if (welcome && !saverMode() && !reducedMotion() && !$("#welcome").classList.contains("hidden")) {
+      const attempt = welcome.play();
+      if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
+    }
+  }
+
+  function shareTeaserToStory() {
+    const media = mediaConfig();
+    if (!media.storyUrl || !tg || typeof tg.shareToStory !== "function") {
+      showToast("Сторис доступны в свежем Telegram.");
+      return;
+    }
+    try {
+      tg.shareToStory(media.storyUrl, { text: `${media.title} — выпуск 001` });
+      haptic("success");
+    } catch (_) {
+      showToast("Не получилось открыть сторис.");
+    }
+  }
+
   function bindEvents() {
     $("#enterShop").addEventListener("click", enterShop);
+    const watchTeaser = $("#watchTeaser");
+    if (watchTeaser) {
+      watchTeaser.addEventListener("click", () => {
+        enterShop();
+        openTeaser();
+      });
+    }
+
+    if ($("#teaserCard")) $("#teaserCard").addEventListener("click", openTeaser);
+    if ($("#teaserToStory")) $("#teaserToStory").addEventListener("click", shareTeaserToStory);
+    if ($("#teaserToShop")) $("#teaserToShop").addEventListener("click", () => {
+      closeModal("teaserModal");
+      scrollToId("catalog");
+    });
 
     $$("[data-stage]").forEach(button => button.addEventListener("click", () => {
       setStage(button.dataset.stage);
@@ -1154,7 +1383,6 @@
     $("#bottomCartButton").addEventListener("click", openCart);
     $("#savedButton").addEventListener("click", showSaved);
     if ($("#profileButton")) $("#profileButton").addEventListener("click", openProfile);
-    if ($("#bottomProfile")) $("#bottomProfile").addEventListener("click", openProfile);
     if ($("#saveProfile")) $("#saveProfile").addEventListener("click", saveProfile);
     if ($("#profileOrders")) $("#profileOrders").addEventListener("click", event => {
       const payButton = event.target.closest("[data-pay-id]");

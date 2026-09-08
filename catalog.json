@@ -30,6 +30,99 @@
   ],
   "products": [
     {
+      "id": "tee-sila-i-chest",
+      "category": "drop",
+      "name": "СИЛА И ЧЕСТЬ",
+      "price": "4 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL",
+        "XXL"
+      ],
+      "description": "Чёрная футболка первого тиража. Уставная надпись «Сила и честь» на груди, меч по позвоночнику и монограмма ВВ у ворота. Плотная шелкография, которая не трескается.",
+      "signature": "Первый тираж. Один раз и без повторов.",
+      "photo_url": "",
+      "image": "assets/spin/tee-sich-01.jpg",
+      "images": [
+        "assets/spin/tee-sich-01.jpg",
+        "assets/spin/tee-sich-05.jpg",
+        "assets/drop/tee-flatlay.jpg",
+        "assets/drop/tee-night.jpg",
+        "assets/drop/tee-back.jpg",
+        "assets/drop/tee-gym.jpg"
+      ],
+      "badge": "ВЫПУСК 001",
+      "material": "100% хлопок · 240 г/м²",
+      "fit": "Прямой крой",
+      "details": [
+        "Принт на груди: «СИЛА И ЧЕСТЬ», уставной шрифт",
+        "Меч по спине, монограмма ВВ у ворота",
+        "Плотная шелкография — не трескается",
+        "Усиленная горловина",
+        "Фирменный зип-пакет «ПУТЬ, ДОСТОЙНЫЙ ВОИНА»"
+      ],
+      "stock_label": "Первый тираж",
+      "real_photos": true,
+      "active": true,
+      "spin": [
+        "assets/spin/tee-sich-01.jpg",
+        "assets/spin/tee-sich-02.jpg",
+        "assets/spin/tee-sich-03.jpg",
+        "assets/spin/tee-sich-04.jpg",
+        "assets/spin/tee-sich-05.jpg",
+        "assets/spin/tee-sich-06.jpg",
+        "assets/spin/tee-sich-07.jpg",
+        "assets/spin/tee-sich-08.jpg"
+      ]
+    },
+    {
+      "id": "tag-sila-i-chest",
+      "category": "access",
+      "name": "ЖЕТОН",
+      "price": "1 900 ₽",
+      "sizes": [
+        "ONE SIZE"
+      ],
+      "description": "Армейский жетон из нержавеющей стали. Лицо — монограмма ВВ с мечом, оборот — «Сила и честь» и твой личный номер тиража. Номер не повторяется ни у кого.",
+      "signature": "Сто штук на весь мир. Дальше — только у своих.",
+      "photo_url": "",
+      "image": "assets/spin/tag-sich-01.jpg",
+      "images": [
+        "assets/spin/tag-sich-01.jpg",
+        "assets/spin/tag-sich-02.jpg",
+        "assets/spin/tag-sich-03.jpg",
+        "assets/spin/tag-sich-04.jpg"
+      ],
+      "badge": "ТИРАЖ 100",
+      "material": "Нержавеющая сталь · лазерная гравировка",
+      "fit": "Нумерованный",
+      "details": [
+        "Сталь AISI 304 · 50×29 мм · 2 мм",
+        "Лазерная гравировка с двух сторон",
+        "Личный номер № 00001–00100",
+        "Шариковая цепочка 60 см в комплекте",
+        "Фирменный зип-пакет"
+      ],
+      "stock_label": "Тираж 100 шт.",
+      "real_photos": true,
+      "active": true,
+      "spin": [
+        "assets/spin/tag-sich-01.jpg",
+        "assets/spin/tag-sich-02.jpg",
+        "assets/spin/tag-sich-03.jpg",
+        "assets/spin/tag-sich-04.jpg"
+      ],
+      "personalization": {
+        "label": "НОМЕР ЖЕТОНА",
+        "hint": "Необязательно. Свободные номера подтвердит менеджер.",
+        "placeholder": "например, 00063",
+        "pattern": "^[0-9]{1,5}$",
+        "optional": true
+      }
+    },
+    {
       "id": "honor-hoodie",
       "category": "drop",
       "name": "СИЛА И ЧЕСТЬ",
@@ -363,6 +456,36 @@
   ],
   "lookbook": [
     {
+      "image": "assets/drop/tee-night.jpg",
+      "photo_url": "",
+      "caption": "НОЧЬ. СВОЙ ГОРОД"
+    },
+    {
+      "image": "assets/drop/tee-back.jpg",
+      "photo_url": "",
+      "caption": "МЕЧ ПО СПИНЕ"
+    },
+    {
+      "image": "assets/drop/tee-gym.jpg",
+      "photo_url": "",
+      "caption": "ЖЕЛЕЗО НЕ ВРЁТ"
+    },
+    {
+      "image": "assets/spin/tag-sich-01.jpg",
+      "photo_url": "",
+      "caption": "ЖЕТОН · МОНОГРАММА"
+    },
+    {
+      "image": "assets/spin/tag-sich-02.jpg",
+      "photo_url": "",
+      "caption": "ЛИЧНЫЙ НОМЕР"
+    },
+    {
+      "image": "assets/drop/tee-crew.jpg",
+      "photo_url": "",
+      "caption": "СВОИ ЗА СПИНОЙ"
+    },
+    {
       "image": "assets/honor-hoodie.jpg",
       "photo_url": "",
       "caption": "СИЛА И ЧЕСТЬ"
@@ -392,5 +515,14 @@
       "photo_url": "",
       "caption": "МАГАЗИН"
     }
-  ]
+  ],
+  "media": {
+    "welcome_loop": "assets/video/welcome-loop.mp4",
+    "welcome_poster": "assets/video/welcome-poster.jpg",
+    "teaser": "assets/video/teaser.mp4",
+    "teaser_poster": "assets/video/teaser-poster.jpg",
+    "teaser_title": "СИЛА И ЧЕСТЬ",
+    "teaser_caption": "Выпуск 001 · 30 секунд · плёнка",
+    "teaser_story_url": ""
+  }
 }

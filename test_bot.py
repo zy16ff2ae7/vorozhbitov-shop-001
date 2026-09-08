@@ -2,8 +2,10 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import shutil
 import tempfile
+import threading
 import time
 import unittest
 import urllib.error
@@ -17,16 +19,26 @@ from bot import (
     BrandBot,
     Catalog,
     Database,
+    RateLimiter,
     REF_RE,
     Settings,
     TelegramAPI,
     ensure_catalog_exists,
     normalize_phone,
+    person_label,
+    sanitize_personalization,
     slugify,
     start_health_server,
     webapp_user_from_init_data,
 )
-from payments import parse_price_rub, stars_amount, verify_crypto_webhook, verify_lava_webhook
+from payments import (
+    PriceError,
+    parse_price_rub,
+    parse_price_strict,
+    stars_amount,
+    verify_crypto_webhook,
+    verify_lava_webhook,
+)
 
 
 def make_db(directory: str) -> Database:
@@ -230,10 +242,116 @@ class BotTests(unittest.TestCase):
             self.assertEqual(sorted(db.broadcast_audience("all")), [11, 12])
             self.assertEqual(db.stats()["consents"], 1)
 
+    def _teaser_bot(self, directory, api):
+        """Стенд бота на временной базе с настоящим каталогом."""
+        root = Path(directory)
+        catalog_path = root / "catalog.json"
+        shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
+        settings = Settings(
+            token="fake",
+            admin_ids=frozenset(),
+            channel_url="https://t.me/channel",
+            webapp_url="https://shop.example/app",
+            manager_chat_id=None,
+            brand_name="ВОРОЖБИТОВ",
+            support_username="",
+            database_path=root / "bot.sqlite3",
+            catalog_path=catalog_path,
+            health_port=8080,
+            giveaway_min_invites=3,
+            privacy_url="",
+        )
+        db = make_db(directory)
+        return BrandBot(settings, api, db, Catalog(catalog_path)), db
+
+    def test_teaser_is_uploaded_once_and_then_reused_by_file_id(self):
+        """Ролик весит мегабайты: второй раз должен уходить одним file_id."""
+        class FakeAPI(TelegramAPI):
+            def __init__(self):
+                super().__init__("test-token")
+                self.videos = []
+
+            def send_video(self, chat_id, video, caption="", reply_markup=None,
+                           thumbnail=None, width=0, height=0, duration=0):
+                self.videos.append(video)
+                return {"video": {"file_id": "CACHED-ID"}}
+
+            def send_message(self, chat_id, text, reply_markup=None):
+                return {"message_id": 1}
+
+        with tempfile.TemporaryDirectory() as directory:
+            api = FakeAPI()
+            bot, db = self._teaser_bot(directory, api)
+            self.assertTrue(bot.send_teaser(1))
+            self.assertTrue(bot.send_teaser(1))
+            # Первый раз — файл с диска, второй — уже кешированный идентификатор.
+            self.assertIsInstance(api.videos[0], Path)
+            self.assertEqual(api.videos[1], "CACHED-ID")
+            self.assertEqual(db.kv_get("teaser_file_id"), "CACHED-ID")
+
+    def test_stale_teaser_file_id_is_dropped_and_resent(self):
+        """Telegram забывает file_id — бот обязан молча перезалить ролик."""
+        class FakeAPI(TelegramAPI):
+            def __init__(self):
+                super().__init__("test-token")
+                self.calls = []
+
+            def send_video(self, chat_id, video, caption="", reply_markup=None,
+                           thumbnail=None, width=0, height=0, duration=0):
+                self.calls.append(video)
+                if video == "DEAD-ID":
+                    raise RuntimeError("Telegram API error: wrong file identifier")
+                return {"video": {"file_id": "FRESH-ID"}}
+
+            def send_message(self, chat_id, text, reply_markup=None):
+                return {"message_id": 1}
+
+        with tempfile.TemporaryDirectory() as directory:
+            api = FakeAPI()
+            bot, db = self._teaser_bot(directory, api)
+            db.kv_set("teaser_file_id", "DEAD-ID")
+            self.assertTrue(bot.send_teaser(1))
+            self.assertEqual(api.calls[0], "DEAD-ID")
+            self.assertIsInstance(api.calls[1], Path)
+            self.assertEqual(db.kv_get("teaser_file_id"), "FRESH-ID")
+
+    def test_product_card_shows_the_whole_garment_as_an_album(self):
+        """В чате вещь тоже показывается со всех сторон, а не одним кадром."""
+        class FakeAPI(TelegramAPI):
+            def __init__(self):
+                super().__init__("test-token")
+                self.albums = []
+                self.photos = []
+
+            def send_media_group(self, chat_id, photos, caption=""):
+                self.albums.append(photos)
+                return {"message_id": 1}
+
+            def send_photo(self, chat_id, photo, caption, reply_markup=None):
+                self.photos.append(photo)
+                return {"message_id": 1}
+
+            def send_message(self, chat_id, text, reply_markup=None):
+                return {"message_id": 1}
+
+        with tempfile.TemporaryDirectory() as directory:
+            api = FakeAPI()
+            bot, _ = self._teaser_bot(directory, api)
+            bot.show_product(1, 1, "tag-sila-i-chest")
+            self.assertEqual(len(api.albums), 1, "карточка ушла без альбома")
+            self.assertGreaterEqual(len(api.albums[0]), 2)
+            self.assertEqual(api.photos, [], "альбом отправлен, одиночное фото лишнее")
+            for url in api.albums[0]:
+                self.assertTrue(url.startswith("https://"), f"нелокальный адрес обязателен: {url}")
+
     def test_webapp_order_is_validated_against_catalog_and_stored(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
+                super().__init__("test-token")
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
@@ -291,7 +409,11 @@ class BotTests(unittest.TestCase):
     def test_webapp_waitlist_is_recorded(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
+                super().__init__("test-token")
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
@@ -359,11 +481,21 @@ class BotTests(unittest.TestCase):
     def test_phone_is_not_saved_without_consent(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
+                super().__init__("test-token")
                 self.sent = []
+                self.videos = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
                 return {"message_id": len(self.sent)}
+
+            def send_video(self, chat_id, video, caption="", reply_markup=None,
+                           thumbnail=None, width=0, height=0, duration=0):
+                self.videos.append(video)
+                return {"video": {"file_id": "TEST-VIDEO-ID"}}
 
             def send_photo_file(self, chat_id, path, caption="", reply_markup=None):
                 self.sent.append((chat_id, caption, reply_markup))
@@ -445,7 +577,11 @@ class BotTests(unittest.TestCase):
     def test_webapp_profile_is_stored(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
+                super().__init__("test-token")
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
@@ -507,7 +643,16 @@ class BotTests(unittest.TestCase):
         class FakeAPI(TelegramAPI):
             def __init__(self):
                 self.photos = []
+                self.videos = []
                 self.messages = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
+
+            def send_video(self, chat_id, video, caption="", reply_markup=None,
+                           thumbnail=None, width=0, height=0, duration=0):
+                self.videos.append(video)
+                return {"video": {"file_id": "TEST-VIDEO-ID"}}
 
             def send_photo_file(self, chat_id, path, caption="", reply_markup=None):
                 self.photos.append((chat_id, Path(path), caption, reply_markup))
@@ -687,6 +832,258 @@ class BotTests(unittest.TestCase):
         self.assertEqual(stars_amount(11900, 2.0), 5950)
         self.assertEqual(stars_amount(100, 0), 50)
 
+    def test_price_parser_accepts_real_formats(self):
+        for raw, expected in [
+            ("11 900 ₽", 11900),
+            ("4900", 4900),
+            ("от 4900", 4900),
+            ("3 200 руб", 3200),
+            ("1 000 000 ₽", 1000000),
+            ("4 900,50 ₽", 4900),  # копейки округляются до рубля
+            ("4 900.49 ₽", 4900),
+        ]:
+            with self.subTest(raw=raw):
+                self.assertEqual(parse_price_strict(raw), expected)
+
+    def test_ambiguous_price_is_rejected_instead_of_overcharging(self):
+        """'1 200 - 1 500 ₽' раньше склеивалось в счёт на 12 001 500 ₽."""
+        for raw in [
+            "1 200 - 1 500 ₽",
+            "4900 (со скидкой 3900)",
+            "4.900 ₽",
+            "цена по запросу",
+            "",
+            "99999999999",
+        ]:
+            with self.subTest(raw=raw):
+                with self.assertRaises(PriceError):
+                    parse_price_strict(raw)
+                # Мягкая обёртка отдаёт 0: заявка примется, но счёт не выставится.
+                with self.assertLogs("brand_bot.pay", level="WARNING"):
+                    self.assertEqual(parse_price_rub(raw), 0)
+
+    def test_personalization_is_validated_against_catalog(self):
+        """Номер жетона приходит из браузера, поэтому проверяется по каталогу."""
+        tag = {"id": "tag", "personalization": {"label": "НОМЕР ЖЕТОНА", "pattern": r"^[0-9]{1,5}$", "optional": True}}
+        plain = {"id": "tee"}
+        self.assertEqual(sanitize_personalization(tag, "00063"), "00063")
+        self.assertEqual(sanitize_personalization(tag, "  00063 "), "00063")
+        for bad in ["ABC", "<script>", "999999999", "63; DROP", ""]:
+            with self.subTest(bad=bad):
+                self.assertEqual(sanitize_personalization(tag, bad), "")
+        # У товара без персонализации поле игнорируется целиком.
+        self.assertEqual(sanitize_personalization(plain, "00063"), "")
+        self.assertEqual(person_label(tag), "НОМЕР ЖЕТОНА")
+
+    def test_real_drop_products_are_loadable(self):
+        """Оба реальных лота живы, с фото и корректной ценой."""
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        tee = catalog.get("tee-sila-i-chest")
+        tag = catalog.get("tag-sila-i-chest")
+        self.assertIsNotNone(tee)
+        self.assertIsNotNone(tag)
+        self.assertEqual(parse_price_strict(tee["price"]), 4900)
+        self.assertEqual(parse_price_strict(tag["price"]), 1900)
+        self.assertIn("XXL", tee["sizes"])
+        self.assertEqual(tag["sizes"], ["ONE SIZE"])
+        root = Path(__file__).with_name("miniapp")
+        for product in (tee, tag):
+            for asset in [product["image"], *product.get("images", []), *product.get("spin", [])]:
+                with self.subTest(asset=asset):
+                    self.assertTrue((root / asset).is_file(), f"нет файла {asset}")
+        media = catalog.data.get("media", {})
+        for key in ("welcome_loop", "welcome_poster", "teaser", "teaser_poster"):
+            with self.subTest(key=key):
+                self.assertTrue((root / media[key]).is_file(), f"нет медиа {media[key]}")
+
+    def test_video_is_served_with_range_support(self):
+        """Без 206 на Range плеер в iOS не стартует."""
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = Catalog(Path(__file__).with_name("catalog.json"))
+            server = start_health_server(0, catalog, None, None, None)
+            port = server.server_address[1]
+            try:
+                base = f"http://127.0.0.1:{port}/assets/video/welcome-loop.mp4"
+                request = urllib.request.Request(base, headers={"Range": "bytes=0-1"})
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    self.assertEqual(response.status, 206)
+                    self.assertEqual(response.headers.get("Accept-Ranges"), "bytes")
+                    self.assertRegex(response.headers.get("Content-Range", ""), r"^bytes 0-1/\d+$")
+                    self.assertEqual(len(response.read()), 2)
+                with urllib.request.urlopen(base, timeout=5) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.headers.get("Content-Type"), "video/mp4")
+                    full = len(response.read())
+                self.assertGreater(full, 1000)
+                bad = urllib.request.Request(base, headers={"Range": f"bytes={full + 500}-"})
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(bad, timeout=5)
+                self.assertEqual(caught.exception.code, 416)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_index_stamps_asset_versions(self):
+        """Без метки версии WebView Telegram показывает старый app.js."""
+        with tempfile.TemporaryDirectory():
+            catalog = Catalog(Path(__file__).with_name("catalog.json"))
+            server = start_health_server(0, catalog, None, None, None)
+            port = server.server_address[1]
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as response:
+                    page = response.read().decode("utf-8")
+                self.assertRegex(page, r'src="app\.js\?v=\d+"')
+                self.assertRegex(page, r'href="styles\.css\?v=\d+"')
+                # Файл с меткой должен нормально отдаваться.
+                stamped = re.search(r'src="(app\.js\?v=\d+)"', page).group(1)
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/{stamped}", timeout=5) as response:
+                    self.assertEqual(response.status, 200)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_real_products_show_the_garment_itself(self):
+        """В обзоре должна крутиться вещь, а не упаковка и не лайфстайл."""
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        root = Path(__file__).with_name("miniapp")
+        for product_id, minimum in (("tee-sila-i-chest", 8), ("tag-sila-i-chest", 2)):
+            with self.subTest(product=product_id):
+                product = catalog.get(product_id)
+                self.assertGreaterEqual(len(product["spin"]), minimum)
+                # Обзор — только студийные кадры товара.
+                for frame in product["spin"]:
+                    self.assertIn("assets/spin/", frame)
+                    self.assertTrue((root / frame).is_file(), f"нет кадра {frame}")
+                # Упаковке в карточке товара не место.
+                everything = [product["image"], *product["images"], *product["spin"]]
+                self.assertFalse([a for a in everything if "pack" in a], "упаковка попала в карточку")
+
+    def test_product_photos_are_sharp_enough_to_sell(self):
+        """Размытые стоп-кадры из видео выглядят дёшево — в галерее только резкие снимки."""
+        try:
+            from PIL import Image
+            import numpy as np
+        except ImportError:  # pragma: no cover - зависит от окружения
+            self.skipTest("нужны Pillow и numpy")
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        root = Path(__file__).with_name("miniapp")
+        # Дисперсия лапласиана, нормированная на контраст кадра: абсолютное
+        # значение штрафует честную тёмную съёмку чёрной вещи на чёрном фоне.
+        # Стоп-кадры из видео давали 0.001-0.007, живые студийные снимки — 0.042+.
+        threshold = 0.02
+        for product_id in ("tee-sila-i-chest", "tag-sila-i-chest"):
+            product = catalog.get(product_id)
+            for shot in dict.fromkeys([product["image"], *product["images"], *product["spin"]]):
+                path = root / shot
+                if not path.is_file():
+                    continue
+                with self.subTest(shot=shot):
+                    grey = np.asarray(Image.open(path).convert("L"), dtype=float)
+                    laplacian = (
+                        grey[:-2, 1:-1] + grey[2:, 1:-1]
+                        + grey[1:-1, :-2] + grey[1:-1, 2:]
+                        - 4 * grey[1:-1, 1:-1]
+                    )
+                    detail = laplacian.var() / max(grey.var(), 1e-6)
+                    self.assertGreater(
+                        detail, threshold, f"{shot} размыт — такое фото продавать нельзя"
+                    )
+
+    def test_welcome_copy_is_structured_not_a_wall_of_text(self):
+        """Обращение к своим должно читаться: зачин, факты и призыв — разными блоками."""
+        miniapp = Path(__file__).with_name("miniapp")
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        styles = (miniapp / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('class="welcome-lede"', index)
+        self.assertIn('class="welcome-drop"', index)
+        self.assertIn('class="welcome-facts"', index)
+        # Текст остаётся тем же обращением, просто разложенным по строкам.
+        self.assertIn("Брат.", index)
+        self.assertIn("закрытую территорию", index)
+        self.assertIn("Бери размер, пока он есть.", index)
+        # Стили для новых блоков должны существовать, иначе разметка развалится.
+        for selector in (".welcome-lede", ".welcome-drop", ".welcome-facts", ".welcome-close"):
+            self.assertIn(selector, styles, f"нет стилей для {selector}")
+
+    def test_media_urls_carry_a_version_so_new_cuts_are_not_cached(self):
+        """Видео кешируется на сутки по неизменному имени — без версии в адресе
+        пользователь после замены ролика ещё сутки видит старый монтаж."""
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        server = start_health_server(0, catalog, None, None, None)
+        port = server.server_address[1]
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/catalog", timeout=5) as response:
+                media = json.loads(response.read().decode("utf-8"))["media"]
+            for key in ("teaser", "teaser_poster", "welcome_loop", "welcome_poster"):
+                with self.subTest(key=key):
+                    self.assertRegex(media[key], r"\?v=\d+$", f"{key} без версии — попадёт в кеш")
+            # Подписи в media — не адреса, версией их портить нельзя.
+            self.assertNotIn("?v=", media.get("teaser_title", ""))
+            # Адрес с версией обязан вести к настоящему файлу, а не в 404.
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/{media['teaser']}", timeout=5) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers.get("Content-Type"), "video/mp4")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_teaser_video_is_the_film_cut(self):
+        """В модалке — плёночный монтаж v2: вертикаль, со звуком, не тяжелее 6 МБ."""
+        video = Path(__file__).with_name("miniapp") / "assets" / "video" / "teaser.mp4"
+        self.assertTrue(video.is_file(), "нет файла тизера")
+        size_mb = video.stat().st_size / 1e6
+        self.assertLess(size_mb, 6.0, f"тизер раздулся до {size_mb:.1f} МБ — мобильный трафик")
+        blob = video.read_bytes()
+        # faststart: moov обязан идти раньше mdat, иначе видео не стартует по сети.
+        moov, mdat = blob.find(b"moov"), blob.find(b"mdat")
+        self.assertNotEqual(moov, -1, "в файле нет moov")
+        self.assertLess(moov, mdat, "moov после mdat — нужен -movflags +faststart")
+        # Звуковая дорожка: барабан и хор — половина впечатления от монтажа.
+        self.assertIn(b"mp4a", blob[:moov + 200_000], "в тизере нет звуковой дорожки")
+
+    def test_welcome_screen_always_shows_on_launch(self):
+        """Приветствие — визитка бренда, оно не должно пропадать после входа."""
+        app_js = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
+        index = (Path(__file__).with_name("miniapp") / "index.html").read_text(encoding="utf-8")
+        # Флаг «уже заходил» в Telegram переживает перезапуск Mini App,
+        # из-за него заставка переставала показываться совсем.
+        self.assertNotIn("vorozhbitov_entered", app_js)
+        self.assertIn('id="welcome"', index)
+        self.assertIn('id="enterShop"', index)
+        # Заставка обязана подниматься над магазином и уметь закрываться.
+        self.assertIn("welcome.classList.remove(\"hidden\")", app_js)
+        self.assertIn("function enterShop", app_js)
+
+    def test_rate_limiter_blocks_burst_and_recovers(self):
+        limiter = RateLimiter(limit=3, window_seconds=60)
+        self.assertTrue(all(limiter.allow("user:1", now=100.0) for _ in range(3)))
+        self.assertFalse(limiter.allow("user:1", now=100.0))
+        # Другой ключ не задет общим счётчиком.
+        self.assertTrue(limiter.allow("user:2", now=100.0))
+        # Окно уехало — снова можно.
+        self.assertTrue(limiter.allow("user:1", now=161.0))
+
+    def test_database_connection_is_released_per_thread(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = make_db(directory)
+            seen: list[int] = []
+
+            def work() -> None:
+                try:
+                    db.connection().execute("SELECT 1").fetchone()
+                    seen.append(1)
+                finally:
+                    db.close_current()
+
+            threads = [threading.Thread(target=work) for _ in range(20)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            self.assertEqual(len(seen), 20)
+            # Повторный вызов на потоке без соединения не должен падать.
+            db.close_current()
+
     def test_payment_webhooks_verify_hmac(self):
         body = b'{"order_id":"p1","status":"success"}'
         lava_sign = hmac.new(b"hook", body, hashlib.sha256).hexdigest()
@@ -741,14 +1138,15 @@ class BotTests(unittest.TestCase):
     def test_checkout_api_creates_payment_and_lava_webhook_marks_paid(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
+                super().__init__("test-token")
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
                 return {"message_id": len(self.sent)}
-
-            def create_invoice_link(self, payload):
-                return "https://t.me/invoice/test"
 
         def request_json(url, init_data=None, method="GET", body=None, extra_headers=None):
             headers = {"Accept": "application/json"}
@@ -866,6 +1264,9 @@ class BotTests(unittest.TestCase):
             def __init__(self):
                 self.pre = []
                 self.sent = []
+
+            def create_invoice_link(self, payload):
+                return "https://t.me/invoice/test"
 
             def answer_pre_checkout(self, query_id, ok=True, error_message=""):
                 self.pre.append((query_id, ok, error_message))

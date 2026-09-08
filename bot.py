@@ -36,10 +36,12 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from payments import (
+    PriceError,
     create_crypto_invoice,
     create_lava_invoice,
     format_rub,
     parse_price_rub,
+    parse_price_strict,
     stars_amount,
     verify_crypto_webhook,
     verify_lava_webhook,
@@ -48,9 +50,50 @@ from payments import (
 BASE_DIR = Path(__file__).resolve().parent
 LOG = logging.getLogger("brand_bot")
 STOP_EVENT = threading.Event()
+
+
+class RateLimiter:
+    """Скользящее окно на память процесса.
+
+    Хватает для одного инстанса за реверс-прокси: защищает от заваливания
+    заявками и от перебора отмен по украденному initData. Для нескольких
+    инстансов счётчик нужно вынести в общее хранилище.
+    """
+
+    def __init__(self, limit: int, window_seconds: float) -> None:
+        self.limit = limit
+        self.window = window_seconds
+        self.hits: dict[str, list[float]] = {}
+        self.lock = threading.Lock()
+
+    def allow(self, key: str, now: float | None = None) -> bool:
+        stamp = now if now is not None else time.monotonic()
+        edge = stamp - self.window
+        with self.lock:
+            recent = [hit for hit in self.hits.get(key, ()) if hit > edge]
+            allowed = len(recent) < self.limit
+            if allowed:
+                recent.append(stamp)
+            self.hits[key] = recent
+            if len(self.hits) > 4096:
+                # Не даём словарю расти бесконечно от разовых посетителей.
+                for stale_key in [k for k, v in self.hits.items() if not v]:
+                    self.hits.pop(stale_key, None)
+            return allowed
+
+
+# Заявка — дорогая операция (счёт у провайдера, сообщения). Чтение своих
+# заявок опрашивается витриной раз в 4 секунды, поэтому лимит выше.
+CHECKOUT_LIMITER = RateLimiter(limit=8, window_seconds=60)
+READ_LIMITER = RateLimiter(limit=60, window_seconds=60)
+VIDEO_SUFFIXES = {".mp4", ".m4v", ".webm", ".mov"}
 PHONE_RE = re.compile(r"^\+?[0-9]{10,15}$")
 REF_RE = re.compile(r"^ref(\d{3,15})$")
 WELCOME_PHOTO = BASE_DIR / "miniapp" / "assets" / "welcome.jpg"
+TEASER_VIDEO = BASE_DIR / "miniapp" / "assets" / "video" / "teaser.mp4"
+TEASER_POSTER = BASE_DIR / "miniapp" / "assets" / "video" / "teaser-poster.jpg"
+# Telegram отказывается принимать файлы крупнее 50 МБ загрузкой по HTTP.
+TEASER_UPLOAD_LIMIT = 50 * 1024 * 1024
 BOT_SHORT_DESCRIPTION = "Сила и честь. Одежда. Закрытый выпуск."
 BOT_DESCRIPTION = (
     "Закрытая витрина ВОРОЖБИТОВ. Малые тиражи, честный крой. "
@@ -180,12 +223,14 @@ class Settings:
     def from_env(cls) -> "Settings":
         load_dotenv(BASE_DIR / ".env")
         token = os.getenv("BOT_TOKEN", "").strip()
+        # Никаких боевых ID по умолчанию: без .env бот не должен молча раздавать
+        # админские права и слать чужие телефоны с адресами в захардкоженный чат.
         admin_ids = frozenset(
             int(item.strip())
-            for item in os.getenv("ADMIN_IDS", "6040375660,900161382").split(",")
+            for item in os.getenv("ADMIN_IDS", "").split(",")
             if item.strip().isdigit()
         )
-        manager_raw = os.getenv("MANAGER_CHAT_ID", "5527514919").strip()
+        manager_raw = os.getenv("MANAGER_CHAT_ID", "").strip()
         try:
             stars_rate = float(os.getenv("STARS_RUB_PER_STAR", "2") or "2")
         except ValueError:
@@ -218,6 +263,9 @@ class Catalog:
         self.path = path
         self.data: dict[str, Any] = {}
         self.products_by_id: dict[str, dict[str, Any]] = {}
+        # /reload и мастер /add подменяют каталог из потока опроса Telegram,
+        # пока потоки HTTP отдают /api/catalog и проверяют заявки.
+        self.lock = threading.RLock()
         self.reload()
 
     def reload(self) -> None:
@@ -257,10 +305,23 @@ class Catalog:
             photo_url = str(product.get("photo_url", ""))
             if photo_url and not photo_url.startswith(("https://", "http://")):
                 raise ValueError(f"photo_url must be HTTP(S) for {product_id}")
+            try:
+                parse_price_strict(product["price"])
+            except PriceError:
+                # Не роняем каталог целиком: товар покажем, но счёт по нему не
+                # выставится (parse_price_rub вернёт 0), поэтому шумим в лог.
+                LOG.error(
+                    "Цена товара %s не разбирается: %r — оплата по нему работать не будет",
+                    product_id,
+                    product["price"],
+                )
             products[product_id] = product
         raw.setdefault("lookbook", [])
-        self.data = raw
-        self.products_by_id = products
+        # Обе структуры собраны целиком — подменяем их разом, чтобы читатель
+        # никогда не увидел новый data со старым индексом товаров.
+        with self.lock:
+            self.data = raw
+            self.products_by_id = products
 
     @property
     def categories(self) -> list[dict[str, str]]:
@@ -281,7 +342,8 @@ class Catalog:
         return self.products_by_id.get(product_id)
 
     def save(self) -> None:
-        payload = json.dumps(self.data, ensure_ascii=False, indent=2) + "\n"
+        with self.lock:
+            payload = json.dumps(self.data, ensure_ascii=False, indent=2) + "\n"
         tmp = self.path.with_name(self.path.name + ".tmp")
         tmp.write_text(payload, encoding="utf-8")
         os.replace(tmp, self.path)
@@ -296,23 +358,25 @@ class Catalog:
         return candidate
 
     def add_product(self, product: dict[str, Any]) -> dict[str, Any]:
-        product = dict(product)
-        product["id"] = self.unique_id(str(product["name"]))
-        product.setdefault("active", True)
-        product.setdefault("photo_url", "")
-        self.data["products"].append(product)
-        self.save()
-        self.reload()
-        return product
+        with self.lock:
+            product = dict(product)
+            product["id"] = self.unique_id(str(product["name"]))
+            product.setdefault("active", True)
+            product.setdefault("photo_url", "")
+            self.data["products"].append(product)
+            self.save()
+            self.reload()
+            return product
 
     def set_active(self, product_id: str, active: bool) -> bool:
-        for product in self.data["products"]:
-            if str(product.get("id")) == product_id:
-                product["active"] = active
-                self.save()
-                self.reload()
-                return True
-        return False
+        with self.lock:
+            for product in self.data["products"]:
+                if str(product.get("id")) == product_id:
+                    product["active"] = active
+                    self.save()
+                    self.reload()
+                    return True
+            return False
 
 
 class Database:
@@ -332,6 +396,23 @@ class Database:
             conn.execute("PRAGMA busy_timeout=30000")
             self.local.conn = conn
         return conn
+
+    def close_current(self) -> None:
+        """Закрыть соединение текущего потока.
+
+        ``ThreadingHTTPServer`` создаёт поток на каждый запрос, а соединение
+        живёт в ``threading.local``. Без явного закрытия дескрипторы копятся до
+        ближайшей сборки мусора: 300 коротких потоков давали 254 открытых fd.
+        Долгоживущие потоки (опрос Telegram) свои соединения не трогают.
+        """
+        conn = getattr(self.local, "conn", None)
+        if conn is None:
+            return
+        self.local.conn = None
+        try:
+            conn.close()
+        except sqlite3.Error:
+            LOG.debug("Не удалось закрыть соединение SQLite", exc_info=True)
 
     def _initialize(self) -> None:
         conn = self.connection()
@@ -398,6 +479,11 @@ class Database:
                 provider_id TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 paid_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS kv (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
             CREATE INDEX IF NOT EXISTS idx_events_event ON events(event);
@@ -749,6 +835,20 @@ class Database:
             (user_id, event, compact_json(payload or {}), utc_now()),
         )
 
+    def kv_get(self, key: str) -> str:
+        row = self.connection().execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+        return str(row[0]) if row else ""
+
+    def kv_set(self, key: str, value: str) -> None:
+        self.connection().execute(
+            "INSERT INTO kv(key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            (key, value, utc_now()),
+        )
+
+    def kv_delete(self, key: str) -> None:
+        self.connection().execute("DELETE FROM kv WHERE key = ?", (key,))
+
     def stats(self) -> dict[str, int]:
         conn = self.connection()
         return {
@@ -1029,6 +1129,84 @@ class TelegramAPI:
             raise RuntimeError(f"Telegram API error: {result}")
         return result.get("result")
 
+    def send_video(
+        self,
+        chat_id: int,
+        video: str | Path,
+        caption: str = "",
+        reply_markup: dict[str, Any] | None = None,
+        thumbnail: Path | None = None,
+        width: int = 0,
+        height: int = 0,
+        duration: int = 0,
+    ) -> Any:
+        """Send a video: a ``file_id``/HTTPS URL as JSON, a local ``Path`` as multipart.
+
+        Uploading a few megabytes on every ``/start`` is wasteful, so callers
+        cache the returned ``file_id`` and pass it next time.
+        """
+        if len(caption) > 1024:
+            caption = caption[:1010] + "…"
+        fields: dict[str, str] = {
+            "chat_id": str(chat_id),
+            "caption": caption,
+            "parse_mode": "HTML",
+            "supports_streaming": "true",
+        }
+        for name, value in (("width", width), ("height", height), ("duration", duration)):
+            if value:
+                fields[name] = str(int(value))
+        if reply_markup:
+            fields["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False, separators=(",", ":"))
+
+        if not isinstance(video, Path):
+            payload: dict[str, Any] = dict(fields)
+            payload["chat_id"] = chat_id
+            payload["video"] = str(video)
+            payload["supports_streaming"] = True
+            if reply_markup:
+                payload["reply_markup"] = reply_markup
+            return self.call("sendVideo", payload)
+
+        boundary = "----VorozhbitovVideo7MA4YWxk"
+        files: list[tuple[str, Path]] = [("video", video)]
+        if thumbnail is not None and thumbnail.is_file():
+            fields["thumbnail"] = "attach://thumb"
+            files.append(("thumb", thumbnail))
+        chunks: list[bytes] = []
+        for name, value in fields.items():
+            chunks.extend(
+                [
+                    f"--{boundary}\r\n".encode(),
+                    f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
+                    value.encode("utf-8"),
+                    b"\r\n",
+                ]
+            )
+        for name, path in files:
+            mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            chunks.extend(
+                [
+                    f"--{boundary}\r\n".encode(),
+                    f'Content-Disposition: form-data; name="{name}"; filename="{path.name}"\r\n'.encode(),
+                    f"Content-Type: {mime}\r\n\r\n".encode(),
+                    path.read_bytes(),
+                    b"\r\n",
+                ]
+            )
+        chunks.append(f"--{boundary}--\r\n".encode())
+        request = urllib.request.Request(
+            self.base_url + "sendVideo",
+            data=b"".join(chunks),
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=180) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        if not result.get("ok"):
+            raise RuntimeError(f"Telegram API error: {result}")
+        return result.get("result")
+
     def send_media_group(self, chat_id: int, photos: list[str], caption: str = "") -> Any:
         media = []
         for index, photo in enumerate(photos[:10]):
@@ -1141,7 +1319,9 @@ ORDER_STATUS_MESSAGES = {
     "cancelled": "Заявка отменена. Если это ошибка — собери новую из карточки вещи.",
 }
 
-WEBAPP_INIT_MAX_AGE = 60 * 60 * 48
+# Витрину открывают и оформляют заказ за один заход. Сутки — запас на «свернул
+# и вернулся»; двое суток давали слишком длинное окно для перехваченного initData.
+WEBAPP_INIT_MAX_AGE = 60 * 60 * 24
 
 
 def webapp_user_from_init_data(token: str, init_data: str, now: int | None = None) -> dict[str, Any] | None:
@@ -1175,6 +1355,36 @@ def webapp_user_from_init_data(token: str, init_data: str, now: int | None = Non
         return None
     user["id"] = int(user["id"])
     return user
+
+
+def person_label(product: dict[str, Any]) -> str:
+    config = product.get("personalization")
+    if isinstance(config, dict) and config.get("label"):
+        return str(config["label"])
+    return "ПЕРСОНАЛИЗАЦИЯ"
+
+
+def sanitize_personalization(product: dict[str, Any], raw: Any) -> str:
+    """Проверить персонализацию (номер жетона) по правилам из каталога.
+
+    Витрине доверять нельзя: паттерн и сам факт поддержки поля берём из
+    серверного каталога, а не из присланного заказа.
+    """
+    config = product.get("personalization")
+    if not isinstance(config, dict):
+        return ""
+    value = str(raw or "").strip()[:32]
+    if not value:
+        return ""
+    pattern = str(config.get("pattern") or "")
+    if pattern:
+        try:
+            if not re.fullmatch(pattern, value):
+                return ""
+        except re.error:
+            LOG.warning("Некорректный шаблон персонализации у товара %s", product.get("id"))
+            return ""
+    return value
 
 
 def public_order_payload(row: sqlite3.Row) -> dict[str, Any]:
@@ -1270,11 +1480,69 @@ class BrandBot:
                     LOG.exception("Welcome photo URL fallback failed")
         self.api.send_message(chat_id, caption, keyboard)
 
+    def send_teaser(self, chat_id: int, caption: str = "", keyboard: dict[str, Any] | None = None) -> bool:
+        """Send the drop teaser, reusing Telegram's own copy after the first upload.
+
+        Order of preference: cached ``file_id`` → public URL from ``media`` →
+        local upload. A stale ``file_id`` is dropped and the send retried, and
+        any failure stays silent: the teaser is a bonus, not the conversation.
+        """
+        media = self.catalog.data.get("media", {}) if self.catalog else {}
+        if not caption:
+            title = str(media.get("teaser_title") or "СИЛА И ЧЕСТЬ")
+            subtitle = str(media.get("teaser_caption") or "")
+            caption = f"<b>{esc(title)}</b>" + (f"\n{esc(subtitle)}" if subtitle else "")
+
+        cached = self.db.kv_get("teaser_file_id")
+        if cached:
+            try:
+                self.api.send_video(chat_id, cached, caption, keyboard)
+                return True
+            except Exception:
+                # Telegram забывает file_id при смене бота или после чистки — шлём заново.
+                LOG.info("Cached teaser file_id rejected, re-uploading")
+                self.db.kv_delete("teaser_file_id")
+
+        story_url = str(media.get("teaser_story_url") or "").strip()
+        if story_url.startswith("https://"):
+            try:
+                result = self.api.send_video(chat_id, story_url, caption, keyboard)
+                self._remember_teaser(result)
+                return True
+            except Exception:
+                LOG.info("Teaser URL rejected, falling back to local upload")
+
+        if TEASER_VIDEO.is_file() and TEASER_VIDEO.stat().st_size <= TEASER_UPLOAD_LIMIT:
+            try:
+                result = self.api.send_video(
+                    chat_id,
+                    TEASER_VIDEO,
+                    caption,
+                    keyboard,
+                    thumbnail=TEASER_POSTER if TEASER_POSTER.is_file() else None,
+                    width=720,
+                    height=1280,
+                    duration=31,
+                )
+                self._remember_teaser(result)
+                return True
+            except Exception:
+                LOG.exception("Could not send teaser video")
+        return False
+
+    def _remember_teaser(self, result: Any) -> None:
+        """Cache the file_id so the next send costs one API call, not 3 MB."""
+        if isinstance(result, dict):
+            video = result.get("video")
+            if isinstance(video, dict) and video.get("file_id"):
+                self.db.kv_set("teaser_file_id", str(video["file_id"]))
+
     # ------------------------------------------------------------------ menus
 
     def main_menu(self) -> dict[str, Any]:
         rows: list[list[tuple[str, str]]] = [
             [("Смотреть выпуск", "catalog"), ("Образы", "lookbook")],
+            [("Ролик выпуска", "teaser")],
             [("Подобрать размер", "size_guide"), ("О бренде", "about")],
             [("Канал", self.settings.channel_url)],
             [("Узнать первым", "profile"), ("Привести друга", "referral")],
@@ -1308,6 +1576,8 @@ class BrandBot:
         name = esc(user.get("first_name") or "друг")
 
         if is_new:
+            # Ролик уходит первым: он объясняет бренд лучше любого абзаца.
+            self.send_teaser(chat_id)
             text = (
                 f"<b>{esc(self.settings.brand_name)}</b>\n\n"
                 f"{name}, ты на закрытой территории.\n"
@@ -1380,6 +1650,20 @@ class BrandBot:
                 [("Назад", f"cat:{product['category']}")],
             ]
         )
+        # Вещь показываем со всех сторон: в витрине для этого есть обзор,
+        # в чате ближайший аналог — альбом из тех же кадров.
+        gallery = [
+            url
+            for shot in list(product.get("images") or [])[:6]
+            if (url := self.public_asset_url(shot))
+        ]
+        if len(gallery) > 1:
+            try:
+                self.api.send_media_group(chat_id, gallery, caption)
+                self.api.send_message(chat_id, "Что делаем?", keyboard)
+                return
+            except Exception:
+                LOG.exception("Failed to send product album, falling back to a single photo")
         photo = self.public_asset_url(product.get("photo_url") or product.get("image"))
         if photo:
             self.api.send_photo(chat_id, photo, caption, keyboard)
@@ -2218,13 +2502,14 @@ class BrandBot:
             base = slugify(name, "category")
             category_id = base
             index = 2
-            existing = {category["id"] for category in self.catalog.categories}
-            while category_id in existing:
-                category_id = f"{base}-{index}"
-                index += 1
-            self.catalog.data["categories"].append({"id": category_id, "name": name})
-            self.catalog.save()
-            self.catalog.reload()
+            with self.catalog.lock:
+                existing = {category["id"] for category in self.catalog.categories}
+                while category_id in existing:
+                    category_id = f"{base}-{index}"
+                    index += 1
+                self.catalog.data["categories"].append({"id": category_id, "name": name})
+                self.catalog.save()
+                self.catalog.reload()
             data = {"step": "name", "category": category_id}
             self.db.set_state(user_id, "admin_add", data)
             self.api.send_message(chat_id, f"Категория «{esc(name)}» создана.\n\n{ADD_STEPS[0][1]}")
@@ -2241,6 +2526,23 @@ class BrandBot:
         elif not value:
             self.api.send_message(chat_id, "Пусто не подойдёт. Напиши ещё раз или «Отмена».")
             return True
+        if step == "price":
+            # Цена уходит прямо в счёт, поэтому неоднозначный ввод отклоняем
+            # здесь, а не превращаем в случайную сумму на этапе оплаты.
+            try:
+                rubles = parse_price_strict(value)
+            except PriceError:
+                self.api.send_message(
+                    chat_id,
+                    "Не понял цену. Нужно одно число, например: <code>9 900 ₽</code>\n\n"
+                    "Диапазоны («1 200 - 1 500»), скидки в скобках и текст не подойдут — "
+                    "из такой строки нельзя посчитать сумму счёта.",
+                )
+                return True
+            if rubles <= 0:
+                self.api.send_message(chat_id, "Цена должна быть больше нуля. Напиши ещё раз.")
+                return True
+            value = format_rub(rubles)
         if step == "sizes":
             sizes = [item.strip() for item in re.split(r"[,;/]", value) if item.strip()]
             if not sizes:
@@ -2328,20 +2630,61 @@ class BrandBot:
         text = str(state[1].get("text", "")).strip()
         segment = str(state[1].get("segment", "all"))
         self.db.clear_state(user_id)
+        audience = self.db.broadcast_audience(segment)
+        if not audience:
+            self.api.send_message(chat_id, "В этом сегменте никого нет.")
+            return
+        # Рассылка идёт в отдельном потоке: раньше она выполнялась прямо в
+        # цикле опроса и на 10 000 получателей морозила бота примерно на 7 минут.
+        thread = threading.Thread(
+            target=self._run_broadcast,
+            args=(chat_id, user_id, text, segment, audience),
+            name="broadcast",
+            daemon=True,
+        )
+        thread.start()
+        self.api.send_message(
+            chat_id,
+            f"Рассылка пошла: {len(audience)} получателей.\n"
+            "Бот продолжает отвечать — отчёт придёт сюда, когда закончим.",
+        )
+
+    def _run_broadcast(
+        self,
+        chat_id: int,
+        user_id: int,
+        text: str,
+        segment: str,
+        audience: list[int],
+    ) -> None:
         delivered = 0
         failed = 0
-        for recipient in self.db.broadcast_audience(segment):
+        try:
+            for recipient in audience:
+                if STOP_EVENT.is_set():
+                    LOG.warning("Рассылка прервана остановкой бота: доставлено %s", delivered)
+                    break
+                try:
+                    self.api.send_message(recipient, esc(text), self.main_menu())
+                    delivered += 1
+                    time.sleep(0.04)
+                except Exception as exc:
+                    failed += 1
+                    if "blocked" in str(exc).lower() or "chat not found" in str(exc).lower():
+                        self.db.mark_blocked(recipient)
+                    LOG.warning("Broadcast failed for %s: %s", recipient, exc)
+            self.db.event(
+                user_id,
+                "broadcast_sent",
+                {"delivered": delivered, "failed": failed, "segment": segment},
+            )
             try:
-                self.api.send_message(recipient, esc(text), self.main_menu())
-                delivered += 1
-                time.sleep(0.04)
-            except Exception as exc:
-                failed += 1
-                if "blocked" in str(exc).lower() or "chat not found" in str(exc).lower():
-                    self.db.mark_blocked(recipient)
-                LOG.warning("Broadcast failed for %s: %s", recipient, exc)
-        self.db.event(user_id, "broadcast_sent", {"delivered": delivered, "failed": failed, "segment": segment})
-        self.api.send_message(chat_id, f"Готово. Доставлено: {delivered}. Ошибок: {failed}.")
+                self.api.send_message(chat_id, f"Готово. Доставлено: {delivered}. Ошибок: {failed}.")
+            except Exception:
+                LOG.warning("Не удалось отправить отчёт о рассылке", exc_info=True)
+        finally:
+            # Поток рассылки живёт долго и держит собственное соединение SQLite.
+            self.db.close_current()
 
     # ------------------------------------------------------------------ miniapp + input
 
@@ -2407,7 +2750,7 @@ class BrandBot:
         user: dict[str, Any],
         customer: dict[str, Any],
         phone: str,
-        valid_items: list[tuple[dict[str, Any], str, int]],
+        valid_items: list[tuple[dict[str, Any], str, int, str]],
         payload: dict[str, Any],
         notify_user: int | None = None,
     ) -> dict[str, Any]:
@@ -2425,27 +2768,30 @@ class BrandBot:
             },
         )
         request_base = re.sub(r"[^a-zA-Z0-9_-]", "", str(payload.get("request_id", "")))[:80] or f"web-{user_id}-{int(time.time())}"
-        total = sum(self.line_amount(product, quantity) for product, _, quantity in valid_items)
+        total = sum(self.line_amount(product, quantity) for product, _, quantity, _ in valid_items)
         payment_id = self.new_payment_id() if total else ""
         status = "awaiting_payment" if total else "new"
-        created_orders: list[tuple[int, dict[str, Any], str, int]] = []
+        created_orders: list[tuple[int, dict[str, Any], str, int, str]] = []
         note = self.customer_note(customer)
-        for index, (product, size, quantity) in enumerate(valid_items, start=1):
+        for index, (product, size, quantity, person) in enumerate(valid_items, start=1):
             line_sum = self.line_amount(product, quantity)
+            # Номер жетона уникален для позиции, поэтому входит и в примечание,
+            # и в request_id — иначе два разных номера схлопнутся в один заказ.
+            line_note = f"{note} · {person_label(product)}: {person}" if person else note
             order_id, created = self.db.create_order(
-                f"{request_base}-{index}-{product['id']}-{size}",
+                f"{request_base}-{index}-{product['id']}-{size}{('-' + person) if person else ''}",
                 user_id,
                 product,
                 size,
                 phone,
                 quantity,
-                note,
+                line_note,
                 status=status,
                 payment_id=payment_id,
                 amount_rub=line_sum,
             )
             if created:
-                created_orders.append((order_id, product, size, quantity))
+                created_orders.append((order_id, product, size, quantity, person))
         if not created_orders:
             return {"ok": False, "error": "Эта заявка уже была принята."}
         stars = stars_amount(total, self.settings.stars_rub_per_star) if total and self.settings.stars_enabled else 0
@@ -2453,9 +2799,10 @@ class BrandBot:
             self.db.create_payment(payment_id, user_id, total, stars)
         order_lines = [
             f"• {esc(product['name'])} · {esc(size)} · {quantity} шт."
-            for _, product, size, quantity in created_orders
+            + (f" · {esc(person_label(product))} {esc(person)}" if person else "")
+            for _, product, size, quantity, person in created_orders
         ]
-        description = f"{self.settings.brand_name}: {', '.join(product['name'] for _, product, _, _ in created_orders)[:180]}"
+        description = f"{self.settings.brand_name}: {', '.join(product['name'] for _, product, _, _, _ in created_orders)[:180]}"
         methods = self.build_pay_methods(payment_id, total, description) if payment_id else []
         if notify_user:
             self.offer_payment(int(notify_user), payment_id, total, order_lines, source="витрины")
@@ -2484,8 +2831,13 @@ class BrandBot:
             "order_ids": [order_id for order_id, *_ in created_orders],
             "status": status,
             "lines": [
-                {"name": str(product["name"]), "size": str(size), "quantity": int(quantity)}
-                for _, product, size, quantity in created_orders
+                {
+                    "name": str(product["name"]),
+                    "size": str(size),
+                    "quantity": int(quantity),
+                    **({"person": person, "person_label": person_label(product)} if person else {}),
+                }
+                for _, product, size, quantity, person in created_orders
             ],
         }
 
@@ -2532,7 +2884,7 @@ class BrandBot:
         raw_items = payload.get("items")
         if not isinstance(raw_items, list) or not raw_items or len(raw_items) > 20:
             return {"ok": False, "error": "В заявке нет вещей или их слишком много. Проверь корзину."}
-        valid_items: list[tuple[dict[str, Any], str, int]] = []
+        valid_items: list[tuple[dict[str, Any], str, int, str]] = []
         for raw_item in raw_items:
             if not isinstance(raw_item, dict):
                 continue
@@ -2544,7 +2896,8 @@ class BrandBot:
                 quantity = max(1, min(int(raw_item.get("quantity", 1)), 20))
             except (TypeError, ValueError):
                 quantity = 1
-            valid_items.append((product, size, quantity))
+            person = sanitize_personalization(product, raw_item.get("person"))
+            valid_items.append((product, size, quantity, person))
         if not valid_items:
             return {"ok": False, "error": "Некоторые вещи уже закончились. Обнови витрину и выбери снова."}
         self.db.upsert_user(user)
@@ -2589,7 +2942,7 @@ class BrandBot:
             self.api.send_message(chat_id, "В заявке нет вещей или их слишком много. Проверь корзину.", self.main_menu())
             return
 
-        valid_items: list[tuple[dict[str, Any], str, int]] = []
+        valid_items: list[tuple[dict[str, Any], str, int, str]] = []
         for raw_item in raw_items:
             if not isinstance(raw_item, dict):
                 continue
@@ -2601,7 +2954,8 @@ class BrandBot:
                 quantity = max(1, min(int(raw_item.get("quantity", 1)), 20))
             except (TypeError, ValueError):
                 quantity = 1
-            valid_items.append((product, size, quantity))
+            person = sanitize_personalization(product, raw_item.get("person"))
+            valid_items.append((product, size, quantity, person))
         if not valid_items:
             self.api.send_message(chat_id, "Некоторые вещи уже закончились. Обнови витрину и выбери снова.", self.main_menu())
             return
@@ -2662,6 +3016,15 @@ class BrandBot:
             self.show_referral(chat_id, user_id)
         elif data == "lookbook":
             self.show_lookbook(chat_id, user_id)
+        elif data == "teaser":
+            self.db.event(user_id, "teaser_open")
+            if not self.send_teaser(chat_id, keyboard=self.main_menu()):
+                self.api.send_message(
+                    chat_id,
+                    "Ролик сейчас не открывается. Загляни в витрину — там он лежит целиком."
+                    + self.cta("drop"),
+                    self.main_menu(),
+                )
         elif data == "about":
             self.api.send_message(
                 chat_id,
@@ -2810,12 +3173,38 @@ class StorefrontHandler(BaseHTTPRequestHandler):
     api: TelegramAPI | None = None
     static_root = BASE_DIR / "miniapp"
 
+    # Витрина живёт внутри Telegram и подключает только свои файлы плюс SDK
+    # telegram.org. CSP — второй рубеж: в app.js много innerHTML, и если где-то
+    # однажды забудут escapeHTML, инлайновый скрипт всё равно не выполнится.
+    CSP_BASE = (
+        "default-src 'self'; "
+        "script-src 'self' https://telegram.org; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "base-uri 'none'; "
+        "form-action 'none'"
+    )
+    # Боевой режим пускает витрину в рамку только Telegram. В предпросмотре без
+    # токена рамку не ограничиваем, иначе локальный iframe покажет пустоту.
+    CSP_FRAME_TELEGRAM = "frame-ancestors https://web.telegram.org https://*.telegram.org"
+
+    def _csp(self) -> str:
+        settings = self.settings
+        if settings and settings.token:
+            return f"{self.CSP_BASE}; {self.CSP_FRAME_TELEGRAM}"
+        return self.CSP_BASE
+
     def _write(self, body: bytes, content_type: str, status: int = 200, cache_control: str = "no-cache") -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache_control)
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", self._csp())
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()")
         self.end_headers()
         if not getattr(self, "_head_only", False):
             self.wfile.write(body)
@@ -2830,6 +3219,25 @@ class StorefrontHandler(BaseHTTPRequestHandler):
 
     def _not_found(self) -> None:
         self._write(b"Not found", "text/plain; charset=utf-8", 404, "no-store")
+
+    def _client_key(self) -> str:
+        """Ключ лимитера: за прокси доверяем первому адресу X-Forwarded-For."""
+        forwarded = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+        if forwarded:
+            return forwarded[:64]
+        return str(self.client_address[0]) if self.client_address else "unknown"
+
+    def _too_many(self) -> None:
+        self._json({"error": "Слишком часто. Подожди немного и попробуй ещё раз."}, 429)
+
+    def _rate_ok(self, limiter: RateLimiter, scope: str, user: dict[str, Any] | None = None) -> bool:
+        """Считаем по user_id, если он подписан, иначе по адресу клиента."""
+        who = f"user:{user['id']}" if user else f"ip:{self._client_key()}"
+        if limiter.allow(f"{scope}:{who}"):
+            return True
+        LOG.warning("Превышен лимит %s для %s", scope, who)
+        self._too_many()
+        return False
 
     def _webapp_user(self) -> dict[str, Any] | None:
         raw = self.headers.get("X-Telegram-Init-Data") or ""
@@ -2864,6 +3272,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if not user:
             self._json({"error": "Открой витрину из бота — тогда подтянутся заявки."}, 401)
             return
+        if not self._rate_ok(READ_LIMITER, "my-orders", user):
+            return
         rows = self.db.orders_for_user(int(user["id"]), 20)
         self._json({"orders": [public_order_payload(row) for row in rows], "source": "bot"})
 
@@ -2874,6 +3284,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         user = self._webapp_user()
         if not user:
             self._json({"error": "Открой витрину из бота."}, 401)
+            return
+        if not self._rate_ok(CHECKOUT_LIMITER, "cancel", user):
             return
         payload = self._read_json_body() or {}
         try:
@@ -2936,6 +3348,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if not user:
             self._json({"error": "Открой витрину из бота."}, 401)
             return
+        if not self._rate_ok(CHECKOUT_LIMITER, "pay", user):
+            return
         payload = self._read_json_body() or {}
         payment_id = str(payload.get("payment_id") or "")[:32]
         bot = self._bot()
@@ -2955,6 +3369,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         user = self._webapp_user()
         if not user:
             self._json({"error": "Открой витрину из бота — тогда можно оплатить."}, 401)
+            return
+        if not self._rate_ok(CHECKOUT_LIMITER, "checkout", user):
             return
         payload = self._read_json_body()
         if not payload:
@@ -3057,14 +3473,20 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             if not catalog:
                 self._not_found()
                 return
-            payload = {
-                "brand": catalog.data.get("brand", {"name": settings.brand_name if settings else "ВОРОЖБИТОВ"}),
-                "channel_url": settings.channel_url if settings else "",
-                "privacy_url": settings.privacy_url if settings else "",
-                "products": [product for product in catalog.data.get("products", []) if product.get("active", True)],
-                "categories": catalog.categories,
-                "lookbook": catalog.data.get("lookbook", []),
-            }
+            if not self._rate_ok(READ_LIMITER, "catalog"):
+                return
+            with catalog.lock:
+                payload = {
+                    "brand": catalog.data.get("brand", {"name": settings.brand_name if settings else "ВОРОЖБИТОВ"}),
+                    "channel_url": settings.channel_url if settings else "",
+                    "privacy_url": settings.privacy_url if settings else "",
+                    "products": [
+                        product for product in catalog.data.get("products", []) if product.get("active", True)
+                    ],
+                    "categories": catalog.categories,
+                    "lookbook": catalog.data.get("lookbook", []),
+                    "media": self._stamp_media(catalog.data.get("media", {})),
+                }
             self._write(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
 
@@ -3082,6 +3504,10 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if not candidate.is_file():
             self._not_found()
             return
+        suffix = candidate.suffix.lower()
+        if suffix in VIDEO_SUFFIXES:
+            self._serve_video(candidate)
+            return
         try:
             body = candidate.read_bytes()
         except OSError:
@@ -3090,8 +3516,122 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
         if content_type.startswith("text/") or content_type in {"application/javascript", "image/svg+xml"}:
             content_type += "; charset=utf-8"
-        cache = "public, max-age=3600" if candidate.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".svg"} else "no-cache"
+        if candidate.name == "index.html":
+            # WebView Telegram держит app.js и styles.css в кеше и после правок
+            # показывает старую версию. Клеим метку версии по времени файла.
+            body = self._stamp_assets(body)
+        if suffix in {".jpg", ".jpeg", ".png", ".webp", ".svg"}:
+            cache = "public, max-age=3600"
+        elif suffix in {".woff2", ".woff", ".ttf"}:
+            # Шрифты неизменяемы и весят больше всего — держим их в кеше долго.
+            cache = "public, max-age=31536000, immutable"
+        else:
+            cache = "no-cache"
         self._write(body, content_type, 200, cache)
+
+    def _stamp_media(self, media: dict[str, Any]) -> dict[str, Any]:
+        """Добавить ?v=<время правки> к роликам и постерам из блока media.
+
+        Видео отдаётся с ``max-age=86400``, а имя файла не меняется: заменив
+        ``teaser.mp4``, мы сутки показывали бы всем старую копию из кеша
+        браузера. Версия в адресе делает подмену мгновенной.
+        """
+        stamped: dict[str, Any] = {}
+        for key, value in media.items():
+            if not isinstance(value, str) or not value or "?" in value or "://" in value:
+                stamped[key] = value
+                continue
+            candidate = self.static_root / value.lstrip("/")
+            try:
+                version = int(candidate.stat().st_mtime)
+            except OSError:
+                stamped[key] = value
+                continue
+            stamped[key] = f"{value}?v={version}"
+        return stamped
+
+    def _stamp_assets(self, body: bytes) -> bytes:
+        """Добавить ?v=<время правки> к app.js и styles.css в index.html."""
+        text = body.decode("utf-8", "replace")
+        for name in ("app.js", "styles.css"):
+            asset = self.static_root / name
+            try:
+                version = int(asset.stat().st_mtime)
+            except OSError:
+                continue
+            text = text.replace(f'href="{name}"', f'href="{name}?v={version}"')
+            text = text.replace(f'src="{name}"', f'src="{name}?v={version}"')
+        return text.encode("utf-8")
+
+    def _serve_video(self, candidate: Path) -> None:
+        """Отдать видео с поддержкой HTTP Range.
+
+        Без 206 ``<video>`` в iOS/Safari не стартует: первый запрос там —
+        ``Range: bytes=0-1``. Тело читается кусками, чтобы ролик не оседал
+        в памяти целиком на каждый запрос.
+        """
+        try:
+            size = candidate.stat().st_size
+        except OSError:
+            self._not_found()
+            return
+        content_type = mimetypes.guess_type(candidate.name)[0] or "video/mp4"
+        cache = "public, max-age=86400"
+        start, end = 0, size - 1
+        partial = False
+        raw_range = (self.headers.get("Range") or "").strip()
+        if raw_range.startswith("bytes="):
+            spec = raw_range[6:].split(",")[0].strip()
+            first, _, last = spec.partition("-")
+            try:
+                if not first:
+                    # Суффиксный диапазон: последние N байт.
+                    length = int(last)
+                    if length <= 0:
+                        raise ValueError
+                    start = max(0, size - length)
+                else:
+                    start = int(first)
+                    if last:
+                        end = min(int(last), size - 1)
+                if start > end or start >= size:
+                    raise ValueError
+                partial = True
+            except ValueError:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+        length = end - start + 1
+        self.send_response(206 if partial else 200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(length))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", cache)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", self._csp())
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        if partial:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        if getattr(self, "_head_only", False):
+            return
+        remaining = length
+        try:
+            with candidate.open("rb") as handle:
+                handle.seek(start)
+                while remaining > 0:
+                    chunk = handle.read(min(262144, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            # Обычное дело: плеер перемотал и оборвал текущий запрос.
+            LOG.debug("Клиент закрыл соединение при отдаче видео")
+        except OSError:
+            LOG.warning("Не удалось отдать видео %s", candidate.name, exc_info=True)
 
     def do_POST(self) -> None:
         path = urllib.parse.urlparse(self.path).path
@@ -3114,7 +3654,20 @@ class StorefrontHandler(BaseHTTPRequestHandler):
 
     def do_HEAD(self) -> None:
         self._head_only = True
-        self.do_GET()
+        try:
+            self.do_GET()
+        finally:
+            # Флаг обязан жить ровно один запрос: если когда-нибудь включат
+            # HTTP/1.1 с keep-alive, иначе следующий ответ уйдёт без тела.
+            self._head_only = False
+
+    def finish(self) -> None:
+        """Отдать соединение SQLite до того, как поток запроса умрёт."""
+        try:
+            super().finish()
+        finally:
+            if self.db is not None:
+                self.db.close_current()
 
     def log_message(self, format: str, *args: Any) -> None:
         return
@@ -3185,6 +3738,10 @@ def main() -> int:
     if not settings.channel_url.startswith(("https://", "http://", "tg://")):
         LOG.error("CHANNEL_URL must be a valid HTTP(S) or tg:// URL")
         return 2
+    if not settings.admin_ids:
+        LOG.warning("ADMIN_IDS пуст — админ-панель и /add никому не доступны. Задай ID в .env")
+    if settings.manager_chat_id is None:
+        LOG.warning("MANAGER_CHAT_ID не задан — уведомления о заявках никуда не уйдут")
     try:
         ensure_catalog_exists(settings.catalog_path, BASE_DIR / "catalog.json")
         catalog = Catalog(settings.catalog_path)

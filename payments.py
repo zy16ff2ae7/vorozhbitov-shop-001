@@ -18,11 +18,57 @@ LOG = logging.getLogger("brand_bot.pay")
 
 PRICE_RE = re.compile(r"\d+")
 
+# Одно число: '11 900 ₽', '11900', '11 900.00 ₽'. Разряды можно разделять
+# пробелом (в том числе неразрывным) или апострофом; дробная часть — копейки.
+STRICT_PRICE_RE = re.compile(
+    r"""^\s*
+        (?:от\s+)?                          # необязательное «от»
+        (?P<int>\d{1,3}(?:[\s\u00a0\u202f']\d{3})*|\d+)
+        (?:[.,](?P<frac>\d{1,2}))?          # копейки
+        \s*(?:₽|руб\.?|rub|r)?              # необязательная валюта
+    \s*$""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+class PriceError(ValueError):
+    """Цену не удалось разобрать однозначно."""
+
+
+def parse_price_strict(value: Any) -> int:
+    """Разобрать цену в рублях или бросить :class:`PriceError`.
+
+    В отличие от старого поведения (склеить все цифры подряд) неоднозначные
+    строки вроде '1 200 - 1 500 ₽' или '4900 (скидка 3900)' отклоняются:
+    молча выставить счёт на 12 001 500 ₽ хуже, чем отказать администратору.
+    Копейки округляются до рубля — оплата идёт в целых рублях.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        raise PriceError("Цена пустая")
+    match = STRICT_PRICE_RE.match(raw)
+    if not match:
+        raise PriceError(f"Непонятная цена: {raw!r}")
+    rubles = int(re.sub(r"[\s\u00a0\u202f']", "", match.group("int")))
+    frac = match.group("frac")
+    if frac:
+        rubles += round(int(frac.ljust(2, "0")) / 100)
+    if rubles < 0 or rubles > 10_000_000:
+        raise PriceError(f"Цена вне допустимых границ: {rubles}")
+    return rubles
+
 
 def parse_price_rub(value: Any) -> int:
-    """'11 900 ₽' → 11900. Missing/garbage → 0."""
-    digits = "".join(PRICE_RE.findall(str(value or "")))
-    return int(digits) if digits else 0
+    """'11 900 ₽' → 11900. Неоднозначная или пустая строка → 0.
+
+    Ноль означает «платить нечем»: вызывающий код не создаёт счёт, поэтому
+    сломанный прайс приводит к заявке без оплаты, а не к списанию наугад.
+    """
+    try:
+        return parse_price_strict(value)
+    except PriceError:
+        LOG.warning("Не удалось разобрать цену %r — счёт не выставляется", value)
+        return 0
 
 
 def format_rub(amount: int) -> str:
