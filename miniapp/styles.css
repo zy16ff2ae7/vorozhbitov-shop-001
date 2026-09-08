@@ -173,8 +173,16 @@ video.welcome-media.is-playing { opacity: 1; }
 .welcome-shade {
   position: absolute; inset: 0;
   background:
-    linear-gradient(180deg, rgba(7,7,8,.15) 0%, rgba(7,7,8,.2) 38%, rgba(7,7,8,.92) 78%, #070708 100%),
-    linear-gradient(90deg, rgba(225,6,0,.22), transparent 42%);
+    /* Нижняя половина уходит почти в чёрный — под текстом всегда тёмное поле,
+       иначе светлые кадры видео (лица, свет) съедают буквы. */
+    linear-gradient(180deg,
+      rgba(7,7,8,.30) 0%,
+      rgba(7,7,8,.42) 30%,
+      rgba(7,7,8,.80) 52%,
+      rgba(7,7,8,.95) 72%,
+      #070708 100%),
+    linear-gradient(90deg, rgba(7,7,8,.72), rgba(7,7,8,.18) 62%, transparent),
+    linear-gradient(90deg, rgba(225,6,0,.16), transparent 40%);
 }
 .welcome-frame {
   position: relative; z-index: 2;
@@ -183,19 +191,23 @@ video.welcome-media.is-playing { opacity: 1; }
 }
 .welcome-kicker {
   display: flex; align-items: center; gap: 10px;
-  font-size: 10px; letter-spacing: .18em; color: var(--muted);
+  font-size: 10px; letter-spacing: .18em; color: #cfc7bb;
+  text-shadow: 0 1px 6px rgba(0,0,0,.9);
 }
 .welcome h1 {
   margin: 16px 0 14px;
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: clamp(56px, 18vw, 108px);
+  font-size: clamp(52px, 16.5vw, 104px);
   line-height: .82;
   letter-spacing: -.07em;
+  /* Двойная тень: ближняя даёт контур, дальняя отделяет от светлых кадров. */
+  text-shadow: 0 2px 10px rgba(0,0,0,.75), 0 12px 42px rgba(0,0,0,.85);
 }
 .welcome-copy {
   max-width: 420px; margin: 0 0 26px;
-  color: #d7d0c6; font-size: 14px; line-height: 1.55;
+  color: #e6dfd5; font-size: 14px; line-height: 1.55;
+  text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 4px 18px rgba(0,0,0,.8);
 }
 .welcome-meta {
   margin-top: 22px; display: flex; gap: 18px; flex-wrap: wrap;
@@ -215,9 +227,13 @@ video.welcome-media.is-playing { opacity: 1; }
   font-family: var(--font-display); font-weight: 900; font-size: 17px;
   letter-spacing: -.02em; color: var(--acid); font-variant-numeric: tabular-nums;
 }
+/* Кнопки заставки идут колонкой: в строку «посмотреть ролик» уезжал за край. */
+.welcome-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.welcome-actions .button-primary { width: 100%; max-width: 340px; justify-content: center; }
 .welcome-skip {
   display: inline-flex; align-items: center; gap: 8px;
-  margin-top: 14px; color: var(--muted); font-size: 12px;
+  color: #cfc7bb; font-size: 12px; letter-spacing: .1em;
+  text-shadow: 0 1px 4px rgba(0,0,0,.9);
 }
 .welcome-skip span { color: var(--red); }
 .welcome-skip:hover { color: var(--ink); }
