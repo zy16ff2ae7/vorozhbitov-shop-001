@@ -875,6 +875,36 @@ class BotTests(unittest.TestCase):
                         detail, threshold, f"{shot} размыт — такое фото продавать нельзя"
                     )
 
+    def test_welcome_copy_is_structured_not_a_wall_of_text(self):
+        """Обращение к своим должно читаться: зачин, факты и призыв — разными блоками."""
+        miniapp = Path(__file__).with_name("miniapp")
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        styles = (miniapp / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('class="welcome-lede"', index)
+        self.assertIn('class="welcome-drop"', index)
+        self.assertIn('class="welcome-facts"', index)
+        # Текст остаётся тем же обращением, просто разложенным по строкам.
+        self.assertIn("Брат.", index)
+        self.assertIn("закрытую территорию", index)
+        self.assertIn("Бери размер, пока он есть.", index)
+        # Стили для новых блоков должны существовать, иначе разметка развалится.
+        for selector in (".welcome-lede", ".welcome-drop", ".welcome-facts", ".welcome-close"):
+            self.assertIn(selector, styles, f"нет стилей для {selector}")
+
+    def test_teaser_video_is_the_film_cut(self):
+        """В модалке — плёночный монтаж v2: вертикаль, со звуком, не тяжелее 6 МБ."""
+        video = Path(__file__).with_name("miniapp") / "assets" / "video" / "teaser.mp4"
+        self.assertTrue(video.is_file(), "нет файла тизера")
+        size_mb = video.stat().st_size / 1e6
+        self.assertLess(size_mb, 6.0, f"тизер раздулся до {size_mb:.1f} МБ — мобильный трафик")
+        blob = video.read_bytes()
+        # faststart: moov обязан идти раньше mdat, иначе видео не стартует по сети.
+        moov, mdat = blob.find(b"moov"), blob.find(b"mdat")
+        self.assertNotEqual(moov, -1, "в файле нет moov")
+        self.assertLess(moov, mdat, "moov после mdat — нужен -movflags +faststart")
+        # Звуковая дорожка: барабан и хор — половина впечатления от монтажа.
+        self.assertIn(b"mp4a", blob[:moov + 200_000], "в тизере нет звуковой дорожки")
+
     def test_welcome_screen_always_shows_on_launch(self):
         """Приветствие — визитка бренда, оно не должно пропадать после входа."""
         app_js = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")

@@ -150,15 +150,18 @@ img { display: block; max-width: 100%; }
 @media (max-height: 720px) {
   .welcome h1 { font-size: clamp(44px, 13vw, 68px); margin: 10px 0 10px; }
   .welcome-copy { margin-bottom: 16px; font-size: 13px; }
+  .welcome-lede { font-size: 15px; }
+  .welcome-drop { font-size: 18px; }
+  .welcome-facts { margin: 10px 0 9px; gap: 5px 14px; }
   .welcome-count { margin-bottom: 14px; padding: 8px 12px; }
   .welcome-meta { margin-top: 14px; }
   .welcome-frame { padding-bottom: calc(22px + var(--safe-bottom)); }
 }
 @media (max-height: 620px) {
-  .welcome-copy {
-    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
+  /* Совсем низкий экран: оставляем зачин и факты, остальное прячем —
+     кнопка «войти» важнее третьей строки текста. */
+  .welcome-copy p:not(.welcome-lede) { display: none; }
+  .welcome-facts { margin: 9px 0 0; }
   .welcome-meta { display: none; }
 }
 .welcome-media {
@@ -204,11 +207,40 @@ video.welcome-media.is-playing { opacity: 1; }
   /* Двойная тень: ближняя даёт контур, дальняя отделяет от светлых кадров. */
   text-shadow: 0 2px 10px rgba(0,0,0,.75), 0 12px 42px rgba(0,0,0,.85);
 }
+/* Обращение к своим: не сплошной абзац, а зачин — уточнение — факты — призыв.
+   Каждый блок читается отдельно, глазу есть за что зацепиться. */
 .welcome-copy {
-  max-width: 420px; margin: 0 0 26px;
-  color: #e6dfd5; font-size: 14px; line-height: 1.55;
+  max-width: 34ch; margin: 0 0 24px;
+  color: #d8d1c6; font-size: 14px; line-height: 1.5;
   text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 4px 18px rgba(0,0,0,.8);
 }
+.welcome-copy p { margin: 0; }
+.welcome-copy p + p { margin-top: 7px; }
+/* Первая строка — крупнее и светлее остального: с неё начинается разговор. */
+.welcome-lede {
+  color: #f4eee6; font-size: 16px; line-height: 1.42;
+  letter-spacing: -.005em;
+}
+/* «Брат.» — красная буквица тем же гротеском, что и заголовок. */
+.welcome-drop {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: 19px; letter-spacing: -.03em;
+  color: var(--red);
+  text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 24px rgba(225,6,0,.35);
+}
+/* Три факта — не перечисление через точку, а короткие строки с красной засечкой. */
+.welcome-facts {
+  list-style: none; margin: 13px 0 12px; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 6px 16px;
+  font-size: 11px; letter-spacing: .13em; text-transform: uppercase;
+  color: #cfc7bb;
+}
+.welcome-facts li { display: inline-flex; align-items: center; gap: 7px; }
+.welcome-facts li::before {
+  content: ""; width: 12px; height: 1px; background: var(--red);
+  box-shadow: 0 0 10px rgba(225,6,0,.55);
+}
+.welcome-close { color: #f4eee6; font-weight: 600; }
 .welcome-meta {
   margin-top: 22px; display: flex; gap: 18px; flex-wrap: wrap;
   font-size: 9px; letter-spacing: .18em; color: var(--muted);
