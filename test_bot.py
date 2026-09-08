@@ -242,6 +242,108 @@ class BotTests(unittest.TestCase):
             self.assertEqual(sorted(db.broadcast_audience("all")), [11, 12])
             self.assertEqual(db.stats()["consents"], 1)
 
+    def _teaser_bot(self, directory, api):
+        """Стенд бота на временной базе с настоящим каталогом."""
+        root = Path(directory)
+        catalog_path = root / "catalog.json"
+        shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
+        settings = Settings(
+            token="fake",
+            admin_ids=frozenset(),
+            channel_url="https://t.me/channel",
+            webapp_url="https://shop.example/app",
+            manager_chat_id=None,
+            brand_name="ВОРОЖБИТОВ",
+            support_username="",
+            database_path=root / "bot.sqlite3",
+            catalog_path=catalog_path,
+            health_port=8080,
+            giveaway_min_invites=3,
+            privacy_url="",
+        )
+        db = make_db(directory)
+        return BrandBot(settings, api, db, Catalog(catalog_path)), db
+
+    def test_teaser_is_uploaded_once_and_then_reused_by_file_id(self):
+        """Ролик весит мегабайты: второй раз должен уходить одним file_id."""
+        class FakeAPI(TelegramAPI):
+            def __init__(self):
+                super().__init__("test-token")
+                self.videos = []
+
+            def send_video(self, chat_id, video, caption="", reply_markup=None,
+                           thumbnail=None, width=0, height=0, duration=0):
+                self.videos.append(video)
+                return {"video": {"file_id": "CACHED-ID"}}
+
+            def send_message(self, chat_id, text, reply_markup=None):
+                return {"message_id": 1}
+
+        with tempfile.TemporaryDirectory() as directory:
+            api = FakeAPI()
+            bot, db = self._teaser_bot(directory, api)
+            self.assertTrue(bot.send_teaser(1))
+            self.assertTrue(bot.send_teaser(1))
+            # Первый раз — файл с диска, второй — уже кешированный идентификатор.
+            self.assertIsInstance(api.videos[0], Path)
+            self.assertEqual(api.videos[1], "CACHED-ID")
+            self.assertEqual(db.kv_get("teaser_file_id"), "CACHED-ID")
+
+    def test_stale_teaser_file_id_is_dropped_and_resent(self):
+        """Telegram забывает file_id — бот обязан молча перезалить ролик."""
+        class FakeAPI(TelegramAPI):
+            def __init__(self):
+                super().__init__("test-token")
+                self.calls = []
+
+            def send_video(self, chat_id, video, caption="", reply_markup=None,
+                           thumbnail=None, width=0, height=0, duration=0):
+                self.calls.append(video)
+                if video == "DEAD-ID":
+                    raise RuntimeError("Telegram API error: wrong file identifier")
+                return {"video": {"file_id": "FRESH-ID"}}
+
+            def send_message(self, chat_id, text, reply_markup=None):
+                return {"message_id": 1}
+
+        with tempfile.TemporaryDirectory() as directory:
+            api = FakeAPI()
+            bot, db = self._teaser_bot(directory, api)
+            db.kv_set("teaser_file_id", "DEAD-ID")
+            self.assertTrue(bot.send_teaser(1))
+            self.assertEqual(api.calls[0], "DEAD-ID")
+            self.assertIsInstance(api.calls[1], Path)
+            self.assertEqual(db.kv_get("teaser_file_id"), "FRESH-ID")
+
+    def test_product_card_shows_the_whole_garment_as_an_album(self):
+        """В чате вещь тоже показывается со всех сторон, а не одним кадром."""
+        class FakeAPI(TelegramAPI):
+            def __init__(self):
+                super().__init__("test-token")
+                self.albums = []
+                self.photos = []
+
+            def send_media_group(self, chat_id, photos, caption=""):
+                self.albums.append(photos)
+                return {"message_id": 1}
+
+            def send_photo(self, chat_id, photo, caption, reply_markup=None):
+                self.photos.append(photo)
+                return {"message_id": 1}
+
+            def send_message(self, chat_id, text, reply_markup=None):
+                return {"message_id": 1}
+
+        with tempfile.TemporaryDirectory() as directory:
+            api = FakeAPI()
+            bot, _ = self._teaser_bot(directory, api)
+            bot.show_product(1, 1, "tag-sila-i-chest")
+            self.assertEqual(len(api.albums), 1, "карточка ушла без альбома")
+            self.assertGreaterEqual(len(api.albums[0]), 2)
+            self.assertEqual(api.photos, [], "альбом отправлен, одиночное фото лишнее")
+            for url in api.albums[0]:
+                self.assertTrue(url.startswith("https://"), f"нелокальный адрес обязателен: {url}")
+
     def test_webapp_order_is_validated_against_catalog_and_stored(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
@@ -381,6 +483,7 @@ class BotTests(unittest.TestCase):
             def __init__(self):
                 super().__init__("test-token")
                 self.sent = []
+                self.videos = []
 
             def create_invoice_link(self, payload):
                 return "https://t.me/invoice/test"
@@ -388,6 +491,11 @@ class BotTests(unittest.TestCase):
             def send_message(self, chat_id, text, reply_markup=None):
                 self.sent.append((chat_id, text, reply_markup))
                 return {"message_id": len(self.sent)}
+
+            def send_video(self, chat_id, video, caption="", reply_markup=None,
+                           thumbnail=None, width=0, height=0, duration=0):
+                self.videos.append(video)
+                return {"video": {"file_id": "TEST-VIDEO-ID"}}
 
             def send_photo_file(self, chat_id, path, caption="", reply_markup=None):
                 self.sent.append((chat_id, caption, reply_markup))
@@ -535,10 +643,16 @@ class BotTests(unittest.TestCase):
         class FakeAPI(TelegramAPI):
             def __init__(self):
                 self.photos = []
+                self.videos = []
                 self.messages = []
 
             def create_invoice_link(self, payload):
                 return "https://t.me/invoice/test"
+
+            def send_video(self, chat_id, video, caption="", reply_markup=None,
+                           thumbnail=None, width=0, height=0, duration=0):
+                self.videos.append(video)
+                return {"video": {"file_id": "TEST-VIDEO-ID"}}
 
             def send_photo_file(self, chat_id, path, caption="", reply_markup=None):
                 self.photos.append((chat_id, Path(path), caption, reply_markup))

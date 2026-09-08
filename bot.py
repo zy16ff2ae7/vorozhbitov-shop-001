@@ -90,6 +90,10 @@ VIDEO_SUFFIXES = {".mp4", ".m4v", ".webm", ".mov"}
 PHONE_RE = re.compile(r"^\+?[0-9]{10,15}$")
 REF_RE = re.compile(r"^ref(\d{3,15})$")
 WELCOME_PHOTO = BASE_DIR / "miniapp" / "assets" / "welcome.jpg"
+TEASER_VIDEO = BASE_DIR / "miniapp" / "assets" / "video" / "teaser.mp4"
+TEASER_POSTER = BASE_DIR / "miniapp" / "assets" / "video" / "teaser-poster.jpg"
+# Telegram отказывается принимать файлы крупнее 50 МБ загрузкой по HTTP.
+TEASER_UPLOAD_LIMIT = 50 * 1024 * 1024
 BOT_SHORT_DESCRIPTION = "Сила и честь. Одежда. Закрытый выпуск."
 BOT_DESCRIPTION = (
     "Закрытая витрина ВОРОЖБИТОВ. Малые тиражи, честный крой. "
@@ -476,6 +480,11 @@ class Database:
                 created_at TEXT NOT NULL,
                 paid_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS kv (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
             CREATE INDEX IF NOT EXISTS idx_events_event ON events(event);
             CREATE INDEX IF NOT EXISTS idx_users_interest ON users(interest);
@@ -826,6 +835,20 @@ class Database:
             (user_id, event, compact_json(payload or {}), utc_now()),
         )
 
+    def kv_get(self, key: str) -> str:
+        row = self.connection().execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+        return str(row[0]) if row else ""
+
+    def kv_set(self, key: str, value: str) -> None:
+        self.connection().execute(
+            "INSERT INTO kv(key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            (key, value, utc_now()),
+        )
+
+    def kv_delete(self, key: str) -> None:
+        self.connection().execute("DELETE FROM kv WHERE key = ?", (key,))
+
     def stats(self) -> dict[str, int]:
         conn = self.connection()
         return {
@@ -1106,6 +1129,84 @@ class TelegramAPI:
             raise RuntimeError(f"Telegram API error: {result}")
         return result.get("result")
 
+    def send_video(
+        self,
+        chat_id: int,
+        video: str | Path,
+        caption: str = "",
+        reply_markup: dict[str, Any] | None = None,
+        thumbnail: Path | None = None,
+        width: int = 0,
+        height: int = 0,
+        duration: int = 0,
+    ) -> Any:
+        """Send a video: a ``file_id``/HTTPS URL as JSON, a local ``Path`` as multipart.
+
+        Uploading a few megabytes on every ``/start`` is wasteful, so callers
+        cache the returned ``file_id`` and pass it next time.
+        """
+        if len(caption) > 1024:
+            caption = caption[:1010] + "…"
+        fields: dict[str, str] = {
+            "chat_id": str(chat_id),
+            "caption": caption,
+            "parse_mode": "HTML",
+            "supports_streaming": "true",
+        }
+        for name, value in (("width", width), ("height", height), ("duration", duration)):
+            if value:
+                fields[name] = str(int(value))
+        if reply_markup:
+            fields["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False, separators=(",", ":"))
+
+        if not isinstance(video, Path):
+            payload: dict[str, Any] = dict(fields)
+            payload["chat_id"] = chat_id
+            payload["video"] = str(video)
+            payload["supports_streaming"] = True
+            if reply_markup:
+                payload["reply_markup"] = reply_markup
+            return self.call("sendVideo", payload)
+
+        boundary = "----VorozhbitovVideo7MA4YWxk"
+        files: list[tuple[str, Path]] = [("video", video)]
+        if thumbnail is not None and thumbnail.is_file():
+            fields["thumbnail"] = "attach://thumb"
+            files.append(("thumb", thumbnail))
+        chunks: list[bytes] = []
+        for name, value in fields.items():
+            chunks.extend(
+                [
+                    f"--{boundary}\r\n".encode(),
+                    f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
+                    value.encode("utf-8"),
+                    b"\r\n",
+                ]
+            )
+        for name, path in files:
+            mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            chunks.extend(
+                [
+                    f"--{boundary}\r\n".encode(),
+                    f'Content-Disposition: form-data; name="{name}"; filename="{path.name}"\r\n'.encode(),
+                    f"Content-Type: {mime}\r\n\r\n".encode(),
+                    path.read_bytes(),
+                    b"\r\n",
+                ]
+            )
+        chunks.append(f"--{boundary}--\r\n".encode())
+        request = urllib.request.Request(
+            self.base_url + "sendVideo",
+            data=b"".join(chunks),
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=180) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        if not result.get("ok"):
+            raise RuntimeError(f"Telegram API error: {result}")
+        return result.get("result")
+
     def send_media_group(self, chat_id: int, photos: list[str], caption: str = "") -> Any:
         media = []
         for index, photo in enumerate(photos[:10]):
@@ -1379,11 +1480,69 @@ class BrandBot:
                     LOG.exception("Welcome photo URL fallback failed")
         self.api.send_message(chat_id, caption, keyboard)
 
+    def send_teaser(self, chat_id: int, caption: str = "", keyboard: dict[str, Any] | None = None) -> bool:
+        """Send the drop teaser, reusing Telegram's own copy after the first upload.
+
+        Order of preference: cached ``file_id`` → public URL from ``media`` →
+        local upload. A stale ``file_id`` is dropped and the send retried, and
+        any failure stays silent: the teaser is a bonus, not the conversation.
+        """
+        media = self.catalog.data.get("media", {}) if self.catalog else {}
+        if not caption:
+            title = str(media.get("teaser_title") or "СИЛА И ЧЕСТЬ")
+            subtitle = str(media.get("teaser_caption") or "")
+            caption = f"<b>{esc(title)}</b>" + (f"\n{esc(subtitle)}" if subtitle else "")
+
+        cached = self.db.kv_get("teaser_file_id")
+        if cached:
+            try:
+                self.api.send_video(chat_id, cached, caption, keyboard)
+                return True
+            except Exception:
+                # Telegram забывает file_id при смене бота или после чистки — шлём заново.
+                LOG.info("Cached teaser file_id rejected, re-uploading")
+                self.db.kv_delete("teaser_file_id")
+
+        story_url = str(media.get("teaser_story_url") or "").strip()
+        if story_url.startswith("https://"):
+            try:
+                result = self.api.send_video(chat_id, story_url, caption, keyboard)
+                self._remember_teaser(result)
+                return True
+            except Exception:
+                LOG.info("Teaser URL rejected, falling back to local upload")
+
+        if TEASER_VIDEO.is_file() and TEASER_VIDEO.stat().st_size <= TEASER_UPLOAD_LIMIT:
+            try:
+                result = self.api.send_video(
+                    chat_id,
+                    TEASER_VIDEO,
+                    caption,
+                    keyboard,
+                    thumbnail=TEASER_POSTER if TEASER_POSTER.is_file() else None,
+                    width=720,
+                    height=1280,
+                    duration=31,
+                )
+                self._remember_teaser(result)
+                return True
+            except Exception:
+                LOG.exception("Could not send teaser video")
+        return False
+
+    def _remember_teaser(self, result: Any) -> None:
+        """Cache the file_id so the next send costs one API call, not 3 MB."""
+        if isinstance(result, dict):
+            video = result.get("video")
+            if isinstance(video, dict) and video.get("file_id"):
+                self.db.kv_set("teaser_file_id", str(video["file_id"]))
+
     # ------------------------------------------------------------------ menus
 
     def main_menu(self) -> dict[str, Any]:
         rows: list[list[tuple[str, str]]] = [
             [("Смотреть выпуск", "catalog"), ("Образы", "lookbook")],
+            [("Ролик выпуска", "teaser")],
             [("Подобрать размер", "size_guide"), ("О бренде", "about")],
             [("Канал", self.settings.channel_url)],
             [("Узнать первым", "profile"), ("Привести друга", "referral")],
@@ -1417,6 +1576,8 @@ class BrandBot:
         name = esc(user.get("first_name") or "друг")
 
         if is_new:
+            # Ролик уходит первым: он объясняет бренд лучше любого абзаца.
+            self.send_teaser(chat_id)
             text = (
                 f"<b>{esc(self.settings.brand_name)}</b>\n\n"
                 f"{name}, ты на закрытой территории.\n"
@@ -1489,6 +1650,20 @@ class BrandBot:
                 [("Назад", f"cat:{product['category']}")],
             ]
         )
+        # Вещь показываем со всех сторон: в витрине для этого есть обзор,
+        # в чате ближайший аналог — альбом из тех же кадров.
+        gallery = [
+            url
+            for shot in list(product.get("images") or [])[:6]
+            if (url := self.public_asset_url(shot))
+        ]
+        if len(gallery) > 1:
+            try:
+                self.api.send_media_group(chat_id, gallery, caption)
+                self.api.send_message(chat_id, "Что делаем?", keyboard)
+                return
+            except Exception:
+                LOG.exception("Failed to send product album, falling back to a single photo")
         photo = self.public_asset_url(product.get("photo_url") or product.get("image"))
         if photo:
             self.api.send_photo(chat_id, photo, caption, keyboard)
@@ -2841,6 +3016,15 @@ class BrandBot:
             self.show_referral(chat_id, user_id)
         elif data == "lookbook":
             self.show_lookbook(chat_id, user_id)
+        elif data == "teaser":
+            self.db.event(user_id, "teaser_open")
+            if not self.send_teaser(chat_id, keyboard=self.main_menu()):
+                self.api.send_message(
+                    chat_id,
+                    "Ролик сейчас не открывается. Загляни в витрину — там он лежит целиком."
+                    + self.cta("drop"),
+                    self.main_menu(),
+                )
         elif data == "about":
             self.api.send_message(
                 chat_id,
