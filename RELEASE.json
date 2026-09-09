@@ -1,0 +1,13 @@
+{
+  "commit": "1cf59e53c1dfb7bf68aef2a0ba343d88d06deef2",
+  "deployed": true,
+  "url": "https://vorozhbitov.107-173-89-192.nip.io/",
+  "backup": "/var/backups/vorozhbitov-shop/20260909T054816Z",
+  "archive": "vorozhbitov-shop-live-20260909.zip",
+  "archive_sha256": "37fa60e257f37250f5a27fe2992d67e0c7a6bb1f65ce93584f95df609899ab52",
+  "archive_bytes": 33944740,
+  "new_video_generated": false,
+  "video_blocker": "HeyGen reauthentication required; Weave account not linked",
+  "original_film_retained": true,
+  "github_pushed": false
+}

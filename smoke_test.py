@@ -9,11 +9,13 @@
 from __future__ import annotations
 
 import json
+import logging
+import threading
+from unittest.mock import patch
 import shutil
 import tempfile
 from pathlib import Path
 
-import bot as bot_module
 from bot import BrandBot, Catalog, Database, Settings, TelegramAPI
 
 SENT: list[tuple[str, dict]] = []
@@ -28,10 +30,23 @@ class FakeAPI(TelegramAPI):
         if method == "sendMessage":
             return {"message_id": len(SENT)}
         if method == "sendPhoto":
-            return {"message_id": len(SENT)}
+            return {"message_id": len(SENT), "photo": [{"file_id": "smoke-photo"}]}
+        if method == "sendVideo":
+            return {"message_id": len(SENT), "video": {"file_id": "smoke-video"}}
+        if method == "createInvoiceLink":
+            return "https://t.me/invoice/smoke"
         if method == "sendMediaGroup":
             return [{"message_id": len(SENT)}]
         return True
+
+    def send_photo_file(self, chat_id, path, caption="", reply_markup=None):
+        return self.call("sendPhoto", {"chat_id": chat_id, "photo": str(path), "caption": caption, "reply_markup": reply_markup or {}})
+
+    def send_video(self, chat_id, video, caption="", reply_markup=None, **kwargs):
+        return self.call("sendVideo", {"chat_id": chat_id, "video": str(video), "caption": caption, "reply_markup": reply_markup or {}})
+
+    def send_document(self, chat_id, filename, content, caption=""):
+        return self.call("sendDocument", {"chat_id": chat_id, "filename": filename, "caption": caption})
 
 
 def show(limit: int = 400) -> None:
@@ -70,8 +85,7 @@ def message(user_id: int, text: str) -> dict:
     }
 
 
-def main() -> int:
-    workdir = Path(tempfile.mkdtemp())
+def run_scenarios(workdir: Path) -> int:
     # работаем на копии каталога, чтобы прогон не испортил боевой catalog.json
     catalog_path = workdir / "catalog.json"
     shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
@@ -135,12 +149,50 @@ def main() -> int:
     for title, update in steps:
         print(f"\n=== {title} ===")
         SENT.clear()
-        brand_bot.handle_update(update)
+        if title == "Подтверждение заявки":
+            order = db.get_order(1)
+            assert order and order["status"] == "awaiting_payment", "checkout did not create an unpaid order"
+            assert db.mark_payment_paid(order["payment_id"], "stars", "smoke-charge"), "payment failed"
+        assert brand_bot.handle_update(update), f"Handler failed: {title}"
+        if title == "Старт нового пользователя":
+            assert any(method == "sendPhoto" for method, _ in SENT), "welcome photo missing"
+            assert any(method == "sendVideo" for method, _ in SENT), "teaser missing"
+        if title == "Подтверждение заявки":
+            assert db.get_order(1)["status"] == "confirmed", "confirmation failed"
+        if title == "Завершение заявки":
+            assert db.get_order(1)["status"] == "completed", "completion failed"
         show()
 
+    for thread in threading.enumerate():
+        if thread.name == "broadcast":
+            thread.join(timeout=5)
+            assert not thread.is_alive(), "broadcast did not finish"
+    stats = db.stats()
+    assert stats["orders"] == 1 and stats["contacts"] == 1 and stats["waitlist"] == 1, stats
+    assert catalog.get("drop-002-cap") is None, "hide product failed"
     print("\n=== Итоговая статистика ===")
-    print(json.dumps(db.stats(), ensure_ascii=False, indent=2))
+    print(json.dumps(stats, ensure_ascii=False, indent=2))
+    db.close_current()
     return 0
+
+
+def main() -> int:
+    diagnostics = []
+    class CaptureWarnings(logging.Handler):
+        def emit(self, record):
+            diagnostics.append(record.getMessage())
+    handler = CaptureWarnings(level=logging.WARNING)
+    logger = logging.getLogger("brand_bot")
+    logger.addHandler(handler)
+    try:
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "urllib.request.urlopen", side_effect=AssertionError("Smoke test attempted external network")
+        ):
+            result = run_scenarios(Path(directory))
+            assert not diagnostics, "Smoke diagnostics: " + "; ".join(diagnostics)
+            return result
+    finally:
+        logger.removeHandler(handler)
 
 
 if __name__ == "__main__":

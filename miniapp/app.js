@@ -1,40 +1,12 @@
 (() => {
   "use strict";
 
+  const Core = window.ShopCore;
   const FALLBACK_CATALOG = {
-    brand: {
-      name: "ВОРОЖБИТОВ",
-      descriptor: "сила и честь / городская форма",
-      drop: "ВЫПУСК",
-      welcome_image: "assets/welcome.jpg",
-      store_image: "assets/store.jpg"
-    },
+    brand: { name: "ВОРОЖБИТОВ", descriptor: "Сила и честь", drop: "ВЫПУСК 001" },
     channel_url: "https://t.me/+XufFz8GGR0o3Njky",
     privacy_url: "",
-    categories: [
-      { id: "drop", name: "Выпуск" },
-      { id: "hoodie", name: "Худи" },
-      { id: "tee", name: "Футболки" },
-      { id: "bottom", name: "Низ" },
-      { id: "access", name: "Аксессуары" }
-    ],
-    products: [
-      { id: "honor-hoodie", category: "drop", name: "СИЛА И ЧЕСТЬ", price: "11 900 ₽", sizes: ["S", "M", "L", "XL"], description: "Главный сигнал выпуска. Тяжёлый футер, принт «Сила и честь» на груди.", signature: "Сила и честь. Это не слоган на витрине — это то, с чем выходишь из дома.", print: "СИЛА И\nЧЕСТЬ", shape: "hoodie", spin: ["assets/honor-hoodie.jpg", "assets/spin/honor-01.jpg", "assets/spin/honor-02.jpg", "assets/spin/honor-03.jpg", "assets/spin/honor-04.jpg", "assets/spin/honor-05.jpg", "assets/spin/honor-06.jpg", "assets/spin/honor-07.jpg"], image: "assets/honor-hoodie.jpg", images: ["assets/honor-hoodie.jpg", "assets/look-ring.jpg"], badge: "ВЫПУСК", material: "100% хлопок · 400 г/м²", fit: "Объёмный крой", details: ["Принт СИЛА И ЧЕСТЬ", "Красная V на кромке"], stock_label: "Осталось мало", active: true },
-      { id: "year-tee-1993", category: "drop", name: "1993", price: "4 900 ₽", sizes: ["S", "M", "L", "XL"], description: "Год, с которого всё началось. Плотный свободный крой, цифра 1993 на груди.", signature: "1993. Носи как дату, не как принт.", print: "1993", shape: "tee", spin: ["assets/year-tee.jpg", "assets/spin/year-01.jpg", "assets/spin/year-02.jpg", "assets/spin/year-04.jpg"], image: "assets/year-tee.jpg", images: ["assets/year-tee.jpg"], badge: "ЛИМИТ", material: "100% хлопок · 240 г/м²", fit: "Свободный крой", details: ["Крупный 1993"], stock_label: "Последний тираж", active: true },
-      { id: "drop-hoodie-001", category: "drop", name: "ХУДИ", price: "9 900 ₽", sizes: ["M", "L", "XL"], description: "Тяжёлое полотно, объёмный силуэт, двойная строчка.", signature: "Тяжёлая. Как надо. Партия маленькая — потом не будет.", print: "V", shape: "hoodie", spin: ["assets/hero-drop.jpg", "assets/spin/honor-02.jpg", "assets/spin/honor-04.jpg", "assets/spin/honor-06.jpg"], image: "assets/hero-drop.jpg", images: ["assets/hero-drop.jpg", "assets/look-ring.jpg"], badge: "ЛИМИТ", material: "100% хлопок · 400 г/м²", fit: "Объёмный крой", details: ["Футер 3-нитка"], stock_label: "Последний тираж", active: true },
-      { id: "drop-tee-001", category: "drop", name: "ФУТБОЛКА", price: "4 900 ₽", sizes: ["S", "M", "L", "XL"], description: "Плотный хлопок, свободный крой, минимальный сигнал.", signature: "База. Без крика. Свой считывает.", print: "V", shape: "tee", spin: ["assets/base-tee.jpg", "assets/spin/year-02.jpg", "assets/spin/year-04.jpg"], image: "assets/base-tee.jpg", images: ["assets/base-tee.jpg"], badge: "ВЫПУСК", material: "100% хлопок · 240 г/м²", fit: "Свободный крой", details: ["Плотный хлопок"], stock_label: "Осталось мало", active: true },
-      { id: "field-tee-001", category: "tee", name: "ОДИН В ПОЛЕ", price: "4 400 ₽", sizes: ["S", "M", "L", "XL"], description: "Один в поле. Даже если все разошлись.", signature: "Один в поле. Даже если все разошлись.", print: "ОДИН\nВ ПОЛЕ", shape: "tee", spin: ["assets/field-tee.jpg", "assets/spin/year-02.jpg", "assets/spin/year-04.jpg"], image: "assets/field-tee.jpg", images: ["assets/field-tee.jpg"], badge: "СИГНАЛ", material: "100% хлопок · 240 г/м²", fit: "Свободный крой", details: ["Принт ОДИН В ПОЛЕ"], stock_label: "В наличии", active: true },
-      { id: "hoodie-heavy-002", category: "hoodie", name: "ТЯЖЁЛОЕ ХУДИ", price: "10 500 ₽", sizes: ["S", "M", "L", "XL"], description: "400 г/м². Держит форму и темп города.", signature: "400 грамм. Держит форму, когда город не держит.", print: "V", shape: "hoodie", spin: ["assets/heavy-hoodie.jpg", "assets/spin/honor-02.jpg", "assets/spin/honor-04.jpg", "assets/spin/honor-06.jpg"], image: "assets/heavy-hoodie.jpg", images: ["assets/heavy-hoodie.jpg"], badge: "БАЗА", material: "100% хлопок · 400 г/м²", fit: "Свободный крой", details: ["Мягкий начес"], stock_label: "В наличии", active: true },
-      { id: "tee-basic-002", category: "tee", name: "НА КАЖДЫЙ ДЕНЬ", price: "3 900 ₽", sizes: ["S", "M", "L", "XL"], description: "База на каждый день.", signature: "На каждый день. Снимать не хочется.", print: "V", shape: "tee", spin: ["assets/base-tee.jpg", "assets/spin/year-02.jpg", "assets/spin/year-04.jpg"], image: "assets/base-tee.jpg", images: ["assets/base-tee.jpg"], badge: "ДЕНЬ", material: "100% хлопок · 240 г/м²", fit: "Свободный крой", details: ["Плотная горловина"], stock_label: "В наличии", active: true },
-      { id: "cargo-city-001", category: "bottom", name: "КАРГО", price: "8 500 ₽", sizes: ["S", "M", "L"], description: "Свободные карго. Город не бережёт — эти выдержат.", signature: "Карманы не для красоты. Город не бережёт.", print: "V", shape: "cargo", spin: ["assets/city-cargo.jpg", "assets/look-street.jpg"], image: "assets/city-cargo.jpg", images: ["assets/city-cargo.jpg", "assets/look-street.jpg"], badge: "ГОРОД", material: "Плотный хлопок", fit: "Свободная посадка", details: ["6 карманов"], stock_label: "Мало размеров", active: true },
-      { id: "cap-logo-001", category: "access", name: "КЕПКА V", price: "3 200 ₽", sizes: ["ОДИН"], description: "Чёрная шестиклинка, красная V.", signature: "V на лбу. Свой узнает. Чужой не обязан.", print: "V", shape: "cap", spin: ["assets/v-cap.jpg", "assets/logo-cap.jpg"], image: "assets/v-cap.jpg", images: ["assets/v-cap.jpg"], badge: "СИГНАЛ", material: "100% хлопок", fit: "Регулируемый размер", details: ["Вышитая красная V"], stock_label: "В наличии", active: true }
-    ],
-    lookbook: [
-      { image: "assets/look-street.jpg", caption: "ГОРОД" },
-      { image: "assets/look-ring.jpg", caption: "РИНГ / 400" },
-      { image: "assets/store-rack.jpg", caption: "ВЕШАЛКА" },
-      { image: "assets/hero-drop.jpg", caption: "ХУДИ" }
-    ]
+    categories: [], products: [], lookbook: []
   };
 
   const ICONS = {
@@ -49,7 +21,6 @@
     user: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.2-3.8 3.8-5.6 7-5.6s5.8 1.8 7 5.6"/></svg>'
   };
 
-  const DROP_END = new Date("2026-09-26T21:00:00+03:00").getTime();
 
   const state = {
     data: FALLBACK_CATALOG,
@@ -59,13 +30,14 @@
     sizeFilter: "all",
     sort: "featured",
     view: "all",
-    cart: loadJSON("vorozhbitov_cart", []),
-    saved: loadJSON("vorozhbitov_saved", []),
-    viewed: loadJSON("vorozhbitov_viewed", []),
-    profile: loadJSON("vorozhbitov_profile", {
-      name: "", phone: "", city: "", address: "", entrance: "",
-      deliver: "СДЭК", size: "", height: "", note: ""
-    }),
+    cart: Core.cleanCart(loadJSON("vorozhbitov_cart", [])),
+    saved: Core.stringList(loadJSON("vorozhbitov_saved", [])),
+    viewed: Core.stringList(loadJSON("vorozhbitov_viewed", [])),
+    profile: Core.cleanProfile(loadJSON("vorozhbitov_profile", {})),
+    catalogReady: false,
+    catalogLoading: false,
+    checkoutPending: false,
+    modalFocus: new Map(),
     currentProduct: null,
     selectedSize: null,
     qty: 1,
@@ -93,6 +65,12 @@
   function saveJSON(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* private mode */ }
   }
+
+  const checkoutClient = window.ShopCheckout.createClient({
+    fetch: window.fetch.bind(window),
+    read: key => loadJSON(key, null),
+    write: saveJSON
+  });
 
   function escapeHTML(value) {
     return String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -190,7 +168,8 @@
   }
 
   function localOrdersAsCards() {
-    return loadJSON("vorozhbitov_orders", []).slice(0, 8).map(row => {
+    const stored = loadJSON("vorozhbitov_orders", []);
+    return (Array.isArray(stored) ? stored : []).filter(row => row && Array.isArray(row.items)).slice(0, 8).map(row => {
       const names = (row.items || []).map(item => {
         const product = productById(item.product_id);
         const label = product ? product.name : "Вещь";
@@ -229,7 +208,7 @@
         ? `<button type="button" class="profile-order-pay" data-pay-id="${escapeHTML(row.payment_id)}">Оплатить</button>`
         : "";
       const cancel = row.can_cancel
-        ? `<button type="button" class="profile-order-cancel" data-cancel-order="${Number(row.id)}">Отменить</button>`
+        ? `<button type="button" class="profile-order-cancel" data-cancel-order="${Number(row.id)}">Отменить всю заявку</button>`
         : "";
       return `<article class="profile-order" data-status="${escapeHTML(status)}">
         <div class="profile-order-main">
@@ -287,7 +266,7 @@
         return;
       }
       haptic("success");
-      showToast("Заявка отменена.");
+      showToast("Все позиции общей заявки отменены.");
       loadProfileOrders();
     } catch (_) {
       showToast("Сеть не ответила. Попробуй ещё раз.");
@@ -300,6 +279,7 @@
     if ($("#checkoutName") && !$("#checkoutName").value) $("#checkoutName").value = profile.name || (user && user.first_name) || "";
     if ($("#checkoutPhone") && !$("#checkoutPhone").value) $("#checkoutPhone").value = profile.phone || "";
     if ($("#checkoutCity") && !$("#checkoutCity").value) $("#checkoutCity").value = profile.city || "";
+    if ($("#checkoutAddress") && !$("#checkoutAddress").value) $("#checkoutAddress").value = profile.address || "";
     if ($("#checkoutNote") && !$("#checkoutNote").value) {
       const bits = [profile.address, profile.entrance, profile.note].filter(Boolean);
       $("#checkoutNote").value = bits.join(" · ");
@@ -351,7 +331,7 @@
 
   function scrollToId(id) {
     const element = document.getElementById(id);
-    if (element) element.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (element) element.scrollIntoView({ behavior: reducedMotion() ? "instant" : "smooth", block: "start" });
   }
 
   function syncBackButton() {
@@ -362,12 +342,41 @@
     } catch (_) { /* old clients */ }
   }
 
+  function syncModalLayers() {
+    const top = state.modalStack.at(-1);
+    const covered = Boolean(top) || document.body.classList.contains("welcoming") || document.body.classList.contains("booting");
+    $("#app").inert = covered;
+    $(".bottom-nav").inert = covered;
+    $("#welcome").inert = Boolean(top) || $("#welcome").classList.contains("hidden");
+    $$(".modal-backdrop").forEach(modal => {
+      const index = state.modalStack.indexOf(modal.id);
+      modal.style.zIndex = String(120 + Math.max(index, 0) * 2);
+      modal.inert = modal.id !== top;
+      modal.setAttribute("aria-hidden", String(modal.id !== top));
+    });
+    if (top !== "productModal" || state.stage !== "3d" || document.hidden) stop3D();
+    else if (state.viewer) state.viewer.start();
+    if (top !== "teaserModal" || document.hidden) $("#teaserVideo").pause();
+    syncWelcomeVideo();
+  }
+
+  function focusableElements(modal) {
+    return $$("button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), summary, [tabindex='0']", modal)
+      .filter(node => !node.closest("[inert]") && node.getClientRects().length);
+  }
+
   function openModal(id) {
     const modal = document.getElementById(id);
     if (!modal) return;
+    if (!state.modalStack.includes(id)) {
+      state.modalFocus.set(id, document.activeElement);
+      state.modalStack.push(id);
+    }
     modal.classList.remove("hidden");
     document.body.classList.add("modal-open");
-    if (!state.modalStack.includes(id)) state.modalStack.push(id);
+    syncModalLayers();
+    const focus = modal.querySelector("[data-close]") || focusableElements(modal)[0];
+    if (focus) focus.focus({ preventScroll: true });
     syncBackButton();
     syncMainButton();
   }
@@ -375,12 +384,22 @@
   function closeModal(id) {
     const modal = document.getElementById(id);
     if (!modal) return;
+    const wasTop = state.modalStack.at(-1) === id;
     modal.classList.add("hidden");
     state.modalStack = state.modalStack.filter(item => item !== id);
     if (!state.modalStack.length) document.body.classList.remove("modal-open");
     if (id === "productModal") stop3D();
     if (id === "payModal") stopPayPoll();
     if (id === "teaserModal") closeTeaser();
+    syncModalLayers();
+    const previous = state.modalFocus.get(id);
+    state.modalFocus.delete(id);
+    if (wasTop) {
+      const top = document.getElementById(state.modalStack.at(-1));
+      const target = previous && previous.isConnected && !previous.closest("[inert]")
+        ? previous : top ? focusableElements(top)[0] : $("#heroProductButton");
+      if (target) target.focus({ preventScroll: true });
+    }
     syncBackButton();
     syncMainButton();
   }
@@ -401,7 +420,7 @@
       setStage("photo", true);
       return;
     }
-    viewer.setProduct(product);
+    if (viewer.product !== product) viewer.setProduct(product);
     viewer.start();
     window.requestAnimationFrame(() => viewer.resize());
   }
@@ -422,6 +441,9 @@
     if (photo) photo.classList.toggle("hidden", mode !== "photo");
     if (hint) hint.classList.toggle("hidden", mode !== "3d");
     if (dots) dots.classList.toggle("hidden", mode !== "photo");
+    $("#spinToggle").classList.toggle("hidden", mode !== "3d");
+    $$("[data-stage]").forEach(button => button.setAttribute("aria-selected", String(button.dataset.stage === mode)));
+    updateMediaPosition();
     if (silent) return;
     if (mode === "3d" && state.currentProduct) start3D(state.currentProduct);
     else stop3D();
@@ -439,8 +461,9 @@
 
   function renderCategoryChips() {
     const root = $("#categoryChips");
-    const all = [{ id: "all", name: "Все вещи" }, ...state.data.categories];
-    root.innerHTML = all.map(category => `<button class="category-chip ${state.category === category.id ? "active" : ""}" data-category="${escapeHTML(category.id)}" type="button" role="tab" aria-selected="${state.category === category.id}">${escapeHTML(category.name)}</button>`).join("");
+    const visible = state.data.categories.filter(category => state.data.products.some(product => product.active !== false && product.category === category.id));
+    const all = [{ id: "all", name: "Все вещи" }, ...visible];
+    root.innerHTML = all.map(category => `<button class="category-chip ${state.category === category.id ? "active" : ""}" data-category="${escapeHTML(category.id)}" type="button" aria-pressed="${state.category === category.id}">${escapeHTML(category.name)}</button>`).join("");
   }
 
   function filteredProducts() {
@@ -450,7 +473,7 @@
       if (state.view === "saved" && !state.saved.includes(product.id)) return false;
       if (state.category !== "all" && product.category !== state.category) return false;
       if (state.stock === "limited" && !isLimited(product)) return false;
-      if (state.stock === "available" && isLimited(product)) return false;
+      if (state.stock === "available" && !Core.available(product)) return false;
       if (state.sizeFilter !== "all" && !(product.sizes || []).includes(state.sizeFilter)) return false;
       if (search && !`${product.name} ${product.description} ${product.badge} ${product.material} ${product.signature || ""} ${product.print || ""}`.toLowerCase().includes(search)) return false;
       return true;
@@ -467,14 +490,14 @@
       <div class="product-image">
         <img src="${escapeHTML(imageFor(product))}" alt="${escapeHTML(product.name)}" loading="lazy">
         <span class="product-badge">${escapeHTML(product.badge || "БАЗА")}</span>
-        <span class="badge-3d">ОБЗОР</span>
+        <span class="badge-3d">360°</span>
         <button class="product-save ${saved ? "saved" : ""}" data-save-id="${escapeHTML(product.id)}" type="button" aria-label="${saved ? "Удалить из сохранённых" : "Сохранить"}"><span class="icon" data-icon="bookmark"></span></button>
-        <span class="product-hover">ОБЗОР <b>↗</b></span>
+        <span class="product-hover">РАССМОТРЕТЬ <b>↗</b></span>
       </div>
       <div class="product-info">
         <div class="product-topline"><span>${escapeHTML(categoryName(product.category))}</span><span class="product-stock">${escapeHTML(product.stock_label || "В наличии")}</span></div>
-        <h3>${escapeHTML(product.name)}</h3>
-        ${product.signature ? `<p class="product-sign">${escapeHTML(product.signature)}</p>` : ""}
+        <h3><button type="button" class="product-open" aria-label="Открыть ${escapeHTML(product.name)}">${escapeHTML(product.name)}</button></h3>
+        <div class="product-sizes">${(product.sizes || []).map(escapeHTML).join(" · ") || "Ждём пополнение"}</div>
         <div class="product-bottom"><strong class="product-price">${escapeHTML(product.price)}</strong><span class="product-fit">${escapeHTML(product.fit || "Свободный крой")}</span></div>
       </div>
     </article>`;
@@ -483,10 +506,9 @@
   function renderProducts() {
     const products = filteredProducts();
     const root = $("#productGrid");
-    const label = state.view === "saved" ? "СОХР." : "ВЕЩИ";
-    $("#productCount").textContent = `${products.length.toString().padStart(2, "0")} ${label}`;
+    $("#productCount").textContent = Core.productCount(products.length);
     root.innerHTML = products.map(renderProductCard).join("");
-    $("#emptyState").classList.toggle("hidden", products.length > 0);
+    $("#emptyState").classList.toggle("hidden", products.length > 0 || !state.catalogReady);
     const banner = $("#viewBanner");
     banner.classList.toggle("hidden", state.view !== "saved");
     $("#viewBannerTitle").textContent = "СОХРАНЁННЫЕ";
@@ -501,20 +523,34 @@
     $("#lookbookGrid").innerHTML = list.map(item => {
       const src = item.image || item.photo_url;
       const caption = item.caption || "ЗАМЕТКА";
-      return `<figure class="lookbook-card" data-lightbox="${escapeHTML(src)}" data-caption="${escapeHTML(caption)}"><img src="${escapeHTML(src)}" alt="${escapeHTML(caption)}" loading="lazy"><figcaption><span>ЗАМЕТКА</span><strong>${escapeHTML(caption)}</strong></figcaption></figure>`;
+      return `<figure class="lookbook-card" tabindex="0" role="button" data-lightbox="${escapeHTML(src)}" data-caption="${escapeHTML(caption)}"><img src="${escapeHTML(src)}" alt="${escapeHTML(caption)}" loading="lazy"><figcaption><strong>${escapeHTML(caption)}</strong></figcaption></figure>`;
     }).join("") + `<div class="lookbook-note"><span class="red-slash">//</span><p>Кадры выпуска. Посадка, ткань, крой.</p><button class="button button-outline" data-scroll="catalog" type="button">В ВИТРИНУ <span>↗</span></button></div>`;
     $("#lookbookGrid").querySelector("[data-scroll]")?.addEventListener("click", () => scrollToId("catalog"));
+  }
+
+  function galleryLabel(product, index) {
+    return (product.image_labels || [])[index] || `Фото ${index + 1}`;
+  }
+
+  function updateMediaPosition() {
+    const viewer = state.viewer;
+    const count = state.stage === "3d" && viewer ? viewer.frames.length : imagesFor(state.currentProduct || {}).length;
+    const index = state.stage === "3d" && viewer ? viewer.frameIndex() : state.galleryIndex;
+    $("#mediaPosition").textContent = `${String(index + 1).padStart(2, "0")} / ${String(count).padStart(2, "0")}`;
+    $("#mediaPrev").disabled = count < 2;
+    $("#mediaNext").disabled = count < 2;
+    $("#spinToggle").disabled = count < 2;
+    const rotating = Boolean(viewer && viewer.rotating);
+    $("#spinToggle").textContent = rotating ? "Остановить" : "Вращать";
+    $("#spinToggle").setAttribute("aria-pressed", String(rotating));
   }
 
   function renderGallery(product) {
     const images = imagesFor(product);
     state.galleryIndex = 0;
     $("#sheetImage").src = images[0];
-    $("#sheetImage").alt = product.name;
-    const dots = $("#galleryDots");
-    dots.innerHTML = images.length > 1
-      ? images.map((_, index) => `<button type="button" data-gallery="${index}" class="${index === 0 ? "active" : ""}" aria-label="Фото ${index + 1}"></button>`).join("")
-      : "";
+    $("#sheetImage").alt = `${product.name} — ${galleryLabel(product, 0)}`;
+    $("#galleryDots").innerHTML = images.map((src, index) => `<button type="button" data-gallery="${index}" class="${index === 0 ? "active" : ""}" aria-pressed="${index === 0}" aria-label="${escapeHTML(galleryLabel(product, index))}"><img src="${escapeHTML(src)}" alt="" loading="lazy" decoding="async"></button>`).join("");
   }
 
   function setGallery(index) {
@@ -523,7 +559,33 @@
     const images = imagesFor(product);
     state.galleryIndex = (index + images.length) % images.length;
     $("#sheetImage").src = images[state.galleryIndex];
-    $$("#galleryDots button").forEach((node, i) => node.classList.toggle("active", i === state.galleryIndex));
+    $("#sheetImage").alt = `${product.name} — ${galleryLabel(product, state.galleryIndex)}`;
+    $$("#galleryDots button").forEach((node, i) => {
+      node.classList.toggle("active", i === state.galleryIndex);
+      node.setAttribute("aria-pressed", String(i === state.galleryIndex));
+    });
+    updateMediaPosition();
+  }
+
+  function stepMedia(delta) {
+    if (state.stage === "3d" && state.viewer) state.viewer.step(delta);
+    else setGallery(state.galleryIndex + delta);
+    updateMediaPosition();
+  }
+
+  function zoomProduct() {
+    const product = state.currentProduct;
+    if (!product) return;
+    const src = state.stage === "3d" && state.viewer ? state.viewer.currentSource() : imagesFor(product)[state.galleryIndex];
+    openLightbox(src, `${product.name} · ${state.stage === "photo" ? galleryLabel(product, state.galleryIndex) : "Обзор 360°"}`);
+  }
+
+  function updatePurchaseSummary() {
+    const product = state.currentProduct;
+    $("#purchaseSummary").textContent = product ? `${product.price} · ${state.selectedSize ? `размер ${state.selectedSize}` : "Выбери размер"}` : "Выбери размер";
+    const blocked = !product || !Core.available(product);
+    $("#addToCartButton").disabled = blocked;
+    $("#addToCartButton").innerHTML = blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : state.selectedSize ? 'ДОБАВИТЬ В ЗАЯВКУ <span>+</span>' : 'ВЫБРАТЬ РАЗМЕР <span>↑</span>';
   }
 
   function renderSheet(product) {
@@ -545,19 +607,21 @@
     $("#sheetPrice").textContent = product.price;
     $("#sheetDescription").textContent = product.description;
     $("#sheetFacts").innerHTML = `<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Плотный хлопок")}</span></div><div class="fact-row"><span>Посадка</span><span>${escapeHTML(product.fit || "Свободная")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(product.stock_label || "В наличии")}</span></div>`;
-    $("#sizeList").innerHTML = (product.sizes || []).map(size => `<button class="size-button ${state.selectedSize === size ? "selected" : ""}" data-size="${escapeHTML(size)}" type="button">${escapeHTML(size)}</button>`).join("");
+    $("#sizeList").innerHTML = (product.sizes || []).map(size => `<button class="size-button ${state.selectedSize === size ? "selected" : ""}" data-size="${escapeHTML(size)}" aria-pressed="${state.selectedSize === size}" type="button">${escapeHTML(size)}</button>`).join("");
     $("#sizeHint").textContent = state.selectedSize ? `Размер ${state.selectedSize} выбран.` : "Выбери размер.";
     $("#sizeHint").classList.remove("error");
     $("#sheetDetails").innerHTML = `<strong>ДЕТАЛИ</strong><br>${(product.details || []).map(escapeHTML).join(" · ")}`;
     renderPersonalization(product);
+    $("#sizeGuideButton").classList.toggle("hidden", product.sizes.length === 1 && product.sizes[0] === "ОДИН");
     const saved = state.saved.includes(product.id);
     $("#sheetSave").classList.toggle("saved", saved);
     $("#sheetSave").setAttribute("aria-label", saved ? "Удалить из сохранённых" : "Сохранить");
     const related = state.data.products.filter(item => item.id !== product.id && item.category === product.category && item.active !== false).slice(0, 2);
     $("#related").innerHTML = related.length
-      ? `<h4>С ЭТИМ БЕРУТ</h4>${related.map(item => `<article class="related-card" data-related="${escapeHTML(item.id)}"><img src="${escapeHTML(imageFor(item))}" alt="${escapeHTML(item.name)}"><span>${escapeHTML(item.name)}</span></article>`).join("")}`
+      ? `<h4>С ЭТИМ БЕРУТ</h4>${related.map(item => `<button type="button" class="related-card" data-related="${escapeHTML(item.id)}"><img src="${escapeHTML(imageFor(item))}" alt="${escapeHTML(item.name)}"><span>${escapeHTML(item.name)}</span></button>`).join("")}`
       : "";
     iconize($("#productModal"));
+    updatePurchaseSummary();
   }
 
   function rememberViewed(id) {
@@ -565,13 +629,17 @@
     saveJSON("vorozhbitov_viewed", state.viewed);
   }
 
-  function openProduct(id) {
+  function openProduct(id, photoIndex) {
     const product = productById(id);
     if (!product) return;
     rememberViewed(id);
     renderSheet(product);
     openModal("productModal");
-    window.requestAnimationFrame(() => setStage("3d"));
+    $(".product-sheet").scrollTop = 0;
+    if (Number.isInteger(photoIndex)) {
+      setStage("photo");
+      setGallery(photoIndex);
+    } else setStage("3d");
     haptic("light");
   }
 
@@ -588,6 +656,7 @@
     renderProducts();
     if (state.currentProduct && state.currentProduct.id === id) {
       $("#sheetSave").classList.toggle("saved", state.saved.includes(id));
+      $("#sheetSave").setAttribute("aria-label", state.saved.includes(id) ? "Удалить из сохранённых" : "Сохранить");
     }
   }
 
@@ -646,10 +715,13 @@
   }
 
   function addToCart() {
+    if (state.checkoutPending) return showToast("Подожди подтверждения заявки. Корзина сохранена.");
     const product = state.currentProduct;
     if (!product) return;
     if (!state.selectedSize) {
       $("#sizeHint").textContent = "Сначала выбери размер.";
+      $(".size-block").scrollIntoView({block:"center", behavior:reducedMotion() ? "instant" : "smooth"});
+      $("#sizeList button")?.focus({preventScroll:true});
       $("#sizeHint").classList.add("error");
       haptic("error");
       return;
@@ -659,6 +731,8 @@
     // Разные номера жетона — разные строки заявки, поэтому номер входит в ключ.
     const key = `${product.id}::${state.selectedSize}${person ? `::${person}` : ""}`;
     const existing = state.cart.find(item => item.key === key);
+    if (existing && existing.qty + state.qty > Core.MAX_QUANTITY) return showToast("В одной позиции — не больше 20 штук.");
+    if (!existing && state.cart.length >= 20) return showToast("В одной заявке — не больше 20 позиций.");
     if (existing) existing.qty += state.qty;
     else state.cart.push({ key, id: product.id, size: state.selectedSize, qty: state.qty, person: person || "" });
     saveJSON("vorozhbitov_cart", state.cart);
@@ -669,28 +743,32 @@
     setTimeout(() => openCart(), 160);
   }
 
-  function sendWaitlist() {
+  async function sendWaitlist() {
     const product = state.currentProduct;
     if (!product) return;
-    if (!state.selectedSize) {
+    const size = state.selectedSize;
+    if (!size) {
       $("#sizeHint").textContent = "Выбери размер, который ждёшь.";
       $("#sizeHint").classList.add("error");
       return;
     }
-    const list = loadJSON("vorozhbitov_waitlist", []);
-    const key = `${product.id}::${state.selectedSize}`;
-    if (!list.includes(key)) list.push(key);
-    saveJSON("vorozhbitov_waitlist", list);
-    const payload = { type: "waitlist", product_id: product.id, size: state.selectedSize };
-    if (tg && typeof tg.sendData === "function") {
-      try {
-        tg.sendData(JSON.stringify(payload));
-        haptic("medium");
-        return;
-      } catch (_) { /* stay on the page and show toast */ }
+    const button = $("#waitlistButton");
+    if (button.disabled) return;
+    button.disabled = true;
+    try {
+      await checkoutClient.waitlist({ product_id: product.id, size }, tg && tg.initData);
+      const list = loadJSON("vorozhbitov_waitlist", []);
+      const key = `${product.id}::${size}`;
+      if (!list.includes(key)) list.push(key);
+      saveJSON("vorozhbitov_waitlist", list);
+      showToast("Размер записан. Напишем в Telegram, когда вернётся.");
+      haptic("success");
+    } catch (error) {
+      showToast(error.message || "Не получилось записать размер. Попробуй ещё раз.");
+      haptic("error");
+    } finally {
+      button.disabled = false;
     }
-    showToast("Размер записан. В Telegram напишем, когда вернётся.");
-    haptic("medium");
   }
 
   function cartItems() {
@@ -702,15 +780,30 @@
   }
 
   function renderCart() {
-    const pairs = cartItems();
     const content = $("#cartContent");
-    if (!pairs.length) {
+    if (!state.catalogReady) {
+      content.innerHTML = `<div class="cart-empty"><h3>Сверяем корзину с каталогом.</h3><p>Сохранённые вещи на месте. Загрузим цены и размеры перед оформлением.</p><button class="button button-outline" data-cart-retry type="button">ПОВТОРИТЬ ЗАГРУЗКУ</button></div>`;
+      $("#checkoutForm").classList.add("hidden");
+      return;
+    }
+    if (!state.cart.length) {
       content.innerHTML = `<div class="cart-empty"><span class="empty-mark">∅</span><h3>Заявка пока пустая.</h3><p>Добавь вещь из выпуска — здесь соберём всё перед оплатой.</p></div>`;
       $("#checkoutForm").classList.add("hidden");
       return;
     }
-    content.innerHTML = pairs.map(({ item, product }) => `<div class="cart-line" data-cart-key="${escapeHTML(item.key)}"><img class="cart-line-image" src="${escapeHTML(imageFor(product))}" alt="${escapeHTML(product.name)}"><div class="cart-line-name"><strong>${escapeHTML(product.name)}</strong><small>Размер: ${escapeHTML(item.size)} · ${escapeHTML(product.price)}</small><div class="qty-control"><button data-qty="minus" type="button" aria-label="Уменьшить">−</button><span>${item.qty}</span><button data-qty="plus" type="button" aria-label="Увеличить">+</button></div></div><div class="cart-line-end"><strong>${rubles(priceNumber(product.price) * item.qty)}</strong><button class="remove-line" data-remove-key="${escapeHTML(item.key)}" type="button">УДАЛИТЬ</button></div></div>`).join("");
+    let unavailable = false;
+    content.innerHTML = state.cart.map(item => {
+      const product = productById(item.id);
+      const ready = product && Core.available(product) && product.sizes.includes(item.size);
+      if (!ready) unavailable = true;
+      const image = product ? `<img class="cart-line-image" src="${escapeHTML(imageFor(product))}" alt="">` : '<span class="cart-line-image unavailable-mark" aria-hidden="true">—</span>';
+      return `<div class="cart-line ${ready ? "" : "is-unavailable"}" data-cart-key="${escapeHTML(item.key)}">${image}<div class="cart-line-name"><strong>${escapeHTML(product ? product.name : "Вещь недоступна")}</strong><small>Размер: ${escapeHTML(item.size)}${item.person ? ` · Номер: ${escapeHTML(item.person)}` : ""}</small>${ready ? `<div class="qty-control"><button data-qty="minus" type="button" aria-label="Уменьшить">−</button><span>${item.qty}</span><button data-qty="plus" type="button" aria-label="Увеличить" ${item.qty >= Core.MAX_QUANTITY ? "disabled" : ""}>+</button></div>` : '<small class="unavailable-note">Удали эту позицию или выбери доступный размер.</small>'}</div><div class="cart-line-end"><strong>${ready ? rubles(priceNumber(product.price) * item.qty) : "Недоступно"}</strong><button class="remove-line" data-remove-key="${escapeHTML(item.key)}" type="button">УДАЛИТЬ</button></div></div>`;
+    }).join("");
+    if (unavailable) content.insertAdjacentHTML("beforeend", '<p class="cart-warning" role="status">Состав изменился. Удали недоступные позиции, чтобы продолжить.</p>');
     $("#cartTotal").textContent = rubles(cartTotal());
+    $("#submitOrder").disabled = unavailable || state.checkoutPending;
+    $$("#cartContent button, #checkoutForm input, #checkoutForm .filter-chip").forEach(node => { node.disabled = state.checkoutPending; });
+    $$("#cartContent [data-qty=plus]").forEach(node => { const item = state.cart.find(row => row.key === node.closest("[data-cart-key]").dataset.cartKey); node.disabled = state.checkoutPending || item.qty >= Core.MAX_QUANTITY; });
     $("#checkoutForm").classList.remove("hidden");
   }
 
@@ -721,8 +814,10 @@
   }
 
   function updateCartItem(key, delta) {
+    if (state.checkoutPending) return showToast("Подожди подтверждения заявки. Корзина сохранена.");
     const line = state.cart.find(item => item.key === key);
     if (!line) return;
+    if (line.qty + delta > Core.MAX_QUANTITY) return showToast("В одной позиции — не больше 20 штук.");
     line.qty += delta;
     if (line.qty <= 0) state.cart = state.cart.filter(item => item.key !== key);
     saveJSON("vorozhbitov_cart", state.cart);
@@ -731,6 +826,7 @@
   }
 
   function removeCartItem(key) {
+    if (state.checkoutPending) return showToast("Подожди подтверждения заявки. Корзина сохранена.");
     state.cart = state.cart.filter(item => item.key !== key);
     saveJSON("vorozhbitov_cart", state.cart);
     renderCart();
@@ -743,7 +839,7 @@
   function syncMainButton() {
     if (!tg || !tg.MainButton) return;
     const cartCount = state.cart.reduce((sum, item) => sum + Number(item.qty || 0), 0);
-    const cartOpen = state.modalStack.includes("cartModal");
+    const cartOpen = state.modalStack.length > 0 || document.body.classList.contains("welcoming") || document.body.classList.contains("booting");
     try {
       if (cartCount > 0 && !cartOpen) {
         tg.MainButton.setText(cartCount === 1 ? "ЗАЯВКА" : `ЗАЯВКА · ${cartCount}`);
@@ -912,7 +1008,10 @@
   }
 
   async function submitOrder() {
+    if (state.checkoutPending || ($("#submitOrder") && $("#submitOrder").disabled)) return;
     const pairs = cartItems();
+    if (!state.catalogReady) return showToast("Подожди загрузку каталога.");
+    if (pairs.length !== state.cart.length || pairs.some(({item, product}) => !Core.available(product) || !product.sizes.includes(item.size))) { renderCart(); return showToast("Проверь недоступные позиции в корзине."); }
     const name = $("#checkoutName").value.trim();
     const phone = $("#checkoutPhone").value.trim();
     const city = $("#checkoutCity").value.trim();
@@ -934,7 +1033,6 @@
     }, false);
     const payload = {
       type: "order",
-      request_id: `web-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       customer: {
         name, phone, city,
         address: address || state.profile.address || "",
@@ -949,70 +1047,40 @@
         return line;
       })
     };
-    const history = loadJSON("vorozhbitov_orders", []);
-    history.unshift({ at: Date.now(), total: cartTotal(), items: payload.items });
-    saveJSON("vorozhbitov_orders", history.slice(0, 12));
-
     const button = $("#submitOrder");
     const previous = button ? button.innerHTML : "";
+    state.checkoutPending = true;
+    renderCart();
     if (button) {
       button.disabled = true;
       button.textContent = "СОБИРАЮ СЧЁТ…";
     }
-
-    const initData = tg && tg.initData;
-    if (initData) {
-      try {
-        const response = await fetch("/api/checkout", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            "X-Telegram-Init-Data": initData
-          },
-          body: JSON.stringify(payload)
-        });
-        const data = await response.json().catch(() => ({}));
-        if (response.ok && data.ok) {
-          state.cart = [];
-          saveJSON("vorozhbitov_cart", state.cart);
-          updateCounters();
-          haptic("success");
-          showPaySheet(data);
-          return;
-        }
-        if (response.status !== 401) {
-          showToast(data.error || "Не получилось создать оплату.");
-          haptic("error");
-          return;
-        }
-      } catch (_) { /* fall back to sendData */ }
-      finally {
-        if (button) {
-          button.disabled = false;
-          button.innerHTML = previous || "ПЕРЕЙТИ К ОПЛАТЕ <span>↗</span>";
-        }
+    try {
+      const user = telegramUser();
+      const data = await checkoutClient.submit(payload, tg && tg.initData, user ? String(user.id) : "");
+      const storedHistory = loadJSON("vorozhbitov_orders", []);
+      const history = Array.isArray(storedHistory) ? storedHistory : [];
+      history.unshift({ at: Date.now(), total: data.amount_rub, items: payload.items });
+      saveJSON("vorozhbitov_orders", history.slice(0, 12));
+      state.cart = [];
+      saveJSON("vorozhbitov_cart", state.cart);
+      updateCounters();
+      if (data.status === "awaiting_payment") {
+        haptic("success");
+        showPaySheet(data);
+      } else {
+        closeModal("cartModal");
+        openProfile();
+        showToast(data.status === "paid" ? "Эта заявка уже оплачена." : "Заявка уже обработана. Проверь её статус.");
       }
-    } else if (button) {
-      button.disabled = false;
-      button.innerHTML = previous || "ПЕРЕЙТИ К ОПЛАТЕ <span>↗</span>";
+    } catch (error) {
+      showToast(error.message || "Нет подтверждения от сервера. Корзина сохранена.");
+      haptic("error");
+    } finally {
+      state.checkoutPending = false;
+      if (button) button.innerHTML = previous;
+      renderCart();
     }
-
-    if (tg && typeof tg.sendData === "function") {
-      try { tg.sendData(JSON.stringify(payload)); }
-      catch (_) {
-        showToast("Не получилось отправить. Попробуй ещё раз.");
-        haptic("error");
-        return;
-      }
-    }
-    state.cart = [];
-    saveJSON("vorozhbitov_cart", state.cart);
-    updateCounters();
-    closeModal("cartModal");
-    $("#successToast").classList.remove("hidden");
-    haptic("success");
-    showToast(tg ? "Заявка ушла. Оплата — в чате с ботом." : "Демо-заявка. В Telegram откроется оплата.");
   }
 
   function openChannel() {
@@ -1035,6 +1103,10 @@
   }
 
   function openLightbox(src, caption) {
+    $("#lightboxViewport").classList.remove("zoomed");
+    $("#lightboxViewport").scrollTo(0, 0);
+    $("#lightboxZoom").textContent = "Увеличить +";
+    $("#lightboxZoom").setAttribute("aria-pressed", "false");
     $("#lightboxImage").src = src;
     $("#lightboxImage").alt = caption || "";
     $("#lightboxCaption").textContent = caption || "";
@@ -1054,31 +1126,7 @@
     else if (height < 178) size = "M";
     else if (height < 186) size = "L";
     result.classList.remove("error");
-    result.textContent = `Рост ${height} см → бери ${size}. Если любишь свободнее — на размер больше.`;
-  }
-
-  function tickDrop() {
-    const node = $("#dropTimer");
-    const welcomeNode = $("#welcomeTimer");
-    if (!node && !welcomeNode) return;
-    const diff = DROP_END - Date.now();
-    if (diff <= 0) {
-      if (node) node.textContent = "ВЫПУСК";
-      if (welcomeNode) welcomeNode.textContent = "ВЫПУСК ЗАКРЫТ";
-      return;
-    }
-    const days = Math.floor(diff / 86400000);
-    const hours = Math.floor((diff % 86400000) / 3600000);
-    const mins = Math.floor((diff % 3600000) / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    const pad = value => String(value).padStart(2, "0");
-    const short = days > 0 ? `${days}д ${pad(hours)}:${pad(mins)}` : `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
-    if (node) node.textContent = short;
-    if (welcomeNode) {
-      welcomeNode.textContent = days > 0
-        ? `${days} д ${pad(hours)} ч ${pad(mins)} мин`
-        : `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
-    }
+    result.textContent = `При росте ${height} см ориентир — ${size}. Посадка зависит от обхвата груди и модели: сравни замеры со своей футболкой.`;
   }
 
   function configureTelegram() {
@@ -1106,55 +1154,76 @@
     if (welcome.classList.contains("is-leaving")) return;
     // Заставка уходит вверх, а не пропадает рывком.
     welcome.classList.add("is-leaving");
+    stopWelcomeVideo();
     document.body.classList.remove("welcoming", "booting");
     haptic("medium");
     window.setTimeout(() => {
       welcome.classList.add("hidden");
       welcome.classList.remove("is-leaving");
       stopWelcomeVideo();
-    }, 520);
+      syncModalLayers();
+      syncMainButton();
+    }, reducedMotion() ? 0 : 520);
+
   }
 
   function startExperience() {
     const boot = $("#boot");
     const welcome = $("#welcome");
-    // Приветствие — визитка бренда, показываем его при каждом запуске.
-    // Раньше здесь стоял флаг в sessionStorage, но в Telegram он переживает
-    // перезапуск Mini App, и заставка переставала появляться совсем.
+    syncModalLayers();
     window.setTimeout(() => {
       document.body.classList.remove("booting");
-      if (boot) boot.classList.add("hidden");
+      boot.classList.add("hidden");
       welcome.classList.remove("hidden");
       document.body.classList.add("welcoming");
-    }, 1100);
+      syncModalLayers();
+      $("#enterShop").focus({ preventScroll: true });
+      if (state.catalogReady) setupWelcomeVideo(mediaConfig());
+    }, reducedMotion() ? 0 : 600);
   }
 
   async function loadCatalog() {
+    if (state.catalogLoading) return;
+    state.catalogLoading = true;
+    $("#catalogStatus").classList.remove("hidden");
+    $("#catalogError").classList.add("hidden");
+    $("#productGrid").setAttribute("aria-busy", "true");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-      const response = await fetch("/api/catalog", { headers: { Accept: "application/json" } });
+      const response = await fetch("/api/catalog", { headers: { Accept: "application/json" }, signal: controller.signal });
       if (!response.ok) throw new Error("catalog unavailable");
       const remote = await response.json();
-      if (Array.isArray(remote.products) && Array.isArray(remote.categories)) {
-        state.data = {
-          ...FALLBACK_CATALOG,
-          ...remote,
-          products: remote.products.filter(product => product.active !== false),
-          lookbook: Array.isArray(remote.lookbook) && remote.lookbook.length ? remote.lookbook : FALLBACK_CATALOG.lookbook,
-          privacy_url: remote.privacy_url || FALLBACK_CATALOG.privacy_url || ""
-        };
-        const privacy = document.getElementById("privacyLink");
-        if (privacy && state.data.privacy_url) {
-          privacy.href = state.data.privacy_url;
-          privacy.classList.remove("hidden");
-        }
+      if (!remote || !Array.isArray(remote.products) || !Array.isArray(remote.categories)) throw new Error("invalid catalog");
+      if (remote.products.some(product => !product || typeof product.id !== "string" || typeof product.name !== "string" || !Array.isArray(product.sizes))) throw new Error("invalid product");
+      state.data = {
+        ...FALLBACK_CATALOG, ...remote,
+        products: remote.products.filter(product => product.active !== false),
+        lookbook: Array.isArray(remote.lookbook) ? remote.lookbook : [],
+        privacy_url: remote.privacy_url || ""
+      };
+      state.catalogReady = true;
+      const privacy = $("#privacyLink");
+      if (privacy && state.data.privacy_url) {
+        privacy.href = state.data.privacy_url;
+        privacy.classList.remove("hidden");
       }
+      $("#sizeFilters").innerHTML = ["all", ...Core.sizesFor(state.data.products)].map(size => `<button class="filter-chip ${size === state.sizeFilter ? "active" : ""}" data-size-filter="${escapeHTML(size)}" type="button" aria-pressed="${size === state.sizeFilter}">${size === "all" ? "Любой" : escapeHTML(size)}</button>`).join("");
+      $("#profileSizeRow").innerHTML = Core.sizesFor(state.data.products).filter(size => size !== "ОДИН").map(size => `<button class="filter-chip" data-profile-size="${escapeHTML(size)}" type="button">${escapeHTML(size)}</button>`).join("");
+      applyMedia();
+      renderCategoryChips();
+      renderProducts();
+      renderLookbook();
+      if (state.modalStack.includes("cartModal")) renderCart();
     } catch (_) {
-      state.data = FALLBACK_CATALOG;
+      $("#catalogError").classList.remove("hidden");
+      $("#emptyState").classList.add("hidden");
+    } finally {
+      clearTimeout(timeout);
+      state.catalogLoading = false;
+      $("#catalogStatus").classList.add("hidden");
+      $("#productGrid").setAttribute("aria-busy", "false");
     }
-    applyMedia();
-    renderCategoryChips();
-    renderProducts();
-    renderLookbook();
   }
 
   /* --- Видео бренда: hero-петля и тизер --- */
@@ -1162,10 +1231,10 @@
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
     return {
-      welcomeLoop: media.welcome_loop || "assets/video/welcome-loop.mp4",
-      welcomePoster: media.welcome_poster || "assets/video/welcome-poster.jpg",
-      teaser: media.teaser || "assets/video/teaser.mp4",
-      teaserPoster: media.teaser_poster || "assets/video/teaser-poster.jpg",
+      welcomeLoop: media.welcome_loop || "assets/video/welcome-final-30s.mp4",
+      welcomePoster: media.welcome_poster || "assets/drop/tee-gym-with-tag-v3.jpg",
+      teaser: media.teaser || "assets/video/campaign-v6.mp4",
+      teaserPoster: media.teaser_poster || "assets/drop/tee-gym-with-tag-v3.jpg",
       title: media.teaser_title || "СИЛА И ЧЕСТЬ",
       caption: media.teaser_caption || "Выпуск 001 · Никита Ворожбитов",
       storyUrl: media.teaser_story_url || ""
@@ -1185,6 +1254,7 @@
 
   function applyMedia() {
     const media = mediaConfig();
+    if (state.data.media && state.data.media.hero_image) $("#heroFallback").src = state.data.media.hero_image;
     const poster = $("#teaserPoster");
     if (poster) poster.src = media.teaserPoster;
     if ($("#teaserTitle")) $("#teaserTitle").textContent = media.title;
@@ -1192,72 +1262,108 @@
     const teaserVideo = $("#teaserVideo");
     if (teaserVideo) teaserVideo.poster = media.teaserPoster;
     setupWelcomeVideo(media);
-    renderHeroDrop();
     // Тираж на заставке берём из каталога, а не пишем руками.
     const stock = $("#welcomeStock");
-    const lead = (state.data.products || []).find(p => p.real_photos && p.stock_label);
+    const lead = (state.data.products || []).find(p => (p.featured || p.real_photos) && p.stock_label);
     if (stock && lead) stock.textContent = String(lead.stock_label).toUpperCase();
+  }
+
+  const welcomePlayback = { source: "", ready: false, paused: false, failed: false, bound: false, pending: false };
+
+  function welcomeCanPlay() {
+    const welcome = $("#welcome");
+    return welcomePlayback.ready && !welcomePlayback.paused && !welcomePlayback.failed
+      && !saverMode() && !reducedMotion() && !document.hidden && !state.modalStack.length
+      && !welcome.classList.contains("hidden") && !welcome.classList.contains("is-leaving");
+  }
+
+  function syncWelcomeVideo() {
+    const video = $("#welcomeVideo");
+    const control = $("#welcomeMotion");
+    control.classList.toggle("hidden", !welcomePlayback.ready || welcomePlayback.failed || saverMode() || reducedMotion());
+    control.setAttribute("aria-label", welcomePlayback.paused ? "Продолжить видео" : "Остановить видео");
+    control.setAttribute("aria-pressed", String(welcomePlayback.paused));
+    $("#welcomeMotionIcon").textContent = welcomePlayback.paused ? "▷" : "Ⅱ";
+    if (!welcomeCanPlay()) {
+      video.pause();
+      if (saverMode() || reducedMotion()) video.classList.remove("is-playing");
+      return;
+    }
+    if (video.getAttribute("src") !== welcomePlayback.source) video.src = welcomePlayback.source;
+    if (!video.paused || welcomePlayback.pending) return;
+    welcomePlayback.pending = true;
+    const attempt = video.play();
+    Promise.resolve(attempt).catch(error => {
+      if (error.name !== "AbortError" && welcomeCanPlay()) {
+        welcomePlayback.paused = true;
+        syncWelcomeVideo();
+      }
+    }).finally(() => {
+      welcomePlayback.pending = false;
+      if (!welcomeCanPlay()) video.pause();
+      else if (video.paused) syncWelcomeVideo();
+    });
   }
 
   function setupWelcomeVideo(media) {
     const video = $("#welcomeVideo");
-    const fallback = $("#welcomeFallback");
-    if (!video) return;
+    if (welcomePlayback.source !== media.welcomeLoop) {
+      video.pause();
+      video.classList.remove("is-playing");
+      welcomePlayback.source = media.welcomeLoop;
+      welcomePlayback.failed = false;
+    }
     video.poster = media.welcomePoster;
-    if (fallback) fallback.src = media.welcomePoster;
-    // При экономии трафика и «меньше движения» оставляем неподвижный кадр.
-    if (saverMode() || reducedMotion()) return;
-    if (!video.dataset.src) {
-      video.dataset.src = media.welcomeLoop;
-      video.src = media.welcomeLoop;
-      video.load();
-    }
-    const tryPlay = () => {
-      const attempt = video.play();
-      // Если автоплей отклонён (iOS), просто остаётся постер — кнопка не нужна.
-      if (attempt && typeof attempt.catch === "function") {
-        attempt.then(() => video.classList.add("is-playing")).catch(() => {});
-      } else {
-        video.classList.add("is-playing");
-      }
-    };
-    tryPlay();
-    if (!video.dataset.bound) {
-      video.dataset.bound = "1";
-      document.addEventListener("visibilitychange", () => {
-        if (document.hidden) video.pause();
-        else if (!$("#welcome").classList.contains("hidden")) tryPlay();
+    $("#welcomeFallback").src = media.welcomePoster;
+    welcomePlayback.ready = Boolean(media.welcomeLoop);
+    if (!welcomePlayback.bound) {
+      welcomePlayback.bound = true;
+      $("#welcomeMotion").addEventListener("click", () => {
+        welcomePlayback.paused = !welcomePlayback.paused;
+        syncWelcomeVideo();
       });
+      video.addEventListener("playing", () => {
+        if (welcomeCanPlay()) video.classList.add("is-playing");
+        else video.pause();
+      });
+      video.addEventListener("error", () => {
+        // Removing a source when leaving is cleanup, not a failed media request.
+        if (!video.hasAttribute("src")) return;
+        welcomePlayback.failed = true;
+        video.classList.remove("is-playing");
+        syncWelcomeVideo();
+      });
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").addEventListener?.("change", syncWelcomeVideo);
+      navigator.connection?.addEventListener?.("change", syncWelcomeVideo);
     }
+    syncWelcomeVideo();
   }
 
-  /** Останавливает фон заставки — после входа он больше не нужен. */
   function stopWelcomeVideo() {
     const video = $("#welcomeVideo");
-    if (!video) return;
     video.pause();
     video.classList.remove("is-playing");
-    video.removeAttribute("src");
-    video.load();
+    if (video.hasAttribute("src")) {
+      video.removeAttribute("src");
+      video.load();
+    }
   }
 
-  /** Два лота выпуска прямо в шапке — сразу видно, что продаётся. */
-  function renderHeroDrop() {
-    const box = $("#heroDrop");
-    if (!box) return;
-    const picks = (state.data.products || []).filter(p => p.real_photos).slice(0, 2);
-    if (!picks.length) { box.innerHTML = ""; return; }
-    box.innerHTML = picks.map(product => `
-      <button class="hero-drop-card" type="button" data-open-product="${escapeHTML(product.id)}">
-        <img src="${escapeHTML(product.image)}" alt="" loading="lazy">
-        <span class="hero-drop-text">
-          <b>${escapeHTML(product.name)}</b>
-          <span>${escapeHTML(product.price)}</span>
-        </span>
-      </button>`).join("");
-    box.querySelectorAll("[data-open-product]").forEach(button => {
-      button.addEventListener("click", () => openProduct(button.dataset.openProduct));
-    });
+  function browseCollection(category = "all") {
+    state.stock = "all";
+    state.sizeFilter = "all";
+    state.search = "";
+    state.category = category;
+    state.view = "all";
+    state.sort = "featured";
+    $("#searchInput").value = "";
+    $("#sortSelect").value = "featured";
+    $("#clearSearch").classList.add("hidden");
+    $$("#filterOptions .filter-chip").forEach(node => node.classList.toggle("active", node.dataset.stock === "all"));
+    $$("#sizeFilters .filter-chip").forEach(node => { node.classList.toggle("active", node.dataset.sizeFilter === "all"); node.setAttribute("aria-pressed", String(node.dataset.sizeFilter === "all")); });
+    updateFilterCount();
+    renderCategoryChips();
+    renderProducts();
   }
 
   function openTeaser() {
@@ -1265,8 +1371,9 @@
     const video = $("#teaserVideo");
     const welcome = $("#welcomeVideo");
     if (welcome) welcome.pause();
+    $("#teaserReplay").classList.add("hidden");
     if (video) {
-      if (!video.src) video.src = media.teaser;
+      if (video.getAttribute("src") !== media.teaser) video.src = media.teaser;
       video.currentTime = 0;
     }
     const story = $("#teaserToStory");
@@ -1286,12 +1393,8 @@
       video.pause();
       video.currentTime = 0;
     }
-    const welcome = $("#welcomeVideo");
-    // Фон заставки оживает только если сама заставка ещё на экране.
-    if (welcome && !saverMode() && !reducedMotion() && !$("#welcome").classList.contains("hidden")) {
-      const attempt = welcome.play();
-      if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
-    }
+    $("#teaserReplay").classList.add("hidden");
+    syncWelcomeVideo();
   }
 
   function shareTeaserToStory() {
@@ -1309,6 +1412,28 @@
   }
 
   function bindEvents() {
+    $("#retryCatalog").addEventListener("click", loadCatalog);
+    $("#heroProductButton").addEventListener("click", () => {
+      browseCollection();
+      scrollToId("catalog");
+    });
+    $("#heroWatchFilm").addEventListener("click", openTeaser);
+    $("#zoomProduct").addEventListener("click", zoomProduct);
+    $("#mediaPrev").addEventListener("click", () => stepMedia(-1));
+    $("#mediaNext").addEventListener("click", () => stepMedia(1));
+    $("#spinToggle").addEventListener("click", () => {
+      if (state.viewer) state.viewer.setRotating(!state.viewer.rotating);
+      updateMediaPosition();
+    });
+    $("#view3d").addEventListener("framechange", updateMediaPosition);
+    $("#lightboxZoom").addEventListener("click", () => {
+      const zoomed = $("#lightboxViewport").classList.toggle("zoomed");
+      $("#lightboxZoom").setAttribute("aria-pressed", String(zoomed));
+      $("#lightboxZoom").textContent = zoomed ? "Весь кадр −" : "Увеличить +";
+      if (!zoomed) $("#lightboxViewport").scrollTo(0, 0);
+    });
+    $$('[data-detail-product]').forEach(button => button.addEventListener('click', () => openProduct(button.dataset.detailProduct, Number(button.dataset.detailPhoto))));
+    document.addEventListener("visibilitychange", syncModalLayers);
     $("#enterShop").addEventListener("click", enterShop);
     const watchTeaser = $("#watchTeaser");
     if (watchTeaser) {
@@ -1320,8 +1445,23 @@
 
     if ($("#teaserCard")) $("#teaserCard").addEventListener("click", openTeaser);
     if ($("#teaserToStory")) $("#teaserToStory").addEventListener("click", shareTeaserToStory);
+    $("#teaserVideo").addEventListener("ended", () => {
+      $("#teaserReplay").classList.remove("hidden");
+    });
+    $("#teaserVideo").addEventListener("play", () => {
+      if (document.activeElement === $("#teaserReplay")) {
+        $("#teaserVideo").focus({ preventScroll: true });
+      }
+      $("#teaserReplay").classList.add("hidden");
+    });
+    $("#teaserReplay").addEventListener("click", () => {
+      const video = $("#teaserVideo");
+      video.currentTime = 0;
+      video.play().catch(() => showToast("Нажми ▶ в плеере, чтобы повторить ролик."));
+    });
     if ($("#teaserToShop")) $("#teaserToShop").addEventListener("click", () => {
       closeModal("teaserModal");
+      browseCollection();
       scrollToId("catalog");
     });
 
@@ -1351,7 +1491,8 @@
       const button = event.target.closest("[data-size]");
       if (!button) return;
       state.selectedSize = button.dataset.size;
-      $$(".size-button", $("#sizeList")).forEach(node => node.classList.toggle("selected", node === button));
+      $$(".size-button", $("#sizeList")).forEach(node => { node.classList.toggle("selected", node === button); node.setAttribute("aria-pressed", String(node === button)); });
+      updatePurchaseSummary();
       $("#sizeHint").textContent = `Размер ${state.selectedSize} выбран.`;
       $("#sizeHint").classList.remove("error");
       haptic("light");
@@ -1361,9 +1502,7 @@
       const button = event.target.closest("[data-gallery]");
       if (button) setGallery(Number(button.dataset.gallery));
     });
-    $("#sheetImage").addEventListener("click", () => {
-      if (state.currentProduct && imagesFor(state.currentProduct).length > 1) setGallery(state.galleryIndex + 1);
-    });
+    $("#sheetImage").addEventListener("click", zoomProduct);
 
     $("#sheetQty").addEventListener("click", event => {
       if (event.target.closest("[data-sheet-qty='plus']")) state.qty = Math.min(20, state.qty + 1);
@@ -1414,6 +1553,7 @@
     $("#clearView").addEventListener("click", () => { state.view = "all"; renderProducts(); });
 
     $("#cartContent").addEventListener("click", event => {
+      if (event.target.closest("[data-cart-retry]")) { loadCatalog(); return; }
       const row = event.target.closest("[data-cart-key]");
       if (!row) return;
       const key = row.dataset.cartKey;
@@ -1425,6 +1565,7 @@
 
     $("#searchToggle").addEventListener("click", () => {
       $("#searchOverlay").classList.toggle("hidden");
+      $("#searchToggle").setAttribute("aria-expanded", String(!$("#searchOverlay").classList.contains("hidden")));
       if (!$("#searchOverlay").classList.contains("hidden")) $("#searchInput").focus();
     });
     $("#searchInput").addEventListener("input", event => {
@@ -1447,7 +1588,10 @@
       scrollToId("catalog");
     }));
 
-    $("#filterToggle").addEventListener("click", () => $("#filterPanel").classList.toggle("hidden"));
+    $("#filterToggle").addEventListener("click", () => {
+      $("#filterPanel").classList.toggle("hidden");
+      $("#filterToggle").setAttribute("aria-expanded", String(!$("#filterPanel").classList.contains("hidden")));
+    });
     $("#filterOptions").addEventListener("click", event => {
       const button = event.target.closest("[data-stock]");
       if (!button) return;
@@ -1459,7 +1603,7 @@
     $("#sizeFilters").addEventListener("click", event => {
       const button = event.target.closest("[data-size-filter]");
       if (!button) return;
-      $$("#sizeFilters .filter-chip").forEach(node => node.classList.toggle("active", node === button));
+      $$("#sizeFilters .filter-chip").forEach(node => { node.classList.toggle("active", node === button); node.setAttribute("aria-pressed", String(node === button)); });
       state.sizeFilter = button.dataset.sizeFilter || "all";
       updateFilterCount();
       renderProducts();
@@ -1468,22 +1612,7 @@
       state.sort = event.target.value;
       renderProducts();
     });
-    $("#resetFilters").addEventListener("click", () => {
-      state.stock = "all";
-      state.sizeFilter = "all";
-      state.search = "";
-      state.category = "all";
-      state.view = "all";
-      state.sort = "featured";
-      $("#searchInput").value = "";
-      $("#sortSelect").value = "featured";
-      $("#clearSearch").classList.add("hidden");
-      $$("#filterOptions .filter-chip").forEach(node => node.classList.toggle("active", node.dataset.stock === "all"));
-      $$("#sizeFilters .filter-chip").forEach(node => node.classList.toggle("active", node.dataset.sizeFilter === "all"));
-      updateFilterCount();
-      renderCategoryChips();
-      renderProducts();
-    });
+    $("#resetFilters").addEventListener("click", () => browseCollection());
     $("#emptyReset").addEventListener("click", () => $("#resetFilters").click());
     $("#submitOrder").addEventListener("click", submitOrder);
     if ($("#payMethods")) $("#payMethods").addEventListener("click", event => {
@@ -1517,10 +1646,26 @@
       if (event.target === backdrop) closeModal(backdrop.id);
     }));
     document.addEventListener("keydown", event => {
+      const top = document.getElementById(state.modalStack.at(-1)) || (document.body.classList.contains("welcoming") ? $("#welcome") : null);
+      if (event.key === "Tab" && top) {
+        const nodes = focusableElements(top);
+        if (!nodes.length) return;
+        const first = nodes[0], last = nodes.at(-1);
+        if (event.shiftKey && (document.activeElement === first || !top.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (document.activeElement === last || !top.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+      }
+      if (event.target.matches('[data-lightbox]') && ["Enter", " "].includes(event.key)) {
+        event.preventDefault(); openLightbox(event.target.dataset.lightbox, event.target.dataset.caption);
+      }
+      if (top && top.id === "productModal" && state.stage === "photo" && !event.target.matches('input,select,textarea') && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
+        event.preventDefault(); stepMedia(event.key === "ArrowLeft" ? -1 : 1);
+      }
       if (event.key !== "Escape") return;
       const search = $("#searchOverlay");
       if (search && !search.classList.contains("hidden") && !state.modalStack.length) {
         search.classList.add("hidden");
+        $("#searchToggle").setAttribute("aria-expanded", "false");
+        $("#searchToggle").focus();
         return;
       }
       closeTopModal();
@@ -1543,7 +1688,5 @@
   updateCounters();
   startExperience();
   loadCatalog();
-  tickDrop();
-  window.setInterval(tickDrop, 1000);
   window.VorozhbitovShop = { state, openProduct, openCart };
 })();

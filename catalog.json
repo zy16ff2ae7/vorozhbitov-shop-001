@@ -3,7 +3,7 @@
     "name": "ВОРОЖБИТОВ",
     "descriptor": "сила и честь / городская форма",
     "drop": "ВЫПУСК",
-    "welcome_image": "assets/welcome.jpg",
+    "welcome_image": "assets/drop/tee-gym-with-tag-v3.jpg",
     "store_image": "assets/store.jpg"
   },
   "categories": [
@@ -41,41 +41,53 @@
         "XL",
         "XXL"
       ],
-      "description": "Чёрная футболка первого тиража. Уставная надпись «Сила и честь» на груди, меч по позвоночнику и монограмма ВВ у ворота. Плотная шелкография, которая не трескается.",
+      "description": "Чёрная футболка первого тиража. Надпись «СИЛА И ЧЕСТЬ» на груди, фирменная чёрная нашивка слева у подола. На спине — постоянная деталь с монограммой у горловины и длинный узкий клинок с потёртой фактурой.",
       "signature": "Первый тираж. Один раз и без повторов.",
       "photo_url": "",
-      "image": "assets/spin/tee-sich-01.jpg",
+      "image": "assets/spin/tee-sich-01-v2.jpg",
       "images": [
-        "assets/spin/tee-sich-01.jpg",
-        "assets/spin/tee-sich-05.jpg",
-        "assets/drop/tee-flatlay.jpg",
-        "assets/drop/tee-night.jpg",
-        "assets/drop/tee-back.jpg",
-        "assets/drop/tee-gym.jpg"
+        "assets/spin/tee-sich-01-v2.jpg",
+        "assets/spin/tee-sich-05-v2.jpg",
+        "assets/drop/tee-flatlay-v2.jpg",
+        "assets/drop/tee-gym-retouched-final.jpg",
+        "assets/drop/tee-back-final.jpg",
+        "assets/spin/tee-sich-03-v2.jpg",
+        "assets/drop/tee-detail-v4.jpg"
       ],
       "badge": "ВЫПУСК 001",
       "material": "100% хлопок · 240 г/м²",
       "fit": "Прямой крой",
       "details": [
         "Принт на груди: «СИЛА И ЧЕСТЬ», уставной шрифт",
-        "Меч по спине, монограмма ВВ у ворота",
+        "Чёрная нашивка с белым знаком слева у переднего подола",
+        "Постоянная чёрная деталь с монограммой у задней горловины",
+        "Узкий клинок с потёртой фактурой почти до подола",
         "Плотная шелкография — не трескается",
         "Усиленная горловина",
         "Фирменный зип-пакет «ПУТЬ, ДОСТОЙНЫЙ ВОИНА»"
       ],
       "stock_label": "Первый тираж",
-      "real_photos": true,
       "active": true,
       "spin": [
-        "assets/spin/tee-sich-01.jpg",
-        "assets/spin/tee-sich-02.jpg",
-        "assets/spin/tee-sich-03.jpg",
-        "assets/spin/tee-sich-04.jpg",
-        "assets/spin/tee-sich-05.jpg",
-        "assets/spin/tee-sich-06.jpg",
-        "assets/spin/tee-sich-07.jpg",
-        "assets/spin/tee-sich-08.jpg"
-      ]
+        "assets/spin/tee-sich-01-v2.jpg",
+        "assets/spin/tee-sich-02-v2.jpg",
+        "assets/spin/tee-sich-03-v2.jpg",
+        "assets/spin/tee-sich-04-v2.jpg",
+        "assets/spin/tee-sich-05-v2.jpg",
+        "assets/spin/tee-sich-06-v2.jpg",
+        "assets/spin/tee-sich-07-v2.jpg",
+        "assets/spin/tee-sich-08-v2.jpg"
+      ],
+      "image_labels": [
+        "Спереди",
+        "Сзади",
+        "Ткань и принт",
+        "На Никите",
+        "В зале · спина",
+        "Крой сбоку",
+        "Нашивка у подола"
+      ],
+      "featured": true
     },
     {
       "id": "tag-sila-i-chest",
@@ -106,7 +118,6 @@
         "Фирменный зип-пакет"
       ],
       "stock_label": "Тираж 100 шт.",
-      "real_photos": true,
       "active": true,
       "spin": [
         "assets/spin/tag-sich-01.jpg",
@@ -120,7 +131,8 @@
         "placeholder": "например, 00063",
         "pattern": "^[0-9]{1,5}$",
         "optional": true
-      }
+      },
+      "featured": true
     },
     {
       "id": "honor-hoodie",
@@ -152,7 +164,7 @@
         "Капюшон с двойной строчкой"
       ],
       "stock_label": "Осталось мало",
-      "active": true,
+      "active": false,
       "spin": [
         "assets/honor-hoodie.jpg",
         "assets/spin/honor-01.jpg",
@@ -193,7 +205,7 @@
         "Усиленная горловина"
       ],
       "stock_label": "Последний тираж",
-      "active": true,
+      "active": false,
       "spin": [
         "assets/year-tee.jpg",
         "assets/spin/year-01.jpg",
@@ -231,7 +243,7 @@
         "Металлические наконечники"
       ],
       "stock_label": "Последний тираж",
-      "active": true,
+      "active": false,
       "spin": [
         "assets/hero-drop.jpg",
         "assets/spin/honor-02.jpg",
@@ -268,7 +280,7 @@
         "Бирка-сигнал внутри"
       ],
       "stock_label": "Осталось мало",
-      "active": true,
+      "active": false,
       "spin": [
         "assets/base-tee.jpg",
         "assets/spin/year-02.jpg",
@@ -304,7 +316,7 @@
         "Красный кант по свету"
       ],
       "stock_label": "В наличии",
-      "active": true,
+      "active": false,
       "spin": [
         "assets/field-tee.jpg",
         "assets/spin/year-02.jpg",
@@ -341,7 +353,7 @@
         "Карман-кенгуру"
       ],
       "stock_label": "В наличии",
-      "active": true,
+      "active": false,
       "spin": [
         "assets/heavy-hoodie.jpg",
         "assets/spin/honor-02.jpg",
@@ -378,7 +390,7 @@
         "Стирается без сюрпризов"
       ],
       "stock_label": "В наличии",
-      "active": true,
+      "active": false,
       "spin": [
         "assets/base-tee.jpg",
         "assets/spin/year-02.jpg",
@@ -414,7 +426,7 @@
         "Усиленные швы"
       ],
       "stock_label": "Мало размеров",
-      "active": true,
+      "active": false,
       "spin": [
         "assets/city-cargo.jpg",
         "assets/look-street.jpg"
@@ -447,7 +459,7 @@
         "Плотный козырёк"
       ],
       "stock_label": "В наличии",
-      "active": true,
+      "active": false,
       "spin": [
         "assets/v-cap.jpg",
         "assets/logo-cap.jpg"
@@ -456,73 +468,36 @@
   ],
   "lookbook": [
     {
-      "image": "assets/drop/tee-night.jpg",
-      "photo_url": "",
-      "caption": "НОЧЬ. СВОЙ ГОРОД"
+      "image": "assets/drop/tee-gym-retouched-final.jpg",
+      "caption": "ДИСЦИПЛИНА. КАЖДЫЙ ДЕНЬ"
     },
     {
-      "image": "assets/drop/tee-back.jpg",
-      "photo_url": "",
-      "caption": "МЕЧ ПО СПИНЕ"
+      "image": "assets/drop/tee-back-final.jpg",
+      "caption": "СВОЙ ЗНАК"
     },
     {
-      "image": "assets/drop/tee-gym.jpg",
-      "photo_url": "",
-      "caption": "ЖЕЛЕЗО НЕ ВРЁТ"
+      "image": "assets/drop/tee-detail-v4.jpg",
+      "caption": "ХАРАКТЕР В ДЕТАЛЯХ"
+    },
+    {
+      "image": "assets/drop/tee-flatlay-v2.jpg",
+      "caption": "ТКАНЬ. ПРИНТ. ПОСАДКА"
     },
     {
       "image": "assets/spin/tag-sich-01.jpg",
-      "photo_url": "",
-      "caption": "ЖЕТОН · МОНОГРАММА"
-    },
-    {
-      "image": "assets/spin/tag-sich-02.jpg",
-      "photo_url": "",
-      "caption": "ЛИЧНЫЙ НОМЕР"
-    },
-    {
-      "image": "assets/drop/tee-crew.jpg",
-      "photo_url": "",
-      "caption": "СВОИ ЗА СПИНОЙ"
-    },
-    {
-      "image": "assets/honor-hoodie.jpg",
-      "photo_url": "",
-      "caption": "СИЛА И ЧЕСТЬ"
-    },
-    {
-      "image": "assets/look-street.jpg",
-      "photo_url": "",
-      "caption": "ГОРОД"
-    },
-    {
-      "image": "assets/year-tee.jpg",
-      "photo_url": "",
-      "caption": "1993"
-    },
-    {
-      "image": "assets/field-tee.jpg",
-      "photo_url": "",
-      "caption": "ОДИН В ПОЛЕ"
-    },
-    {
-      "image": "assets/v-cap.jpg",
-      "photo_url": "",
-      "caption": "КЕПКА V"
-    },
-    {
-      "image": "assets/store.jpg",
-      "photo_url": "",
-      "caption": "МАГАЗИН"
+      "caption": "ЛИЧНЫЙ ЗНАК"
     }
   ],
   "media": {
-    "welcome_loop": "assets/video/welcome-loop.mp4",
-    "welcome_poster": "assets/video/welcome-poster.jpg",
-    "teaser": "assets/video/teaser.mp4",
-    "teaser_poster": "assets/video/teaser-poster.jpg",
+    "welcome_loop": "assets/video/welcome-final-30s.mp4",
+    "welcome_poster": "assets/drop/tee-gym-with-tag-v3.jpg",
+    "teaser": "assets/video/campaign-v6.mp4",
+    "teaser_poster": "assets/video/campaign-v6.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",
-    "teaser_caption": "Выпуск 001 · 30 секунд · плёнка",
-    "teaser_story_url": ""
+    "teaser_caption": "Фильм выпуска · 20 сек",
+    "teaser_story_url": "",
+    "teaser_thumbnail": "assets/video/campaign-v6-thumb.jpg",
+    "hero_image": "assets/drop/tee-gym-with-tag-v3.jpg",
+    "welcome_motion": true
   }
 }

@@ -2,16 +2,18 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#070708">
-  <meta name="description" content="ВОРОЖБИТОВ — официальная витрина. Сила и честь. Закрытый выпуск.">
+  <meta name="description" content="ВОРОЖБИТОВ — одежда и аксессуары Никиты Ворожбитова. Сила и честь. Характер в деталях.">
   <title>ВОРОЖБИТОВ</title>
   <link rel="preload" href="fonts/unbounded-900.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/manrope-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="refinement.css">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body class="booting">
+  <a class="skip-link" href="#catalog">Перейти к вещам</a>
   <div class="noise" aria-hidden="true"></div>
   <div class="scan" aria-hidden="true"></div>
 
@@ -23,29 +25,28 @@
 
   <section class="welcome hidden" id="welcome" aria-label="Приветствие">
     <video class="welcome-media" id="welcomeVideo" muted loop playsinline preload="none"
-           poster="assets/video/welcome-poster.jpg" aria-hidden="true"></video>
-    <img class="welcome-media" id="welcomeFallback" src="assets/video/welcome-poster.jpg" alt="ВОРОЖБИТОВ — приветствие">
+           poster="assets/drop/tee-gym-with-tag-v3.jpg" aria-hidden="true"></video>
+    <img class="welcome-media" id="welcomeFallback" src="assets/drop/tee-gym-with-tag-v3.jpg" alt="ВОРОЖБИТОВ — приветствие">
     <div class="welcome-shade"></div>
+    <button class="welcome-motion hidden" id="welcomeMotion" type="button" aria-label="Остановить видео"><span id="welcomeFrameCount" aria-hidden="true">ФИЛЬМ · 30 СЕК</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
     <div class="welcome-frame">
       <div class="welcome-kicker"><span class="pulse-dot"></span> ВЫПУСК 001 · ДЛЯ СВОИХ</div>
       <h1>ВОРОЖ<br>БИТОВ</h1>
       <div class="welcome-copy" id="welcomeCopy">
         <p class="welcome-lede"><span class="welcome-drop">Брат.</span> Ты зашёл на закрытую территорию.</p>
-        <p>Здесь не витрина для всех — здесь форма для своих.</p>
+        <p>Сила и честь — в поступках. И в том, что носишь.</p>
         <ul class="welcome-facts">
           <li>Плотная ткань</li>
           <li>Честная посадка</li>
-          <li>Маленький тираж</li>
+          <li>Первый тираж</li>
         </ul>
-        <p class="welcome-close">Бери размер, пока он есть.</p>
-      </div>
-      <div class="welcome-count">
-        <span class="welcome-count-label">ДО КОНЦА ВЫПУСКА</span>
-        <strong id="welcomeTimer">—</strong>
       </div>
       <div class="welcome-actions">
         <button class="button button-primary punch" id="enterShop" type="button">ВОЙТИ В МАГАЗИН <span>↗</span></button>
-        <button class="text-button welcome-skip" id="watchTeaser" type="button">Сначала посмотреть ролик <span>▶</span></button>
+        <button class="text-button welcome-skip" id="watchTeaser" type="button">
+          <span class="ws-text">Сначала посмотреть ролик</span>
+          <span class="ws-play" aria-hidden="true"><svg viewBox="0 0 10 12" width="9" height="11" focusable="false"><path d="M0 0 10 6 0 12Z" fill="currentColor"/></svg></span>
+        </button>
       </div>
       <div class="welcome-meta">
         <b>СИЛА И ЧЕСТЬ</b>
@@ -62,7 +63,7 @@
         <span class="brand-type"><strong>ВОРОЖБИТОВ</strong><small>СИЛА И ЧЕСТЬ</small></span>
       </a>
       <div class="top-actions">
-        <button class="icon-button" id="searchToggle" type="button" aria-label="Поиск"><span class="icon" data-icon="search"></span></button>
+        <button class="icon-button" id="searchToggle" type="button" aria-label="Поиск" aria-expanded="false" aria-controls="searchOverlay"><span class="icon" data-icon="search"></span></button>
         <button class="icon-button" id="profileButton" type="button" aria-label="Профиль"><span class="icon" data-icon="user"></span></button>
         <button class="icon-button" id="savedButton" type="button" aria-label="Сохранённые">
           <span class="icon" data-icon="bookmark"></span><span class="counter hidden" id="savedCount">0</span>
@@ -76,119 +77,51 @@
     <div class="search-overlay hidden" id="searchOverlay">
       <label class="search-big">
         <span class="icon" data-icon="search"></span>
-        <input id="searchInput" type="search" placeholder="Худи, карго, кепка…" autocomplete="off">
+        <input id="searchInput" aria-label="Найти вещь" type="search" placeholder="Футболка, жетон…" autocomplete="off">
         <button id="clearSearch" class="clear-search hidden" type="button" aria-label="Очистить">×</button>
       </label>
       <div class="search-hints">
-        <button type="button" data-hint="худи">худи</button>
-        <button type="button" data-hint="футболка">футболка</button>
-        <button type="button" data-hint="карго">карго</button>
-        <button type="button" data-hint="кепка">кепка</button>
+        <button type="button" data-hint="сила и честь">сила и честь</button>
+        <button type="button" data-hint="жетон">жетон</button>
       </div>
     </div>
 
     <main>
-      <section class="hero" id="home">
+      <section class="hero" id="home" aria-labelledby="heroTitle">
         <div class="hero-media">
-          <img src="assets/drop/tee-night.jpg" alt="Никита Ворожбитов — выпуск 001" fetchpriority="high" id="heroFallback">
+          <img src="assets/drop/tee-gym-with-tag-v3.jpg" alt="Никита Ворожбитов в футболке «Сила и честь» и фирменном жетоне" fetchpriority="high" decoding="async" id="heroFallback" width="1120" height="1400">
           <div class="hero-shade"></div>
-          <div class="hero-bout" aria-hidden="true">
-            <svg class="bout-svg" viewBox="0 0 140 260">
-              <defs>
-                <linearGradient id="bagSkin" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0" stop-color="#0a0908"/>
-                  <stop offset=".18" stop-color="#2c2622"/>
-                  <stop offset=".42" stop-color="#4a4038"/>
-                  <stop offset=".68" stop-color="#1c1916"/>
-                  <stop offset="1" stop-color="#090808"/>
-                </linearGradient>
-                <linearGradient id="bagCap" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="#5a5248"/>
-                  <stop offset="1" stop-color="#1a1816"/>
-                </linearGradient>
-                <radialGradient id="hitGlow" cx=".5" cy=".5" r=".5">
-                  <stop offset="0" stop-color="#e10600" stop-opacity=".95"/>
-                  <stop offset=".55" stop-color="#e10600" stop-opacity=".35"/>
-                  <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
-                </radialGradient>
-              </defs>
-              <ellipse class="bout-floor" cx="70" cy="250" rx="42" ry="7" fill="#000"/>
-              <g class="bout-chain">
-                <rect x="58" y="2" width="24" height="5" rx=".5" fill="#d8d0c4"/>
-                <rect x="66" y="7" width="8" height="4" fill="#9a9388"/>
-                <ellipse cx="70" cy="18" rx="5.5" ry="8" fill="none" stroke="#cfc6ba" stroke-width="2"/>
-                <ellipse cx="70" cy="32" rx="5.5" ry="8" fill="none" stroke="#a8a096" stroke-width="2"/>
-                <ellipse cx="70" cy="46" rx="5.5" ry="8" fill="none" stroke="#cfc6ba" stroke-width="2"/>
-              </g>
-              <g class="bout-bag">
-                <ellipse cx="70" cy="58" rx="28" ry="8" fill="url(#bagCap)"/>
-                <path d="M46 58h48v18H46z" fill="#2a2622"/>
-                <path d="M52 62v10M70 62v10M88 62v10" stroke="#cfc6ba" stroke-width="1.4"/>
-                <rect x="42" y="72" width="56" height="148" rx="26" fill="url(#bagSkin)"/>
-                <ellipse cx="70" cy="220" rx="28" ry="10" fill="#0c0b0a"/>
-                <path d="M48 88c8 4 36 4 44 0" stroke="#efe6d8" stroke-opacity=".18" stroke-width="1.2"/>
-                <path d="M46 110v88M94 110v88" stroke="#efe6d8" stroke-opacity=".12" stroke-width=".8" stroke-dasharray="3 4"/>
-                <g transform="translate(70 148) skewX(-12)">
-                  <path d="M-16 -28 L0 22 L16 -28 h-9 L0 6 L-7 -28z" fill="#e10600"/>
-                </g>
-                <ellipse cx="56" cy="120" rx="8" ry="28" fill="#fff" opacity=".06"/>
-              </g>
-              <g class="bout-hit">
-                <circle cx="42" cy="148" r="22" fill="url(#hitGlow)"/>
-                <path d="M36 148H18M40 136l-12-12M40 160l-12 12" stroke="#d6ff3c" stroke-width="2.2" stroke-linecap="square"/>
-              </g>
-              <g class="bout-dust">
-                <circle cx="38" cy="140" r="2.2" fill="#cfc6ba"/>
-                <circle cx="30" cy="152" r="1.6" fill="#9a958c"/>
-                <circle cx="44" cy="162" r="1.4" fill="#efe6d8"/>
-                <circle cx="26" cy="136" r="1.2" fill="#e10600"/>
-              </g>
-            </svg>
-          </div>
-          <div class="hero-live"><span class="pulse-dot"></span> ВЫПУСК СЕЙЧАС</div>
+          <div class="hero-live"><span class="pulse-dot"></span> НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ</div>
         </div>
         <div class="hero-copy">
-          <div class="eyebrow"><span>ЛИМИТ</span><span id="dropTimer">—:—:—</span></div>
-          <h1>НЕ ДЛЯ<br><em>ВСЕХ.</em></h1>
-          <p class="hero-lead">Городская форма. Плотная ткань. Честный крой. Вещи для тех, кто сам выбирает, с кем стоять.</p>
+          <div class="eyebrow"><span>ОДЕЖДА С ХАРАКТЕРОМ</span><span>ВОРОЖБИТОВ</span></div>
+          <h1 id="heroTitle">СИЛА<br><em>И ЧЕСТЬ.</em></h1>
+          <p class="hero-lead">Твоя форма. На каждый день.</p>
           <div class="hero-actions">
-            <button class="button button-primary punch" data-scroll="catalog" type="button">СМОТРЕТЬ ВЫПУСК <span>↗</span></button>
-            <button class="text-button" data-scroll="store" type="button">Магазин <span>↓</span></button>
+            <button class="button button-primary" id="heroProductButton" type="button">СМОТРЕТЬ ВЕЩИ <span>↗</span></button>
+            <button class="hero-film-button" id="heroWatchFilm" type="button"><span aria-hidden="true">▷</span> Фильм выпуска</button>
           </div>
-          <div class="hero-drop" id="heroDrop" aria-label="Что в выпуске"></div>
-          <div class="hero-specs">
-            <div><strong>400</strong><span>Г/М²</span></div>
-            <div><strong>СЕЙЧАС</strong><span>ЛИМИТ</span></div>
-            <div><strong>1993</strong><span>СИЛА И ЧЕСТЬ</span></div>
-          </div>
+          <div class="brand-principles"><span>СИЛА</span><i aria-hidden="true">/</i><span>ДИСЦИПЛИНА</span><i aria-hidden="true">/</i><span>ЧЕСТЬ</span></div>
         </div>
       </section>
-
-      <div class="ticker" aria-hidden="true">
-        <div class="ticker-track">
-          <span>СИЛА И ЧЕСТЬ</span><i>✳</i><span>МАЛАЯ ПАРТИЯ</span><i>✳</i><span>НЕ ДЛЯ ВСЕХ</span><i>✳</i><span>ДЛЯ ТЕХ, КТО ПОНЯЛ</span><i>✳</i>
-          <span>СИЛА И ЧЕСТЬ</span><i>✳</i><span>МАЛАЯ ПАРТИЯ</span><i>✳</i><span>НЕ ДЛЯ ВСЕХ</span><i>✳</i><span>ДЛЯ ТЕХ, КТО ПОНЯЛ</span><i>✳</i>
-        </div>
-      </div>
-
       <section class="section-pad catalog-section" id="catalog">
         <div class="section-heading">
           <div>
             <span class="section-kicker">01 / ВИТРИНА</span>
-            <h2>СМОТРИ,<br><em>ЧТО ОСТАЛОСЬ.</em></h2>
+            <h2>ВЕЩИ<br><em>БРЕНДА.</em></h2>
           </div>
           <span class="item-count" id="productCount">— ВЕЩИ</span>
         </div>
 
-        <div class="category-row" id="categoryChips" role="tablist" aria-label="Категории"></div>
+        <div class="category-row" id="categoryChips" role="group" aria-label="Категории"></div>
 
         <div class="catalog-tools">
-          <button class="filter-button" type="button" id="filterToggle">
+          <button class="filter-button" type="button" id="filterToggle" aria-expanded="false" aria-controls="filterPanel">
             <span class="icon" data-icon="sliders"></span> ФИЛЬТРЫ
             <span class="tool-count hidden" id="filterCount">0</span>
           </button>
           <div class="sort-wrap">
-            <label class="sort-label" for="sortSelect">РЯД</label>
+            <label class="sort-label" for="sortSelect">ПОРЯДОК</label>
             <select id="sortSelect">
               <option value="featured">Сначала выпуск</option>
               <option value="limited">Лимит</option>
@@ -224,7 +157,9 @@
           <button class="text-button" id="clearView" type="button">Показать всё</button>
         </div>
 
-        <div class="product-grid" id="productGrid" aria-live="polite"></div>
+        <div class="catalog-status" id="catalogStatus" role="status"><span class="loading-line"></span>Загружаем коллекцию…</div>
+        <div class="catalog-error hidden" id="catalogError" role="alert"><p>Не удалось загрузить вещи. Проверь соединение и повтори.</p><button class="button button-outline" id="retryCatalog" type="button">ПОВТОРИТЬ</button></div>
+        <div class="product-grid" id="productGrid" aria-live="polite" aria-busy="true"></div>
         <div class="empty-state hidden" id="emptyState">
           <span class="empty-mark">∅</span>
           <h3>Ничего не нашлось</h3>
@@ -233,37 +168,20 @@
         </div>
       </section>
 
-      <section class="store-section" id="store">
-        <div class="section-pad store-head">
-          <div>
-            <span class="section-kicker">02 / МАГАЗИН</span>
-            <h2>БЕТОН.<br><em>НЕОН.</em><br>ВЕЩЬ.</h2>
-          </div>
-          <p class="store-lead">Не зал для селфи. Подвал, вешалка, красный свет. Сюда приходят свои — забрать выпуск после заявки или просто посмотреть, как сидит ткань.</p>
-        </div>
-        <figure class="store-hero" id="storeHero" data-lightbox="assets/store.jpg" data-caption="МАГАЗИН / ВОРОЖБИТОВ">
-          <img src="assets/store.jpg" alt="Магазин ВОРОЖБИТОВ — бетон, неон, вешалки" loading="lazy" decoding="async">
-          <figcaption>
-            <span>МАГАЗИН</span>
-            <strong>ВОРОЖБИТОВ</strong>
-            <small>Самовывоз после подтверждения · Могилёв / СПб</small>
-          </figcaption>
-        </figure>
-        <div class="section-pad store-grid">
-          <figure class="store-shot" data-lightbox="assets/store-rack.jpg" data-caption="ВЕШАЛКА">
-            <img src="assets/store-rack.jpg" alt="Вешалка с худи" loading="lazy" decoding="async">
-            <figcaption>ВЕШАЛКА</figcaption>
-          </figure>
-          <figure class="store-shot" data-lightbox="assets/look-ring.jpg" data-caption="РИНГ / 400">
-            <img src="assets/look-ring.jpg" alt="Худи на ринге" loading="lazy" decoding="async">
-            <figcaption>РИНГ / 400</figcaption>
-          </figure>
-          <div class="store-facts">
-            <div><span>01</span><strong>САМОВЫВОЗ</strong><small>После оплаты менеджер скажет, когда забирать</small></div>
-            <div><span>02</span><strong>ДОСТАВКА</strong><small>СДЭК / Яндекс — считаем по городу</small></div>
-            <div><span>03</span><strong>ВЫПУСК</strong><small>Сначала здесь. Повторов не будет</small></div>
-          </div>
-        </div>
+      <section class="product-story section-pad" id="store" aria-labelledby="detailTitle">
+        <div class="detail-heading"><span class="section-kicker">ПЕРВЫЙ ВЫПУСК / КРУПНЫМ ПЛАНОМ</span><h2 id="detailTitle">ХАРАКТЕР<br>В ДЕТАЛЯХ.</h2></div>
+        <button class="detail-shot" type="button" data-detail-product="tee-sila-i-chest" data-detail-photo="1" aria-label="Рассмотреть спину футболки">
+          <img src="assets/drop/tee-back-final.jpg" alt="Постоянная нашивка у горловины и узкий клинок по спине" loading="lazy" decoding="async" width="1122" height="1402">
+          <span class="detail-caption"><small>01 / СПИНА</small><strong>Свой знак.</strong><span>Монограмма и клинок почти до подола ↗</span></span>
+        </button>
+        <button class="detail-shot detail-closeup" type="button" data-detail-product="tee-sila-i-chest" data-detail-photo="6" aria-label="Рассмотреть нашивку у подола">
+          <img src="assets/drop/tee-detail-v4.jpg" alt="Чёрная тканая нашивка с белой монограммой у переднего подола" loading="lazy" decoding="async">
+          <span class="detail-caption"><small>02 / ПОДОЛ</small><strong>Точность в малом.</strong><span>Фирменная тканая нашивка ↗</span></span>
+        </button>
+        <button class="detail-shot detail-tag" type="button" data-detail-product="tag-sila-i-chest" data-detail-photo="0" aria-label="Рассмотреть жетон">
+          <img src="assets/spin/tag-sich-01.jpg" alt="Жетон с монограммой" loading="lazy" decoding="async" width="1408" height="768">
+          <span class="detail-caption"><small>03 / ЖЕТОН</small><strong>Личный знак.</strong><span>Рассмотреть гравировку ↗</span></span>
+        </button>
       </section>
 
       <section class="manifesto section-pad" id="manifesto">
@@ -272,12 +190,12 @@
           <span class="vertical-label">ВОРОЖБИТОВ / 1993</span>
         </div>
         <div class="manifesto-body">
-          <h2>ОДЕЖДА,<br>КОТОРАЯ<br>ДЕРЖИТ <em>ТЕМП.</em></h2>
-          <p>Это не костюм для чужого мнения. Это базовая форма: плотная, собранная, честная. Маленькая партия — чтобы вещь оставалась своей. Сила и честь носятся, а не пишутся на биллборде.</p>
+          <h2>СИЛА —<br>В ДЕЛЕ.</h2>
+          <p>Дисциплина начинается с простых вещей. Приходить. Делать. Держать слово.</p>
           <div class="manifesto-lines">
             <div><span>01</span><strong>ПЛОТНО</strong><small>Ткань, которую чувствуешь</small></div>
             <div><span>02</span><strong>ПРЯМО</strong><small>Без лишнего на вещах</small></div>
-            <div><span>03</span><strong>СВОИМ</strong><small>Для тех, кто понял сигнал</small></div>
+            <div><span>03</span><strong>СВОИМ</strong><small>Сила и честь — каждый день</small></div>
           </div>
         </div>
       </section>
@@ -285,13 +203,13 @@
       <section class="feature-section section-pad" id="lookbook">
         <div class="section-heading compact">
           <div>
-            <span class="section-kicker">04 / ПОЛЕ</span>
-            <h2>В ПОЛЕ.</h2>
+            <span class="section-kicker">04 / ИСТОРИИ БРЕНДА</span>
+            <h2>В КАДРЕ.</h2>
           </div>
-          <span class="item-count">ЗАМЕТКИ</span>
+
         </div>
         <button class="teaser-card" id="teaserCard" type="button" aria-label="Смотреть тизер выпуска">
-          <img id="teaserPoster" src="assets/video/teaser-poster.jpg" alt="Тизер выпуска 001" loading="lazy" decoding="async">
+          <img id="teaserPoster" src="assets/drop/tee-gym-with-tag-v3.jpg" alt="Тизер выпуска 001" loading="lazy" decoding="async">
           <span class="teaser-shade" aria-hidden="true"></span>
           <span class="teaser-play" aria-hidden="true">▶</span>
           <span class="teaser-meta">
@@ -304,9 +222,9 @@
 
       <section class="join-banner section-pad" id="join">
         <div>
-          <span class="section-kicker">05 / ЗАКРЫТЫЙ СИГНАЛ</span>
+          <span class="section-kicker">05 / НОВОСТИ БРЕНДА</span>
           <h2>УЗНАЙ<br><em>ПЕРВЫМ.</em></h2>
-          <p>Новые выпуски, возвраты размеров и закрытые показы — одно сообщение. Без спама.</p>
+          <p>Новые выпуски и наличие размеров — в канале.</p>
         </div>
         <div class="join-actions">
           <button class="button button-primary punch" id="channelButton" type="button">ОТКРЫТЬ КАНАЛ <span>↗</span></button>
@@ -328,7 +246,7 @@
           </details>
           <details>
             <summary><span>02</span> Как платить?</summary>
-            <p>Деньги списываются сразу. Карта и СБП — обычным переводом. Крипта — отдельным счётом. Звёзды — внутри Telegram. Если размера нет — возврат через менеджера.</p>
+            <p>После оформления появятся доступные способы оплаты. Списание происходит после твоего подтверждения у платёжного провайдера. Статус заявки можно проверить в профиле.</p>
           </details>
           <details>
             <summary><span>03</span> Есть доставка и самовывоз?</summary>
@@ -357,16 +275,16 @@
       </div>
       <div class="footer-meta">
         <span>© 2026 / ВСЕ ПРАВА ЗАЩИЩЕНЫ</span>
-        <span>ДЛЯ ТЕХ, КТО ПОНЯЛ</span>
+        <span>СИЛА И ЧЕСТЬ</span>
       </div>
     </footer>
   </div>
 
   <nav class="bottom-nav" aria-label="Навигация">
     <button class="bottom-link active" data-scroll="home" type="button"><span class="icon" data-icon="home"></span><small>Главная</small></button>
-    <button class="bottom-link" data-scroll="catalog" type="button"><span class="icon" data-icon="grid"></span><small>Выпуск</small></button>
-    <button class="bottom-link" data-scroll="store" type="button"><span class="icon" data-icon="pin"></span><small>Магазин</small></button>
-    <button class="bottom-link" id="bottomSaved" type="button"><span class="icon" data-icon="bookmark"></span><small>Сохр.</small></button>
+    <button class="bottom-link" data-scroll="catalog" type="button"><span class="icon" data-icon="grid"></span><small>Каталог</small></button>
+    <button class="bottom-link" data-scroll="store" type="button"><span class="icon" data-icon="pin"></span><small>Детали</small></button>
+    <button class="bottom-link" id="bottomSaved" type="button"><span class="icon" data-icon="bookmark"></span><small>Избранное</small></button>
     <button class="bottom-link bottom-cart" id="bottomCartButton" type="button"><span class="icon" data-icon="bag"></span><small>Заявка</small><b class="nav-badge hidden" id="bottomCartCount">0</b></button>
   </nav>
 
@@ -376,16 +294,23 @@
       <button class="sheet-close" data-close="productModal" type="button" aria-label="Закрыть">×</button>
       <div class="sheet-image image-frame">
         <div class="stage-switch" role="tablist" aria-label="Просмотр">
-          <button class="stage-btn active" id="stage3d" data-stage="3d" type="button">ОБЗОР</button>
-          <button class="stage-btn" id="stagePhoto" data-stage="photo" type="button">ФОТО</button>
+          <button class="stage-btn active" id="stage3d" data-stage="3d" role="tab" aria-selected="true" aria-controls="view3d" type="button">360°</button>
+          <button class="stage-btn" id="stagePhoto" data-stage="photo" role="tab" aria-selected="false" aria-controls="sheetImage" type="button">ФОТО</button>
         </div>
-        <div class="view3d" id="view3d" aria-label="Обзор вещи с разных сторон"></div>
-        <img id="sheetImage" class="sheet-photo hidden" alt="">
+        <div class="view3d" id="view3d" role="tabpanel" tabindex="0" aria-label="Обзор вещи. Повернуть: стрелки влево и вправо." aria-describedby="view3dHint"></div>
+        <img id="sheetImage" class="sheet-photo hidden" role="tabpanel" alt="">
         <span class="sheet-badge" id="sheetBadge"></span>
         <button class="save-product" id="sheetSave" type="button" aria-label="Сохранить"><span class="icon" data-icon="bookmark"></span></button>
         <p class="view3d-hint" id="view3dHint">ТЯНИ В СТОРОНЫ</p>
-        <div class="gallery-dots hidden" id="galleryDots"></div>
+        <button class="media-zoom" id="zoomProduct" type="button" aria-label="Увеличить фото">⤢</button>
       </div>
+      <div class="media-toolbar">
+        <button id="mediaPrev" type="button" aria-label="Предыдущий ракурс">←</button>
+        <span id="mediaPosition" aria-live="polite">01 / 08</span>
+        <button id="spinToggle" type="button" aria-pressed="false">Вращать</button>
+        <button id="mediaNext" type="button" aria-label="Следующий ракурс">→</button>
+      </div>
+      <div class="gallery-dots gallery-thumbnails hidden" id="galleryDots" aria-label="Фотографии вещи"></div>
       <div class="sheet-content">
         <div class="sheet-kicker" id="sheetKicker">БАЗА</div>
         <h2 id="sheetTitle">—</h2>
@@ -414,7 +339,7 @@
             <button data-sheet-qty="plus" type="button" aria-label="Больше">+</button>
           </div>
         </div>
-        <button class="button button-primary full-button punch" id="addToCartButton" type="button">ДОБАВИТЬ В ЗАЯВКУ <span>+</span></button>
+        <div class="purchase-bar"><span id="purchaseSummary">Выбери размер</span><button class="button button-primary full-button" id="addToCartButton" type="button">ДОБАВИТЬ В ЗАЯВКУ <span>+</span></button></div>
         <button class="button button-ghost full-button" id="waitlistButton" type="button">ЖДАТЬ РАЗМЕР</button>
         <div class="sheet-details" id="sheetDetails"></div>
         <div class="related" id="related"></div>
@@ -498,7 +423,7 @@
         <label class="field-label">КОММЕНТАРИЙ<input id="checkoutNote" type="text" placeholder="Подъезд, время, нюанс по размеру"></label>
         <label class="consent-check"><input id="checkoutConsent" type="checkbox"><span>Соглашаюсь на обработку данных для связи по заявке. <a id="privacyLink" class="privacy-link hidden" href="#" target="_blank" rel="noopener noreferrer">Политика</a></span></label>
         <button class="button button-primary full-button punch" id="submitOrder" type="button">ПЕРЕЙТИ К ОПЛАТЕ <span>↗</span></button>
-        <p class="form-note">Деньги списываются сразу. Если размера нет — возврат через менеджера.</p>
+        <p class="form-note">Оплата — после подтверждения выбранным способом. Состав и сумма заявки указаны выше.</p>
       </div>
     </div>
   </div>
@@ -529,9 +454,10 @@
   <div class="modal-backdrop hidden" id="teaserModal" role="dialog" aria-modal="true" aria-label="Тизер выпуска">
     <div class="teaser-sheet">
       <button class="sheet-close" data-close="teaserModal" type="button" aria-label="Закрыть">×</button>
-      <video id="teaserVideo" controls playsinline preload="none" poster="assets/video/teaser-poster.jpg"></video>
+      <video id="teaserVideo" tabindex="0" controls playsinline preload="none" poster="assets/drop/tee-gym-with-tag-v3.jpg"></video>
       <div class="teaser-actions">
-        <button class="button button-primary punch" id="teaserToShop" type="button">СМОТРЕТЬ ВЫПУСК <span>↗</span></button>
+        <button class="button button-primary punch" id="teaserToShop" type="button">СМОТРЕТЬ ВЕЩИ <span>↗</span></button>
+        <button class="text-button hidden" id="teaserReplay" type="button">Посмотреть ещё раз <span aria-hidden="true">↻</span></button>
         <button class="text-button hidden" id="teaserToStory" type="button">В сторис <span>↗</span></button>
       </div>
     </div>
@@ -540,7 +466,8 @@
   <div class="modal-backdrop hidden" id="lightbox" role="dialog" aria-modal="true" aria-label="Фото">
     <div class="lightbox-sheet">
       <button class="sheet-close" data-close="lightbox" type="button" aria-label="Закрыть">×</button>
-      <img id="lightboxImage" alt="">
+      <button class="lightbox-zoom" id="lightboxZoom" type="button" aria-pressed="false">Увеличить +</button>
+      <div class="lightbox-viewport" id="lightboxViewport" tabindex="0" role="region" aria-label="Фотография. После увеличения перемещайся стрелками."><img id="lightboxImage" alt=""></div>
       <p id="lightboxCaption"></p>
     </div>
   </div>
@@ -559,7 +486,7 @@
           <p class="pay-amount" id="payAmount">—</p>
         </div>
         <ul class="pay-lines" id="payLines"></ul>
-        <p class="pay-lead">Выбери способ. Деньги списываются сразу. Если размера нет — возврат через менеджера.</p>
+        <p class="pay-lead">Выбери способ. Оплата — после подтверждения выбранным способом. Состав и сумма заявки указаны выше.</p>
         <div class="pay-methods" id="payMethods"></div>
         <p class="form-note" id="payNote">Статус обновится сам. Можно закрыть и доплатить из профиля.</p>
       </div>
@@ -573,7 +500,9 @@
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="shop-core.js"></script>
   <script src="viewer3d.js"></script>
+  <script src="checkout.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

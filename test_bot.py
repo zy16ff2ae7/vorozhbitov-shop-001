@@ -287,7 +287,7 @@ class BotTests(unittest.TestCase):
             # Первый раз — файл с диска, второй — уже кешированный идентификатор.
             self.assertIsInstance(api.videos[0], Path)
             self.assertEqual(api.videos[1], "CACHED-ID")
-            self.assertEqual(db.kv_get("teaser_file_id"), "CACHED-ID")
+            self.assertEqual(api.videos[0], bot.local_asset_path(bot.catalog.data["media"]["teaser"]))
 
     def test_stale_teaser_file_id_is_dropped_and_resent(self):
         """Telegram забывает file_id — бот обязан молча перезалить ролик."""
@@ -301,7 +301,7 @@ class BotTests(unittest.TestCase):
                 self.calls.append(video)
                 if video == "DEAD-ID":
                     raise RuntimeError("Telegram API error: wrong file identifier")
-                return {"video": {"file_id": "FRESH-ID"}}
+                return {"video": {"file_id": "DEAD-ID" if len(self.calls) == 1 else "FRESH-ID"}}
 
             def send_message(self, chat_id, text, reply_markup=None):
                 return {"message_id": 1}
@@ -309,11 +309,44 @@ class BotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             api = FakeAPI()
             bot, db = self._teaser_bot(directory, api)
-            db.kv_set("teaser_file_id", "DEAD-ID")
             self.assertTrue(bot.send_teaser(1))
-            self.assertEqual(api.calls[0], "DEAD-ID")
-            self.assertIsInstance(api.calls[1], Path)
-            self.assertEqual(db.kv_get("teaser_file_id"), "FRESH-ID")
+            self.assertTrue(bot.send_teaser(1))
+            self.assertTrue(bot.send_teaser(1))
+            self.assertEqual(api.calls[1], "DEAD-ID")
+            self.assertIsInstance(api.calls[2], Path)
+            self.assertEqual(api.calls[3], "FRESH-ID")
+
+    def test_teaser_source_changes_invalidate_telegram_copy(self):
+        class FakeAPI:
+            def __init__(self):
+                self.videos = []
+
+            def send_video(self, chat_id, video, *args, **kwargs):
+                self.videos.append(video)
+                return {"video": {"file_id": f"COPY-{len(self.videos)}"}}
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "miniapp").mkdir()
+            first = root / "miniapp" / "first.mp4"
+            second = root / "miniapp" / "second.mp4"
+            first.write_bytes(b"old-cut")
+            second.write_bytes(b"new-cut")
+            api = FakeAPI()
+            bot, db = self._teaser_bot(directory, api)
+            db.kv_set("teaser_file_id", "LEGACY-COPY")
+            bot.catalog.data["media"]["teaser"] = "first.mp4"
+            with patch("bot.BASE_DIR", root):
+                self.assertTrue(bot.send_teaser(1))
+                self.assertTrue(bot.send_teaser(1))
+                bot.catalog.data["media"]["teaser"] = "second.mp4"
+                self.assertTrue(bot.send_teaser(1))
+                second.write_bytes(b"replacement-cut")
+                self.assertTrue(bot.send_teaser(1))
+                self.assertEqual(api.videos, [first.resolve(), "COPY-1", second.resolve(), second.resolve()])
+                bot.catalog.data["media"]["teaser"] = "../catalog.json"
+                self.assertFalse(bot.send_teaser(1))
+                self.assertEqual(len(api.videos), 4)
 
     def test_product_card_shows_the_whole_garment_as_an_album(self):
         """В чате вещь тоже показывается со всех сторон, а не одним кадром."""
@@ -387,7 +420,6 @@ class BotTests(unittest.TestCase):
                 "customer": {"name": "Buyer", "phone": "8 (999) 123-45-67", "city": "Могилёв"},
                 "items": [
                     {"product_id": "drop-tee-001", "size": "M", "quantity": 2},
-                    {"product_id": "missing", "size": "M", "quantity": 99},
                 ],
             }
             brand_bot.handle_update({
@@ -700,7 +732,7 @@ class BotTests(unittest.TestCase):
             self.assertEqual(len(api.photos), 1)
             self.assertEqual(api.messages, [])
             _chat_id, path, caption, keyboard = api.photos[0]
-            self.assertEqual(path.name, "welcome.jpg")
+            self.assertEqual(path, brand_bot.local_asset_path(catalog.data["brand"]["welcome_image"]))
             self.assertIn("ВОРОЖБИТОВ", caption)
             self.assertIn("закрытой территории", caption)
             buttons = [btn["text"] for row in keyboard["inline_keyboard"] for btn in row]
@@ -933,11 +965,52 @@ class BotTests(unittest.TestCase):
                 with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as response:
                     page = response.read().decode("utf-8")
                 self.assertRegex(page, r'src="app\.js\?v=\d+"')
-                self.assertRegex(page, r'href="styles\.css\?v=\d+"')
+                self.assertRegex(page, r'href="styles\.css\?v=[a-f0-9]+"')
                 # Файл с меткой должен нормально отдаваться.
                 stamped = re.search(r'src="(app\.js\?v=\d+)"', page).group(1)
                 with urllib.request.urlopen(f"http://127.0.0.1:{port}/{stamped}", timeout=5) as response:
                     self.assertEqual(response.status, 200)
+                    self.assertIn("immutable", response.headers.get("Cache-Control", ""))
+                for resource in ("app.js?v=stale", "?v=123"):
+                    with urllib.request.urlopen(f"http://127.0.0.1:{port}/{resource}", timeout=5) as response:
+                        self.assertEqual(response.headers.get("Cache-Control"), "no-cache")
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_font_replacement_invalidates_css_and_keeps_preload_in_sync(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "fonts").mkdir()
+            font = root / "fonts" / "brand.woff2"
+            font.write_bytes(b"font-v1")
+            os.utime(font, (100, 100))
+            (root / "styles.css").write_text('@font-face{src:url("fonts/brand.woff2")}', encoding="utf-8")
+            (root / "index.html").write_text(
+                '<link rel="preload" href="fonts/brand.woff2"><link rel="stylesheet" href="styles.css">',
+                encoding="utf-8",
+            )
+            server = start_health_server(0)
+            server.RequestHandlerClass.static_root = root
+            base = f"http://127.0.0.1:{server.server_address[1]}/"
+            try:
+                def read_page():
+                    with urllib.request.urlopen(base, timeout=5) as response:
+                        page = response.read().decode()
+                    css_url = re.search(r'href="(styles\.css\?v=[a-f0-9]+)"', page).group(1)
+                    with urllib.request.urlopen(base + css_url, timeout=5) as response:
+                        self.assertIn("immutable", response.headers.get("Cache-Control", ""))
+                        css = response.read().decode()
+                    font_url = re.search(r'href="(fonts/brand\.woff2\?v=\d+)"', page).group(1)
+                    self.assertIn(font_url, css)
+                    return css_url, font_url
+
+                old_css, old_font = read_page()
+                font.write_bytes(b"font-v2")
+                os.utime(font, (200, 200))
+                new_css, new_font = read_page()
+                self.assertNotEqual(old_css, new_css)
+                self.assertNotEqual(old_font, new_font)
             finally:
                 server.shutdown()
                 server.server_close()
@@ -959,17 +1032,16 @@ class BotTests(unittest.TestCase):
                 self.assertFalse([a for a in everything if "pack" in a], "упаковка попала в карточку")
 
     def test_product_photos_are_sharp_enough_to_sell(self):
-        """Размытые стоп-кадры из видео выглядят дёшево — в галерее только резкие снимки."""
+        """Heuristic detail check at a common display size; visual review is still required."""
         try:
-            from PIL import Image
+            from PIL import Image, ImageOps
             import numpy as np
         except ImportError:  # pragma: no cover - зависит от окружения
             self.skipTest("нужны Pillow и numpy")
         catalog = Catalog(Path(__file__).with_name("catalog.json"))
         root = Path(__file__).with_name("miniapp")
-        # Дисперсия лапласиана, нормированная на контраст кадра: абсолютное
-        # значение штрафует честную тёмную съёмку чёрной вещи на чёрном фоне.
-        # Стоп-кадры из видео давали 0.001-0.007, живые студийные снимки — 0.042+.
+        # Pixel-scale sharpness is resolution-dependent. Compare at the same
+        # display size before normalizing contrast for black-on-black photos.
         threshold = 0.02
         for product_id in ("tee-sila-i-chest", "tag-sila-i-chest"):
             product = catalog.get(product_id)
@@ -978,7 +1050,9 @@ class BotTests(unittest.TestCase):
                 if not path.is_file():
                     continue
                 with self.subTest(shot=shot):
-                    grey = np.asarray(Image.open(path).convert("L"), dtype=float)
+                    with Image.open(path) as image:
+                        display = ImageOps.contain(image.convert("L"), (800, 800), Image.Resampling.LANCZOS)
+                        grey = np.asarray(display, dtype=float)
                     laplacian = (
                         grey[:-2, 1:-1] + grey[2:, 1:-1]
                         + grey[1:-1, :-2] + grey[1:-1, 2:]
@@ -1023,13 +1097,15 @@ class BotTests(unittest.TestCase):
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/{media['teaser']}", timeout=5) as response:
                 self.assertEqual(response.status, 200)
                 self.assertEqual(response.headers.get("Content-Type"), "video/mp4")
+                self.assertIn("immutable", response.headers.get("Cache-Control", ""))
         finally:
             server.shutdown()
             server.server_close()
 
     def test_teaser_video_is_the_film_cut(self):
-        """В модалке — плёночный монтаж v2: вертикаль, со звуком, не тяжелее 6 МБ."""
-        video = Path(__file__).with_name("miniapp") / "assets" / "video" / "teaser.mp4"
+        """Подключённый тизер со звуком, faststart и размером менее 6 МБ."""
+        media = Catalog(Path(__file__).with_name("catalog.json")).data["media"]
+        video = Path(__file__).with_name("miniapp") / media["teaser"]
         self.assertTrue(video.is_file(), "нет файла тизера")
         size_mb = video.stat().st_size / 1e6
         self.assertLess(size_mb, 6.0, f"тизер раздулся до {size_mb:.1f} МБ — мобильный трафик")

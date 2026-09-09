@@ -262,13 +262,50 @@ video.welcome-media.is-playing { opacity: 1; }
 /* Кнопки заставки идут колонкой: в строку «посмотреть ролик» уезжал за край. */
 .welcome-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .welcome-actions .button-primary { width: 100%; max-width: 340px; justify-content: center; }
-.welcome-skip {
-  display: inline-flex; align-items: center; gap: 8px;
-  color: #cfc7bb; font-size: 12px; letter-spacing: .1em;
-  text-shadow: 0 1px 4px rgba(0,0,0,.9);
+/* «Посмотреть ролик» — вторая по важности кнопка.
+   Селектор .welcome-actions .welcome-skip, а не просто .welcome-skip:
+   общий .text-button ниже по файлу имеет ту же специфичность и
+   перебивал цвет и кегль — из-за этого ссылка rendered'илась серой
+   10-м и рядом с большой красной «ВОЙТИ В МАГАЗИН» просто исчезала.
+   Теперь это ссылка цвета слоновой кости с красной подчёркивающей
+   линией и обведённым кружком play — по языку бренда (съёмка, титры),
+   без коробки, которая спорила бы с главной кнопкой. */
+.welcome-actions .welcome-skip {
+  display: inline-flex; align-items: center; gap: 12px;
+  padding: 0;
+  color: var(--ink);
+  font-size: 12px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, .7);
+  transition: color .18s ease;
 }
-.welcome-skip span { color: var(--red); }
-.welcome-skip:hover { color: var(--ink); }
+.welcome-actions .welcome-skip .ws-text {
+  /* Цвет и кегль задаём явно: правило .text-button span ниже по файлу
+     красит любой span внутри в красный 15-м и перебивает наследование. */
+  color: var(--ink);
+  font-size: 12px; font-weight: 700; letter-spacing: .14em;
+  margin: 0;
+  border-bottom: 1px solid var(--red);
+  padding-bottom: 4px;
+  transition: border-color .18s ease;
+}
+.welcome-actions .welcome-skip .ws-play {
+  display: inline-grid; place-items: center;
+  flex: none;
+  width: 30px; height: 30px;
+  margin: 0;
+  border: 1px solid rgba(244, 238, 230, .4);
+  border-radius: 50%;
+  color: var(--red);
+  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+}
+.welcome-actions .welcome-skip:hover .ws-text { border-bottom-color: var(--red-hot); }
+.welcome-actions .welcome-skip:hover .ws-play {
+  border-color: var(--red);
+  background: rgba(225, 6, 0, .14);
+  transform: scale(1.06);
+}
+.welcome-actions .welcome-skip:active .ws-play { transform: scale(.95); }
 
 /* Разворот выпуска в шапке: что именно продаётся */
 .hero-drop { display: flex; gap: 8px; margin-top: 22px; }
@@ -314,6 +351,7 @@ video.welcome-media.is-playing { opacity: 1; }
   padding-bottom: calc(64px + var(--safe-bottom));
 }
 .section-pad { padding-inline: clamp(16px, 5vw, 78px); }
+main > section { scroll-margin-top: calc(62px + var(--safe-top)); }
 .topbar {
   height: calc(62px + var(--safe-top));
   padding: var(--safe-top) clamp(16px, 5vw, 78px) 0;
@@ -431,6 +469,7 @@ h1, h2 {
   position: relative;
   min-height: min(86vh, 760px);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 .hero-media {
   position: relative; min-height: 420px; overflow: hidden; background: #0c0c0e;
@@ -527,8 +566,10 @@ h1, h2 {
 
 /* ---------- catalog ---------- */
 .catalog-section { padding-top: 64px; padding-bottom: 72px; }
-.section-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
-.section-heading h2 { font-size: clamp(42px, 12vw, 86px); margin: 14px 0 0; line-height: .86; }
+.section-heading { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 20px; margin-bottom: 28px; }
+.section-heading > div { min-width: 0; }
+.section-heading h2 { font-size: clamp(36px, 12vw, 86px); margin: 14px 0 0; line-height: .86; }
+.section-heading .item-count { white-space: nowrap; }
 .section-heading.compact { margin-bottom: 22px; }
 .category-row { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 16px; }
 .category-chip, .filter-chip {
@@ -747,7 +788,7 @@ h1, h2 {
 .person-input.error + .person-hint, .person-row .person-hint.error { color: var(--red-hot); }
 .person-hint { margin: 0; font-size: 11px; line-height: 1.4; color: var(--dim); }
 
-/* --- Тизер выпуска: настоящая съёмка бренда --- */
+/* --- Фильм выпуска --- */
 .teaser-card {
   position: relative; display: block; width: 100%; margin: 0 0 8px;
   padding: 0; border: 1px solid var(--line); background: #0c0c0e;
@@ -780,9 +821,10 @@ h1, h2 {
 }
 .teaser-meta small { font-size: 10px; letter-spacing: .18em; color: var(--muted); text-transform: uppercase; }
 
-.teaser-sheet { background: #050505; padding: 48px 0 20px; }
-.teaser-sheet video { width: 100%; max-height: 72vh; background: #000; display: block; }
+.teaser-sheet { background: #050505; padding: 48px 0 20px; overflow-y: auto; overscroll-behavior: contain; }
+.teaser-sheet video { width: 100%; max-height: 62vh; max-height: min(68dvh, calc(100dvh - 230px)); object-fit: contain; background: #000; display: block; }
 .teaser-actions { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 0; }
+.teaser-actions .text-button { min-height: 44px; align-self: center; }
 
 @media (prefers-reduced-motion: reduce) {
   video.welcome-media { display: none; }
@@ -913,6 +955,12 @@ h1, h2 {
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
+}
+.sheet-photo[src*="/tee-flatlay-v2.jpg"],
+.sheet-photo[src*="/tee-back-v3.jpg"],
+.sheet-photo[src*="/tee-detail-v4.jpg"] { object-fit: contain; }
+@media (max-width: 859px) {
+  .spin-frame[src*="/tee-sich-"] { object-fit: cover; }
 }
 
 .stage-switch {
@@ -1300,4 +1348,86 @@ h1, h2 {
     transition-duration: .01ms !important;
   }
   .welcome-media, .hero-media img { animation: none; }
+}
+/* MOBILE-HARDEN: адаптация под узкие экраны (<=380px). */
+@media (max-width: 380px) {
+  body { min-width: 0; }
+  .hero h1 { font-size: 16.8vw; }
+  .topbar { padding-inline: 12px; gap: 8px; }
+  .topbar .brand-lockup { min-width: 0; gap: 7px; }
+  .topbar .brand-mark { width: 24px; flex-shrink: 0; }
+  .topbar .brand-type strong { font-size: 10px; letter-spacing: .08em; }
+  .topbar .brand-type small { font-size: 8px; letter-spacing: .08em; white-space: nowrap; }
+  .top-actions { gap: 4px; flex-shrink: 0; }
+  .badge-3d { font-size: 12px; }
+  .boot small { font-size: 12px; }
+  .bottom-link small { font-size: 12px; }
+  .brand-type small, .footer-brand small { font-size: 12px; }
+  .brand-type strong, .footer-brand strong { font-size: 12px; }
+  .button { font-size: 12px; }
+  .cart-line-name small { font-size: 12px; }
+  .category-chip, .filter-chip { font-size: 12px; }
+  .checkout-total { font-size: 12px; }
+  .consent-check { font-size: 12px; }
+  .counter { font-size: 12px; }
+  .eyebrow, .section-kicker, .sheet-kicker, .item-count, .vertical-label, .filter-caption { font-size: 12px; }
+  .fact-row { font-size: 12px; }
+  .faq-list summary span { font-size: 12px; }
+  .field-label { font-size: 12px; }
+  .filter-button { font-size: 12px; }
+  .filter-panel-head { font-size: 12px; }
+  .footer-meta { font-size: 12px; }
+  .form-note { font-size: 12px; }
+  .hero-drop-text span { font-size: 12px; }
+  .hero-live { font-size: 12px; }
+  .hero-specs span { font-size: 12px; }
+  .lightbox-sheet p { font-size: 12px; }
+  .lookbook-card figcaption span { font-size: 12px; }
+  .manifesto-lines span { font-size: 12px; }
+  .nav-badge { font-size: 12px; }
+  .pay-card small { font-size: 12px; }
+  .pay-kicker { font-size: 12px; }
+  .person-hint { font-size: 12px; }
+  .person-label { font-size: 12px; }
+  .product-badge { font-size: 12px; }
+  .product-fit { font-size: 12px; }
+  .product-hover { font-size: 12px; }
+  .product-sign { font-size: 12px; }
+  .product-topline { font-size: 12px; }
+  .profile-caption { font-size: 12px; }
+  .profile-fill { font-size: 12px; }
+  .profile-hero small { font-size: 12px; }
+  .profile-order-cancel { font-size: 12px; }
+  .profile-order-main small { font-size: 12px; }
+  .profile-order-pay { font-size: 12px; }
+  .profile-order-status { font-size: 12px; }
+  .profile-stats span { font-size: 12px; }
+  .qty-row { font-size: 12px; }
+  .related h4 { font-size: 12px; }
+  .related-card span { font-size: 12px; }
+  .remove-line { font-size: 12px; }
+  .search-hints button { font-size: 12px; }
+  .sheet-badge { font-size: 12px; }
+  .size-heading { font-size: 12px; }
+  .size-hint { font-size: 12px; }
+  .size-table > div:first-child { font-size: 12px; }
+  .sort-label { font-size: 12px; }
+  .sort-wrap select { font-size: 12px; }
+  .stage-btn { font-size: 12px; }
+  .store-facts span { font-size: 12px; }
+  .store-hero figcaption small { font-size: 12px; }
+  .store-hero figcaption span { font-size: 12px; }
+  .store-shot figcaption { font-size: 12px; }
+  .success-toast small { font-size: 12px; }
+  .success-toast strong { font-size: 12px; }
+  .teaser-meta small { font-size: 12px; }
+  .text-button { font-size: 12px; }
+  .ticker-track { font-size: 12px; }
+  .tool-count { font-size: 12px; }
+  .view-banner { font-size: 12px; }
+  .view3d-hint { font-size: 12px; }
+  .welcome-count-label { font-size: 12px; }
+  .welcome-facts { font-size: 12px; }
+  .welcome-kicker { font-size: 12px; }
+  .welcome-meta { font-size: 12px; }
 }
