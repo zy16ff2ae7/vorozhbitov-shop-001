@@ -1083,6 +1083,14 @@ class BotTests(unittest.TestCase):
         self.assertNotIn("Пропустить", index)
         self.assertNotIn(".welcome-close", styles)
 
+    def test_teaser_has_no_photo_lead(self):
+        """Фильм выпуска начинается сразу с видео: фото-заставки нет ни на карточке, ни в модалке."""
+        miniapp = Path(__file__).with_name("miniapp")
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn('id="teaserPoster"', index)
+        video = next(line for line in index.splitlines() if 'id="teaserVideo"' in line)
+        self.assertNotIn("poster=", video)
+
     def test_media_urls_carry_a_version_so_new_cuts_are_not_cached(self):
         """Видео кешируется на сутки по неизменному имени — без версии в адресе
         пользователь после замены ролика ещё сутки видит старый монтаж."""

@@ -524,3 +524,4 @@ html { scrollbar-width: thin; scrollbar-color: #2b2b2f #0b0b0d; }
 .stories-progress i.done b { width: 100%; }
 .quiz-sub { margin-top: 16px; }
 .tryon-upload.hidden { display: none; }
+.teaser-card { min-height: 190px; }

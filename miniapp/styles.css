@@ -747,14 +747,6 @@ h1, h2 {
   padding: 0; border: 1px solid var(--line); background: #0c0c0e;
   overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-.teaser-card img {
-  display: block; width: 100%; aspect-ratio: 16/10; object-fit: cover; object-position: 50% 28%;
-  filter: contrast(1.05) saturate(.72); transition: transform .5s ease;
-}
-.teaser-card:focus-visible img { transform: scale(1.03); }
-@media (hover: hover) {
-  .teaser-card:hover img { transform: scale(1.03); }
-}
 .teaser-shade {
   position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(180deg, rgba(7,7,8,.05) 30%, rgba(7,7,8,.85));

@@ -1247,7 +1247,6 @@
       welcomeLoop: media.welcome_loop || "assets/video/welcome-final-30s.mp4",
       welcomePoster: media.welcome_poster || "assets/drop/hero-sila-chest-v1.jpg",
       teaser: media.teaser || "assets/video/campaign-v6.mp4",
-      teaserPoster: media.teaser_poster || "assets/drop/hero-sila-chest-v1.jpg",
       title: media.teaser_title || "СИЛА И ЧЕСТЬ",
       caption: media.teaser_caption || "Выпуск 001 · Никита Ворожбитов",
       storyUrl: media.teaser_story_url || ""
@@ -1268,12 +1267,8 @@
   function applyMedia() {
     const media = mediaConfig();
     if (state.data.media && state.data.media.hero_image) $("#heroFallback").src = state.data.media.hero_image;
-    const poster = $("#teaserPoster");
-    if (poster) poster.src = media.teaserPoster;
     if ($("#teaserTitle")) $("#teaserTitle").textContent = media.title;
     if ($("#teaserCaption")) $("#teaserCaption").textContent = media.caption;
-    const teaserVideo = $("#teaserVideo");
-    if (teaserVideo) teaserVideo.poster = media.teaserPoster;
     setupWelcomeVideo(media);
     // Тираж на заставке берём из каталога, а не пишем руками.
     const stock = $("#welcomeStock");
