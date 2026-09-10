@@ -139,6 +139,8 @@ img { display: block; max-width: 100%; }
   position: fixed; inset: 0; z-index: 180;
   display: grid; align-items: end;
   overflow: hidden;
+  /* Сплошной фон: пока видео грузится, магазин под заставкой не просвечивает. */
+  background: #070708;
 }
 /* Уход заставки: поднимается и растворяется, магазин уже под ней. */
 .welcome.is-leaving {

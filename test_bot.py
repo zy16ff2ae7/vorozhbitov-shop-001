@@ -45,6 +45,24 @@ def make_db(directory: str) -> Database:
     return Database(Path(directory) / "test.sqlite3")
 
 
+def mp4_duration_seconds(path: Path) -> float:
+    """Длительность mp4 из бокса mvhd — без ffmpeg, только стандартная библиотека."""
+    blob = path.read_bytes()
+    at = blob.find(b"mvhd")
+    if at < 0 or len(blob) < at + 32:
+        raise AssertionError(f"в {path.name} нет бокса mvhd")
+    version = blob[at + 4]
+    if version == 0:
+        timescale = int.from_bytes(blob[at + 16:at + 20], "big")
+        duration = int.from_bytes(blob[at + 20:at + 24], "big")
+    else:
+        timescale = int.from_bytes(blob[at + 20:at + 24], "big")
+        duration = int.from_bytes(blob[at + 24:at + 32], "big")
+    if not timescale:
+        raise AssertionError(f"в {path.name} нулевой timescale")
+    return duration / timescale
+
+
 class BotTests(unittest.TestCase):
     def test_phone_normalization(self):
         self.assertEqual(normalize_phone("8 (999) 123-45-67"), "+79991234567")
@@ -1105,9 +1123,62 @@ class BotTests(unittest.TestCase):
         self.assertNotIn("poster=", "\n".join(lines[at:at + 3]))
         app = (miniapp / "app.js").read_text(encoding="utf-8")
         self.assertNotIn("video.poster = media.welcomePoster", app)
-        self.assertIn('fallback.classList.toggle("hidden", canPlay || (!welcomePlayback.failed && !reducedMotion()))', app)
+        self.assertIn('fallback.classList.toggle("hidden", canPlay || !reducedMotion())', app)
         atf = next(i for i, line in enumerate(lines) if 'id="welcomeFallback"' in line)
         self.assertIn("hidden", lines[atf])
+
+    def test_welcome_video_starts_loading_immediately(self):
+        """Фильм грузится сразу: preload, мгновенная установка src и повторные попытки запуска."""
+        miniapp = Path(__file__).with_name("miniapp")
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        video = next(line for line in index.splitlines() if 'id="welcomeVideo"' in line)
+        self.assertIn('preload="auto"', video)
+        app = (miniapp / "app.js").read_text(encoding="utf-8")
+        # Запуск не ждёт каталог: сетап при инициализации, на показе и по данным каталога.
+        self.assertNotIn("if (state.catalogReady) setupWelcomeVideo", app)
+        self.assertGreaterEqual(app.count("setupWelcomeVideo(mediaConfig())"), 2)
+        self.assertIn("setupWelcomeVideo(media)", app)
+        # Источник ставится до гейта воспроизведения и явно прогружается.
+        self.assertIn("video.src = welcomePlayback.source", app)
+        self.assertIn("video.load();", app)
+        # WebView может резать автоплей: жест, возврат во вкладку и сторожевой таймер.
+        self.assertIn('"pointerdown"', app)
+        self.assertIn('"visibilitychange"', app)
+        self.assertIn("welcomePlayback.watchdog", app)
+        self.assertIn("}, 4000);", app)
+
+    def test_welcome_video_keeps_playing_when_catalog_restamps(self):
+        """Каталог приносит тот же файл с новым ?v-штампом — идущий ролик не перезапускается."""
+        app = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
+        self.assertIn('video.classList.contains("is-playing") || (!video.paused && video.currentTime > 0)', app)
+        self.assertIn("welcomePlayback.source !== media.welcomeLoop && !playing", app)
+
+    def test_welcome_has_solid_background(self):
+        """У заставки сплошной фон: пока видео грузится, магазин под ней не просвечивает."""
+        styles = (Path(__file__).with_name("miniapp") / "styles.css").read_text(encoding="utf-8")
+        at = styles.find(".welcome {")
+        self.assertNotEqual(at, -1, "нет правила .welcome")
+        self.assertIn("background: #070708", styles[at:at + 400])
+
+    def test_welcome_video_has_no_photo_insert(self):
+        """Фоновый ролик — сплошное видео: статичная фото-вставка вырезана, титр и финал на месте."""
+        miniapp = Path(__file__).with_name("miniapp")
+        video = miniapp / "assets/video/welcome-final-30s.mp4"
+        self.assertTrue(video.is_file(), "нет файла фонового ролика")
+        # Было 28.4с с 3.6с фото-вставкой, стало ~24.8с чистого видео.
+        duration = mp4_duration_seconds(video)
+        self.assertGreater(duration, 20.0, f"ролик обрезан слишком сильно: {duration:.1f}с")
+        self.assertLess(duration, 27.0, f"фото-вставка на месте: {duration:.1f}с")
+        size_mb = video.stat().st_size / 1e6
+        self.assertLess(size_mb, 3.0, f"фон раздулся до {size_mb:.1f} МБ — мобильный трафик")
+        blob = video.read_bytes()
+        moov, mdat = blob.find(b"moov"), blob.find(b"mdat")
+        self.assertNotEqual(moov, -1, "в файле нет moov")
+        self.assertLess(moov, mdat, "moov после mdat — нужен -movflags +faststart")
+        # Плашка честно говорит новую длительность.
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        self.assertIn("ФИЛЬМ · 25 СЕК", index)
+        self.assertNotIn("ФИЛЬМ · 30 СЕК", index)
 
     def test_media_urls_carry_a_version_so_new_cuts_are_not_cached(self):
         """Видео кешируется на сутки по неизменному имени — без версии в адресе
