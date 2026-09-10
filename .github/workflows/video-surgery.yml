@@ -29,6 +29,7 @@ jobs:
           XV() { ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 "$1"; }
           E() { echo "::error::$1"; exit 1; }
           ENC="-c:v libx264 -preset fast -crf 18 -video_track_timescale 15360"
+          mkdir -p ../probe && for n in $(seq 40 4 84); do ffmpeg -y -v error -i $W -vf "select='eq(n,$n)',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1" -frames:v 1 ../probe/welcome-f$n.jpg || E "probe$n"; done
           ffmpeg -y -v error -i $W -vf "select='between(n,0,273)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 274 $ENC w0.mp4 || E "w0"
           ffmpeg -y -v error -i $W -vf "select='between(n,326,507)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 182 $ENC w1.mp4 || E "w1"
           ffmpeg -y -v error -i $W -vf "select='between(n,594,733)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 140 $ENC w2.mp4 || E "w2"
