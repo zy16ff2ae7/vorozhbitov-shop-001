@@ -163,7 +163,6 @@ button:disabled { opacity: .45; cursor: default; transform: none; }
 .welcome-media { filter: none; animation: none; }
 .welcome-frame { justify-content: flex-end; padding: 34px 22px calc(25px + var(--safe-bottom)); }
 .welcome-copy { max-width: 330px; font-size: 12px; }
-.welcome-copy .welcome-close { display: none; }
 .welcome-meta { margin-top: 22px; }
 .welcome-actions { gap: 14px; margin-top: 22px; }
 @media (max-width:360px) {
@@ -345,7 +344,6 @@ button:disabled { opacity: .45; cursor: default; transform: none; }
 .store-hero img { object-position: center; }
 /* Заставка: призыв после фактов и пропуск тем же переходом, что у входа. */
 .welcome-cta { margin: 12px 0 0; color: #f4eee6; font-weight: 700; }
-.welcome-close { display: block; margin-top: 16px; min-height: 44px; }
 /* Секция магазина: на мобильных шапка и сетка с боковыми полями, фото-витрина — в край. */
 @media (max-width:859px) {
   .store-head, .store-grid { padding-inline: clamp(16px, 5vw, 78px); }

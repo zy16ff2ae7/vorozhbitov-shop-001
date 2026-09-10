@@ -1777,7 +1777,6 @@
     $$('[data-detail-product]').forEach(button => button.addEventListener('click', () => openProduct(button.dataset.detailProduct, Number(button.dataset.detailPhoto))));
     document.addEventListener("visibilitychange", syncModalLayers);
     $("#enterShop").addEventListener("click", enterShop);
-    $("#welcomeClose").addEventListener("click", enterShop);
     const watchTeaser = $("#watchTeaser");
     if (watchTeaser) {
       watchTeaser.addEventListener("click", () => {

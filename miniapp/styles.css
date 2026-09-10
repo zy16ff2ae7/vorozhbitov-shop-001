@@ -239,7 +239,6 @@ video.welcome-media.is-playing { opacity: 1; }
   content: ""; width: 12px; height: 1px; background: var(--red);
   box-shadow: 0 0 10px rgba(225,6,0,.55);
 }
-.welcome-close { color: #f4eee6; font-weight: 600; }
 .welcome-meta {
   margin-top: 22px; display: flex; gap: 18px; flex-wrap: wrap;
   font-size: 9px; letter-spacing: .18em; color: var(--muted);

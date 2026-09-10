@@ -1076,8 +1076,12 @@ class BotTests(unittest.TestCase):
         self.assertIn("закрытую территорию", index)
         self.assertIn("Бери размер, пока он есть.", index)
         # Стили для новых блоков должны существовать, иначе разметка развалится.
-        for selector in (".welcome-lede", ".welcome-drop", ".welcome-facts", ".welcome-close"):
+        for selector in (".welcome-lede", ".welcome-drop", ".welcome-facts"):
             self.assertIn(selector, styles, f"нет стилей для {selector}")
+        # Кнопки «Пропустить» нет: вход — только через «Войти в магазин».
+        self.assertNotIn("welcomeClose", index)
+        self.assertNotIn("Пропустить", index)
+        self.assertNotIn(".welcome-close", styles)
 
     def test_media_urls_carry_a_version_so_new_cuts_are_not_cached(self):
         """Видео кешируется на сутки по неизменному имени — без версии в адресе
