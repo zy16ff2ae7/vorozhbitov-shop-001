@@ -26,19 +26,27 @@
 ++ XV ../v6b-cut.mp4
 ++ ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 ../v6b-cut.mp4
 + '[' 547 = 547 ']'
++ printf 'file '\''a1.mp4'\''\nfile '\''an1.mp4'\''\nfile '\''a2.mp4'\''\n'
++ ffmpeg -y -v error -f concat -safe 0 -i clist.txt -i ../../miniapp/assets/video/campaign-v6.mp4 -map 0:v:0 -map 1:a:0 -af atrim=start=1.4,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.15 -c:v copy -c:a aac -b:a 192k -ar 48000 -movflags +faststart ../v6c-cut-replace.mp4
+++ XV ../v6c-cut-replace.mp4
+++ ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 ../v6c-cut-replace.mp4
++ '[' 547 = 547 ']'
 + cd ..
 + ffmpeg -y -v error -i welcome-v2.mp4 -frames:v 1 -vf fps=1,scale=320:-1,tile=5x6 welcome-v2-sheet.jpg
 + ffmpeg -y -v error -i v6a-replace.mp4 -frames:v 1 -vf fps=1,scale=320:-1,tile=5x4 v6a-sheet.jpg
 + ffmpeg -y -v error -i v6b-cut.mp4 -frames:v 1 -vf fps=1,scale=320:-1,tile=5x4 v6b-sheet.jpg
++ ffmpeg -y -v error -i v6c-cut-replace.mp4 -frames:v 1 -vf fps=1,scale=320:-1,tile=5x4 v6c-sheet.jpg
 + ls -la
-total 14416
-drwxr-xr-x 3 runner runner    4096 Sep 10 18:07 .
-drwxr-xr-x 8 runner runner    4096 Sep 10 18:07 ..
--rw-r--r-- 1 runner runner    4646 Sep 10 18:07 build.log
-drwxr-xr-x 2 runner runner    4096 Sep 10 18:07 stage
--rw-r--r-- 1 runner runner 5718016 Sep 10 18:07 v6a-replace.mp4
--rw-r--r-- 1 runner runner  177297 Sep 10 18:07 v6a-sheet.jpg
--rw-r--r-- 1 runner runner 5448074 Sep 10 18:07 v6b-cut.mp4
--rw-r--r-- 1 runner runner  160086 Sep 10 18:07 v6b-sheet.jpg
--rw-r--r-- 1 runner runner  209573 Sep 10 18:07 welcome-v2-sheet.jpg
--rw-r--r-- 1 runner runner 3012181 Sep 10 18:07 welcome-v2.mp4
+total 19924
+drwxr-xr-x 3 runner runner    4096 Sep 10 18:11 .
+drwxr-xr-x 8 runner runner    4096 Sep 10 18:10 ..
+-rw-r--r-- 1 runner runner    5273 Sep 10 18:11 build.log
+drwxr-xr-x 2 runner runner    4096 Sep 10 18:11 stage
+-rw-r--r-- 1 runner runner 5720785 Sep 10 18:11 v6a-replace.mp4
+-rw-r--r-- 1 runner runner  177319 Sep 10 18:11 v6a-sheet.jpg
+-rw-r--r-- 1 runner runner 5450824 Sep 10 18:11 v6b-cut.mp4
+-rw-r--r-- 1 runner runner  160069 Sep 10 18:11 v6b-sheet.jpg
+-rw-r--r-- 1 runner runner 5470822 Sep 10 18:11 v6c-cut-replace.mp4
+-rw-r--r-- 1 runner runner  162894 Sep 10 18:11 v6c-sheet.jpg
+-rw-r--r-- 1 runner runner  209496 Sep 10 18:11 welcome-v2-sheet.jpg
+-rw-r--r-- 1 runner runner 3012833 Sep 10 18:11 welcome-v2.mp4
