@@ -1191,7 +1191,8 @@
       document.body.classList.add("welcoming");
       syncModalLayers();
       $("#enterShop").focus({ preventScroll: true });
-      if (state.catalogReady) setupWelcomeVideo(mediaConfig());
+      // Фильм не ждёт каталог: стартует сразу, версия из каталога подхватится без перезапуска.
+      setupWelcomeVideo(mediaConfig());
     }, reducedMotion() ? 0 : 600);
   }
 
@@ -1254,7 +1255,7 @@
   }
 
   function saverMode() {
-    // Экономия трафика или медленная сеть — оставляем постер, видео не грузим.
+    // Экономия трафика или медленная сеть — чёрный фон, видео не грузим.
     const conn = navigator.connection || {};
     if (conn.saveData) return true;
     return /(^|-)2g$/.test(String(conn.effectiveType || ""));
@@ -1276,7 +1277,7 @@
     if (stock && lead) stock.textContent = String(lead.stock_label).toUpperCase();
   }
 
-  const welcomePlayback = { source: "", ready: false, paused: false, failed: false, bound: false, pending: false };
+  const welcomePlayback = { source: "", ready: false, paused: false, failed: false, bound: false, pending: false, watchdog: 0 };
 
   function welcomeCanPlay() {
     const welcome = $("#welcome");
@@ -1294,13 +1295,20 @@
     $("#welcomeMotionIcon").textContent = welcomePlayback.paused ? "▷" : "Ⅱ";
     const canPlay = welcomeCanPlay();
     const fallback = $("#welcomeFallback");
-    if (fallback) fallback.classList.toggle("hidden", canPlay || (!welcomePlayback.failed && !reducedMotion()));
+    // Фото — только для режима без движения. Во всех остальных случаях фон чёрный,
+    // магазин под заставкой не просвечивает (у .welcome сплошной фон).
+    if (fallback) fallback.classList.toggle("hidden", canPlay || !reducedMotion());
+    // Источник ставим сразу, не дожидаясь конца загрузки и гейта воспроизведения:
+    // ролик буферизуется уже под бут-штампом и стартует мгновенно.
+    if (!saverMode() && !reducedMotion() && welcomePlayback.source && video.getAttribute("src") !== welcomePlayback.source) {
+      video.src = welcomePlayback.source;
+      video.load();
+    }
     if (!canPlay) {
       video.pause();
       if (saverMode() || reducedMotion()) video.classList.remove("is-playing");
       return;
     }
-    if (video.getAttribute("src") !== welcomePlayback.source) video.src = welcomePlayback.source;
     if (!video.paused || welcomePlayback.pending) return;
     welcomePlayback.pending = true;
     const attempt = video.play();
@@ -1318,7 +1326,10 @@
 
   function setupWelcomeVideo(media) {
     const video = $("#welcomeVideo");
-    if (welcomePlayback.source !== media.welcomeLoop) {
+    // Каталог приходит позже старта и приносит тот же файл с новым ?v-штампом.
+    // Уже идущий ролик не трогаем, иначе начало проиграется дважды.
+    const playing = video.classList.contains("is-playing") || (!video.paused && video.currentTime > 0);
+    if (welcomePlayback.source !== media.welcomeLoop && !playing) {
       video.pause();
       video.classList.remove("is-playing");
       welcomePlayback.source = media.welcomeLoop;
@@ -1345,7 +1356,18 @@
       });
       window.matchMedia?.("(prefers-reduced-motion: reduce)").addEventListener?.("change", syncWelcomeVideo);
       navigator.connection?.addEventListener?.("change", syncWelcomeVideo);
+      // WebView может резать автоплей: первый жест и возврат во вкладку — повод повторить.
+      window.addEventListener("pointerdown", () => { if (!video.classList.contains("is-playing")) syncWelcomeVideo(); }, { passive: true });
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) syncWelcomeVideo(); });
     }
+    // Сторожевой таймер: не заиграло за 4 секунды — перезагружаем и повторяем попытку.
+    window.clearTimeout(welcomePlayback.watchdog);
+    welcomePlayback.watchdog = window.setTimeout(() => {
+      if (video.classList.contains("is-playing") || !welcomeCanPlay()) return;
+      welcomePlayback.pending = false;
+      video.load();
+      syncWelcomeVideo();
+    }, 4000);
     syncWelcomeVideo();
   }
 
@@ -1353,6 +1375,10 @@
     const video = $("#welcomeVideo");
     video.pause();
     video.classList.remove("is-playing");
+    // Гасим источник и сторожевой таймер, иначе syncWelcomeVideo вернёт src
+    // и ролик будет грузиться фоном, пока человек в магазине.
+    welcomePlayback.source = "";
+    window.clearTimeout(welcomePlayback.watchdog);
     if (video.hasAttribute("src")) {
       video.removeAttribute("src");
       video.load();
@@ -2034,6 +2060,8 @@
   configureTelegram();
   bindEvents();
   updateCounters();
+  // Фильм начинаем грузить сразу, не дожидаясь 600мс бута и каталога.
+  setupWelcomeVideo(mediaConfig());
   startExperience();
   loadCatalog();
   window.VorozhbitovShop = { state, openProduct, openCart };
