@@ -1091,6 +1091,12 @@ class BotTests(unittest.TestCase):
         video = next(line for line in index.splitlines() if 'id="teaserVideo"' in line)
         self.assertNotIn("poster=", video)
 
+    def test_teaser_skips_photo_lead(self):
+        """Тизер стартует с видео, а не со стопкадра: пропуск начала прошит в open/close/replay."""
+        app = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
+        self.assertIn("TEASER_SKIP_SECONDS", app)
+        self.assertNotIn("currentTime = 0", app)
+
     def test_media_urls_carry_a_version_so_new_cuts_are_not_cached(self):
         """Видео кешируется на сутки по неизменному имени — без версии в адресе
         пользователь после замены ролика ещё сутки видит старый монтаж."""

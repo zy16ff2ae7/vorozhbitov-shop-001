@@ -1374,6 +1374,15 @@
     renderProducts();
   }
 
+  // Фото-стопкадр в начале монтажа тизера — столько секунд пропускаем при старте.
+  const TEASER_SKIP_SECONDS = 2.5;
+
+  function cueTeaserStart(video) {
+    const start = () => { try { video.currentTime = TEASER_SKIP_SECONDS; } catch (_) { /* метаданные ещё не готовы */ } };
+    if (video.readyState >= 1) start();
+    else video.addEventListener("loadedmetadata", start, { once: true });
+  }
+
   function openTeaser() {
     const media = mediaConfig();
     const video = $("#teaserVideo");
@@ -1382,7 +1391,7 @@
     $("#teaserReplay").classList.add("hidden");
     if (video) {
       if (video.getAttribute("src") !== media.teaser) video.src = media.teaser;
-      video.currentTime = 0;
+      cueTeaserStart(video);
     }
     const story = $("#teaserToStory");
     // Кнопка сторис есть только на клиентах Bot API 7.8+ и с публичным URL.
@@ -1399,7 +1408,7 @@
     const video = $("#teaserVideo");
     if (video) {
       video.pause();
-      video.currentTime = 0;
+      cueTeaserStart(video);
     }
     $("#teaserReplay").classList.add("hidden");
     syncWelcomeVideo();
@@ -1793,7 +1802,7 @@
     });
     $("#teaserReplay").addEventListener("click", () => {
       const video = $("#teaserVideo");
-      video.currentTime = 0;
+      cueTeaserStart(video);
       video.play().catch(() => showToast("Нажми ▶ в плеере, чтобы повторить ролик."));
     });
     if ($("#teaserToShop")) $("#teaserToShop").addEventListener("click", () => {
