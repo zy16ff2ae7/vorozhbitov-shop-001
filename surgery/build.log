@@ -6,47 +6,24 @@
 + ffmpeg -y -v error -i ../../miniapp/assets/video/welcome-final-30s.mp4 -vf 'select='\''between(n,0,273)'\'',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p' -an -frames:v 274 -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 w0.mp4
 + ffmpeg -y -v error -i ../../miniapp/assets/video/welcome-final-30s.mp4 -vf 'select='\''between(n,326,507)'\'',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p' -an -frames:v 182 -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 w1.mp4
 + ffmpeg -y -v error -i ../../miniapp/assets/video/welcome-final-30s.mp4 -vf 'select='\''between(n,594,733)'\'',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p' -an -frames:v 140 -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 w2.mp4
-+ ffmpeg -y -v error -loop 1 -framerate 24 -i ../../miniapp/assets/drop/hero-sila-chest-v1.jpg -vf 'scale=1080:-2,crop=880:1174:100:222,zoompan=z='\''1+on*0.0006'\'':x='\''iw/2-iw/zoom/2'\'':y='\''ih/2-ih/zoom/2'\'':d=1:s=540x720:fps=24,eq=contrast=1.03:saturation=0.85,setsar=1,format=yuv420p' -frames:v 52 -an -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 wn0.mp4
 + ffmpeg -y -v error -loop 1 -framerate 24 -i ../../miniapp/assets/drop/hero-sila-chest-v1.jpg -vf 'scale=1080:-2,crop=880:1174:100:300,zoompan=z='\''1.035-on*0.0004'\'':x='\''iw/2-iw/zoom/2'\'':y='\''ih/2-ih/zoom/2'\'':d=1:s=540x720:fps=24,eq=contrast=1.03:saturation=0.85,setsar=1,format=yuv420p' -frames:v 86 -an -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 wn1.mp4
-+ printf 'file '\''w0.mp4'\''\nfile '\''wn0.mp4'\''\nfile '\''w1.mp4'\''\nfile '\''wn1.mp4'\''\nfile '\''w2.mp4'\''\n'
-+ ffmpeg -y -v error -f concat -safe 0 -i wlist.txt -c copy ../welcome-v2.mp4
++ printf 'file '\''w0.mp4'\''\nfile '\''w1.mp4'\''\nfile '\''wn1.mp4'\''\nfile '\''w2.mp4'\''\n'
++ ffmpeg -y -v error -f concat -safe 0 -i wlist.txt -c copy -movflags +faststart ../welcome-v2.mp4
 ++ XV ../welcome-v2.mp4
 ++ ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 ../welcome-v2.mp4
-+ '[' 734 = 734 ']'
++ '[' 682 = 682 ']'
 + ffmpeg -y -v error -i ../../miniapp/assets/video/campaign-v6.mp4 -vf 'select='\''between(n,42,316)'\'',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p' -an -frames:v 275 -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 a1.mp4
 + ffmpeg -y -v error -i ../../miniapp/assets/video/campaign-v6.mp4 -vf 'select='\''between(n,350,588)'\'',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p' -an -frames:v 239 -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 a2.mp4
 + ffmpeg -y -v error -loop 1 -framerate 30 -i ../../miniapp/assets/drop/hero-sila-chest-v1.jpg -vf 'scale=900:-2,crop=632:1124:134:112,zoompan=z='\''1+on*0.0003'\'':x='\''iw/2-iw/zoom/2'\'':y='\''ih/2-ih/zoom/2'\'':d=1:s=720x1280:fps=30,eq=contrast=1.02:saturation=0.82,setsar=1,format=yuv420p' -frames:v 42 -an -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 an0.mp4
-+ ffmpeg -y -v error -loop 1 -framerate 30 -i ../../miniapp/assets/drop/hero-sila-chest-v1.jpg -vf 'scale=1122:-2,crop=430:764:368:222,zoompan=z='\''1+on*0.00035'\'':x='\''iw/2-iw/zoom/2'\'':y='\''ih/2-ih/zoom/2'\'':d=1:s=720x1280:fps=30,eq=contrast=1.02:saturation=0.82,setsar=1,format=yuv420p' -frames:v 33 -an -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 an1.mp4
++ ffmpeg -y -v error -loop 1 -framerate 30 -i ../../miniapp/assets/drop/hero-sila-chest-v1.jpg -vf 'scale=1600:-2,crop=616:1094:524:450,zoompan=z='\''1+on*0.0004'\'':x='\''iw/2-iw/zoom/2'\'':y='\''ih/2-ih/zoom/2'\'':d=1:s=720x1280:fps=30,eq=contrast=1.02:saturation=0.82,setsar=1,format=yuv420p' -frames:v 33 -an -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 an1.mp4
 + printf 'file '\''an0.mp4'\''\nfile '\''a1.mp4'\''\nfile '\''an1.mp4'\''\nfile '\''a2.mp4'\''\n'
 + ffmpeg -y -v error -f concat -safe 0 -i alist.txt -i ../../miniapp/assets/video/campaign-v6.mp4 -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy -movflags +faststart ../v6a-replace.mp4
 ++ XV ../v6a-replace.mp4
 ++ ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 ../v6a-replace.mp4
-+ '[' 589 = 589 ']'
-+ ffmpeg -y -v error -i ../../miniapp/assets/video/campaign-v6.mp4 -vf trim=start_frame=42,setpts=PTS-STARTPTS,fps=30,setsar=1,format=yuv420p -af atrim=start=1.4,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.15 -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k -ar 48000 -movflags +faststart ../v6b-cut.mp4
-++ XV ../v6b-cut.mp4
-++ ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 ../v6b-cut.mp4
-+ '[' 547 = 547 ']'
-+ printf 'file '\''a1.mp4'\''\nfile '\''an1.mp4'\''\nfile '\''a2.mp4'\''\n'
-+ ffmpeg -y -v error -f concat -safe 0 -i clist.txt -i ../../miniapp/assets/video/campaign-v6.mp4 -map 0:v:0 -map 1:a:0 -af atrim=start=1.4,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.15 -c:v copy -c:a aac -b:a 192k -ar 48000 -movflags +faststart ../v6c-cut-replace.mp4
-++ XV ../v6c-cut-replace.mp4
-++ ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 ../v6c-cut-replace.mp4
-+ '[' 547 = 547 ']'
-+ cd ..
-+ ffmpeg -y -v error -i welcome-v2.mp4 -frames:v 1 -vf fps=1,scale=320:-1,tile=5x6 welcome-v2-sheet.jpg
-+ ffmpeg -y -v error -i v6a-replace.mp4 -frames:v 1 -vf fps=1,scale=320:-1,tile=5x4 v6a-sheet.jpg
-+ ffmpeg -y -v error -i v6b-cut.mp4 -frames:v 1 -vf fps=1,scale=320:-1,tile=5x4 v6b-sheet.jpg
-+ ffmpeg -y -v error -i v6c-cut-replace.mp4 -frames:v 1 -vf fps=1,scale=320:-1,tile=5x4 v6c-sheet.jpg
-+ ls -la
-total 19924
-drwxr-xr-x 3 runner runner    4096 Sep 10 18:11 .
-drwxr-xr-x 8 runner runner    4096 Sep 10 18:10 ..
--rw-r--r-- 1 runner runner    5273 Sep 10 18:11 build.log
-drwxr-xr-x 2 runner runner    4096 Sep 10 18:11 stage
--rw-r--r-- 1 runner runner 5720785 Sep 10 18:11 v6a-replace.mp4
--rw-r--r-- 1 runner runner  177319 Sep 10 18:11 v6a-sheet.jpg
--rw-r--r-- 1 runner runner 5450824 Sep 10 18:11 v6b-cut.mp4
--rw-r--r-- 1 runner runner  160069 Sep 10 18:11 v6b-sheet.jpg
--rw-r--r-- 1 runner runner 5470822 Sep 10 18:11 v6c-cut-replace.mp4
--rw-r--r-- 1 runner runner  162894 Sep 10 18:11 v6c-sheet.jpg
--rw-r--r-- 1 runner runner  209496 Sep 10 18:11 welcome-v2-sheet.jpg
--rw-r--r-- 1 runner runner 3012833 Sep 10 18:11 welcome-v2.mp4
++ '[' 547 = 589 ']'
+++ XV ../v6a-replace.mp4
+++ ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 ../v6a-replace.mp4
++ E 'v6a frames: 547'
++ echo '::error::v6a frames: 547'
+::error::v6a frames: 547
++ exit 1
