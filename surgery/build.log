@@ -3,6 +3,32 @@
 + V6=../orig-v6.mp4
 + P=../../miniapp/assets/drop/hero-sila-chest-v1.jpg
 + ENC='-c:v libx264 -preset fast -crf 18 -video_track_timescale 15360'
++ mkdir -p ../probe
+++ seq 40 4 84
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,40)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f40.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,44)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f44.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,48)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f48.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,52)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f52.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,56)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f56.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,60)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f60.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,64)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f64.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,68)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f68.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,72)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f72.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,76)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f76.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,80)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f80.jpg
++ for n in $(seq 40 4 84)
++ ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''eq(n,84)'\'',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1' -frames:v 1 ../probe/welcome-f84.jpg
 + ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''between(n,0,273)'\'',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p' -an -frames:v 274 -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 w0.mp4
 + ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''between(n,326,507)'\'',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p' -an -frames:v 182 -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 w1.mp4
 + ffmpeg -y -v error -i ../orig-welcome.mp4 -vf 'select='\''between(n,594,733)'\'',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p' -an -frames:v 140 -c:v libx264 -preset fast -crf 18 -video_track_timescale 15360 w2.mp4
@@ -48,18 +74,19 @@ DECODE_OK
 + echo QA_DONE
 QA_DONE
 + ls -la
-total 27268
-drwxr-xr-x 3 runner runner    4096 Sep 10 18:58 .
-drwxr-xr-x 8 runner runner    4096 Sep 10 18:58 ..
--rw-r--r-- 1 runner runner    5205 Sep 10 18:58 build.log
--rw-r--r-- 1 runner runner 5828779 Sep 10 18:58 orig-v6.mp4
--rw-r--r-- 1 runner runner 1928170 Sep 10 18:58 orig-welcome.mp4
-drwxr-xr-x 2 runner runner    4096 Sep 10 18:58 stage
--rw-r--r-- 1 runner runner 5707649 Sep 10 18:58 v6a-replace.mp4
--rw-r--r-- 1 runner runner  175822 Sep 10 18:58 v6a-sheet.jpg
--rw-r--r-- 1 runner runner 5450824 Sep 10 18:58 v6b-cut.mp4
--rw-r--r-- 1 runner runner  160069 Sep 10 18:58 v6b-sheet.jpg
--rw-r--r-- 1 runner runner 5457686 Sep 10 18:58 v6c-cut-replace.mp4
--rw-r--r-- 1 runner runner  161519 Sep 10 18:58 v6c-sheet.jpg
--rw-r--r-- 1 runner runner  195762 Sep 10 18:58 welcome-v2-sheet.jpg
--rw-r--r-- 1 runner runner 2816612 Sep 10 18:58 welcome-v2.mp4
+total 27272
+drwxr-xr-x 4 runner runner    4096 Sep 10 19:18 .
+drwxr-xr-x 8 runner runner    4096 Sep 10 19:18 ..
+-rw-r--r-- 1 runner runner    7424 Sep 10 19:18 build.log
+-rw-r--r-- 1 runner runner 5828779 Sep 10 19:18 orig-v6.mp4
+-rw-r--r-- 1 runner runner 1928170 Sep 10 19:18 orig-welcome.mp4
+drwxr-xr-x 2 runner runner    4096 Sep 10 19:18 probe
+drwxr-xr-x 2 runner runner    4096 Sep 10 19:18 stage
+-rw-r--r-- 1 runner runner 5707649 Sep 10 19:18 v6a-replace.mp4
+-rw-r--r-- 1 runner runner  175822 Sep 10 19:18 v6a-sheet.jpg
+-rw-r--r-- 1 runner runner 5450824 Sep 10 19:18 v6b-cut.mp4
+-rw-r--r-- 1 runner runner  160069 Sep 10 19:18 v6b-sheet.jpg
+-rw-r--r-- 1 runner runner 5457686 Sep 10 19:18 v6c-cut-replace.mp4
+-rw-r--r-- 1 runner runner  161519 Sep 10 19:18 v6c-sheet.jpg
+-rw-r--r-- 1 runner runner  195762 Sep 10 19:18 welcome-v2-sheet.jpg
+-rw-r--r-- 1 runner runner 2816612 Sep 10 19:18 welcome-v2.mp4
