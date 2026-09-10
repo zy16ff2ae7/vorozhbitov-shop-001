@@ -1,22 +1,32 @@
 == miniapp/assets/video/welcome-final-30s.mp4
+codec_type=video
+width=540
+height=720
+r_frame_rate=24/1
+nb_frames=734
 duration=30.583333
 == miniapp/assets/video/campaign-v6.mp4
+codec_type=video
+width=720
+height=1280
+r_frame_rate=30/1
+nb_frames=589
+codec_type=audio
+r_frame_rate=0/0
+nb_frames=922
 duration=19.633333
-== sheet welcome-final-30s
+== welcome span A [10,16]
 OK
-== sheet campaign-v6
+== welcome span B [20,26]
 OK
-== welcome head strip
-OK
-== scene cuts
-21 storyboard/welcome-final-30s-cuts.txt
-2 storyboard/campaign-v6-cuts.txt
-total 540
-drwxr-xr-x 2 runner runner   4096 Sep 10 17:53 .
-drwxr-xr-x 7 runner runner   4096 Sep 10 17:52 ..
--rw-r--r-- 1 runner runner    292 Sep 10 17:53 build.log
--rw-r--r-- 1 runner runner     34 Sep 10 17:53 campaign-v6-cuts.txt
--rw-r--r-- 1 runner runner 189087 Sep 10 17:53 campaign-v6-sheet.jpg
--rw-r--r-- 1 runner runner    340 Sep 10 17:53 welcome-final-30s-cuts.txt
--rw-r--r-- 1 runner runner 196879 Sep 10 17:53 welcome-final-30s-sheet.jpg
--rw-r--r-- 1 runner runner 136212 Sep 10 17:53 welcome-head.jpg
+total 960
+drwxr-xr-x 2 runner runner   4096 Sep 10 17:57 .
+drwxr-xr-x 7 runner runner   4096 Sep 10 17:56 ..
+-rw-r--r-- 1 runner runner    371 Sep 10 17:57 build.log
+-rw-r--r-- 1 runner runner     34 Sep 10 17:56 campaign-v6-cuts.txt
+-rw-r--r-- 1 runner runner 189087 Sep 10 17:56 campaign-v6-sheet.jpg
+-rw-r--r-- 1 runner runner    340 Sep 10 17:56 welcome-final-30s-cuts.txt
+-rw-r--r-- 1 runner runner 196879 Sep 10 17:56 welcome-final-30s-sheet.jpg
+-rw-r--r-- 1 runner runner 136212 Sep 10 17:56 welcome-head.jpg
+-rw-r--r-- 1 runner runner 226216 Sep 10 17:57 welcome-span-a.jpg
+-rw-r--r-- 1 runner runner 200412 Sep 10 17:57 welcome-span-b.jpg
