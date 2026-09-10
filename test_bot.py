@@ -54,8 +54,8 @@ class BotTests(unittest.TestCase):
     def test_catalog_loads_and_resolves_products(self):
         catalog = Catalog(Path(__file__).with_name("catalog.json"))
         self.assertGreaterEqual(len(catalog.categories), 1)
-        self.assertIsNotNone(catalog.get("drop-tee-001"))
-        self.assertEqual(catalog.get("drop-tee-001")["category"], "drop")
+        self.assertIsNotNone(catalog.get("tee-sila-i-chest"))
+        self.assertEqual(catalog.get("tee-sila-i-chest")["category"], "drop")
         self.assertEqual(catalog.lookbook, [])
 
     def test_catalog_seed_is_copied_once_to_mutable_storage(self):
@@ -178,13 +178,13 @@ class BotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             db = make_db(directory)
             db.upsert_user({"id": 5, "username": "waiter"})
-            product = {"id": "drop-tee-001", "name": "DROP 001 TEE"}
+            product = {"id": "tee-sila-i-chest", "name": "СИЛА И ЧЕСТЬ"}
             self.assertTrue(db.add_to_waitlist(5, product, "L"))
             self.assertFalse(db.add_to_waitlist(5, product, "L"))
             self.assertEqual(db.stats()["waitlist"], 1)
-            self.assertEqual(db.waitlist_user_ids("drop-tee-001", "L"), [5])
-            self.assertEqual(db.waitlist_user_ids("drop-tee-001", "M"), [])
-            self.assertEqual(db.waitlist_rows()[0]["product_name"], "DROP 001 TEE")
+            self.assertEqual(db.waitlist_user_ids("tee-sila-i-chest", "L"), [5])
+            self.assertEqual(db.waitlist_user_ids("tee-sila-i-chest", "M"), [])
+            self.assertEqual(db.waitlist_rows()[0]["product_name"], "СИЛА И ЧЕСТЬ")
 
     def test_csv_export_escapes_formulas(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -419,7 +419,7 @@ class BotTests(unittest.TestCase):
                 "consent": True,
                 "customer": {"name": "Buyer", "phone": "8 (999) 123-45-67", "city": "Могилёв"},
                 "items": [
-                    {"product_id": "drop-tee-001", "size": "M", "quantity": 2},
+                    {"product_id": "tee-sila-i-chest", "size": "M", "quantity": 2},
                 ],
             }
             brand_bot.handle_update({
@@ -432,7 +432,7 @@ class BotTests(unittest.TestCase):
             })
             self.assertEqual(db.stats()["orders"], 1)
             order = db.recent_orders(1)[0]
-            self.assertEqual(order["product_id"], "drop-tee-001")
+            self.assertEqual(order["product_id"], "tee-sila-i-chest")
             self.assertEqual(order["quantity"], 2)
             self.assertEqual(order["phone"], "+79991234567")
             self.assertTrue(db.has_consent(77))
@@ -474,7 +474,7 @@ class BotTests(unittest.TestCase):
             api = FakeAPI()
             brand_bot = BrandBot(settings, api, db, catalog)
             user = {"id": 88, "first_name": "Waiter", "username": "waiter"}
-            payload = {"type": "waitlist", "product_id": "drop-tee-001", "size": "L"}
+            payload = {"type": "waitlist", "product_id": "tee-sila-i-chest", "size": "L"}
             brand_bot.handle_update({
                 "update_id": 2,
                 "message": {
@@ -484,7 +484,7 @@ class BotTests(unittest.TestCase):
                 },
             })
             self.assertEqual(db.stats()["waitlist"], 1)
-            self.assertEqual(db.waitlist_user_ids("drop-tee-001", "L"), [88])
+            self.assertEqual(db.waitlist_user_ids("tee-sila-i-chest", "L"), [88])
 
     def test_invalid_catalog_category_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -575,7 +575,7 @@ class BotTests(unittest.TestCase):
                 "update_id": 11,
                 "callback_query": {
                     "id": "cb-size",
-                    "data": "size:drop-tee-001:M",
+                    "data": "size:tee-sila-i-chest:M",
                     "from": user,
                     "message": {"chat": {"id": 91, "type": "private"}},
                 },
@@ -816,7 +816,7 @@ class BotTests(unittest.TestCase):
             db.upsert_user({"id": 77, "first_name": "Buyer"})
             db.upsert_user({"id": 88, "first_name": "Other"})
             order_id, _ = db.create_order(
-                "web-scope-1", 77, {"id": "drop-tee-001", "name": "ФУТБОЛКА"}, "M", "+79991234567"
+                "web-scope-1", 77, {"id": "tee-sila-i-chest", "name": "ФУТБОЛКА"}, "M", "+79991234567"
             )
             catalog = Catalog(catalog_path)
             server = start_health_server(0, catalog, settings, db)
@@ -1076,8 +1076,38 @@ class BotTests(unittest.TestCase):
         self.assertIn("закрытую территорию", index)
         self.assertIn("Бери размер, пока он есть.", index)
         # Стили для новых блоков должны существовать, иначе разметка развалится.
-        for selector in (".welcome-lede", ".welcome-drop", ".welcome-facts", ".welcome-close"):
+        for selector in (".welcome-lede", ".welcome-drop", ".welcome-facts"):
             self.assertIn(selector, styles, f"нет стилей для {selector}")
+        # Кнопки «Пропустить» нет: вход — только через «Войти в магазин».
+        self.assertNotIn("welcomeClose", index)
+        self.assertNotIn("Пропустить", index)
+        self.assertNotIn(".welcome-close", styles)
+
+    def test_teaser_has_no_photo_lead(self):
+        """Фильм выпуска начинается сразу с видео: фото-заставки нет ни на карточке, ни в модалке."""
+        miniapp = Path(__file__).with_name("miniapp")
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn('id="teaserPoster"', index)
+        video = next(line for line in index.splitlines() if 'id="teaserVideo"' in line)
+        self.assertNotIn("poster=", video)
+
+    def test_teaser_starts_from_zero(self):
+        """Монтаж тизера начинается с видео: никаких пропусков начала в плеере."""
+        app = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn("TEASER_SKIP_SECONDS", app)
+        self.assertNotIn("cueTeaserStart", app)
+
+    def test_welcome_video_has_no_poster_flash(self):
+        """Фоновое видео стартует с чёрного/титра: у video нет постера, подложка-фото скрыта при загрузке и прячется при воспроизведении."""
+        miniapp = Path(__file__).with_name("miniapp")
+        lines = (miniapp / "index.html").read_text(encoding="utf-8").splitlines()
+        at = next(i for i, line in enumerate(lines) if 'id="welcomeVideo"' in line)
+        self.assertNotIn("poster=", "\n".join(lines[at:at + 3]))
+        app = (miniapp / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn("video.poster = media.welcomePoster", app)
+        self.assertIn('fallback.classList.toggle("hidden", canPlay || (!welcomePlayback.failed && !reducedMotion()))', app)
+        atf = next(i for i, line in enumerate(lines) if 'id="welcomeFallback"' in line)
+        self.assertIn("hidden", lines[atf])
 
     def test_media_urls_carry_a_version_so_new_cuts_are_not_cached(self):
         """Видео кешируется на сутки по неизменному имени — без версии в адресе
@@ -1298,7 +1328,7 @@ class BotTests(unittest.TestCase):
                         "request_id": "web-pay-1",
                         "consent": True,
                         "customer": {"name": "Buyer", "phone": "8 (999) 123-45-67", "city": "Могилёв"},
-                        "items": [{"product_id": "drop-tee-001", "size": "M", "quantity": 1}],
+                        "items": [{"product_id": "tee-sila-i-chest", "size": "M", "quantity": 1}],
                     },
                 )
                 self.assertEqual(status, 200)

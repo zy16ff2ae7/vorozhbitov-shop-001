@@ -38,7 +38,7 @@ class CheckoutRegressionTests(unittest.TestCase):
         self.user = {'id': 420, 'first_name': 'Test'}
         self.payload = {'request_id': 'checkout-test', 'consent': True,
                         'customer': {'phone': '+79990000000', 'city': 'Test'},
-                        'items': [{'product_id': 'drop-tee-001', 'size': 'M', 'quantity': 1}]}
+                        'items': [{'product_id': 'tee-sila-i-chest', 'size': 'M', 'quantity': 1}]}
 
     def checkout(self, payload=None, user=None, notify=None):
         return self.bot.checkout_web_payload(user or self.user, payload or self.payload, notify_user=notify)
@@ -54,13 +54,13 @@ class CheckoutRegressionTests(unittest.TestCase):
 
     def test_retry_uses_original_price_after_catalog_change(self):
         first = self.checkout()
-        self.catalog.get('drop-tee-001')['price'] = '6 900 ₽'
+        self.catalog.get('tee-sila-i-chest')['price'] = '6 900 ₽'
         self.assertEqual(self.checkout()['amount_rub'], first['amount_rub'])
 
     def test_modified_request_with_same_key_is_rejected(self):
         self.checkout()
         changed = copy.deepcopy(self.payload)
-        changed['items'].append({'product_id': 'drop-hoodie-001', 'size': 'M', 'quantity': 1})
+        changed['items'].append({'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1})
         self.assertFalse(self.checkout(changed)['ok'])
         self.assertEqual(self.db.stats()['orders'], 1)
         self.assertEqual(self.db.connection().execute('SELECT COUNT(*) FROM payments').fetchone()[0], 1)
@@ -79,19 +79,19 @@ class CheckoutRegressionTests(unittest.TestCase):
         self.assertTrue(self.checkout()['ok'])
 
     def test_invalid_price_rejects_entire_checkout(self):
-        self.catalog.get('drop-tee-001')['price'] = 'bad price'
+        self.catalog.get('tee-sila-i-chest')['price'] = 'bad price'
         payload = copy.deepcopy(self.payload)
-        payload['items'].append({'product_id': 'drop-hoodie-001', 'size': 'M', 'quantity': 1})
+        payload['items'].append({'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1})
         self.assertFalse(self.checkout(payload)['ok'])
         self.assertEqual(self.db.stats()['orders'], 0)
 
     def test_zero_price_is_not_a_paid_product(self):
-        self.catalog.get('drop-tee-001')['price'] = '0 ₽'
+        self.catalog.get('tee-sila-i-chest')['price'] = '0 ₽'
         self.assertFalse(self.checkout()['ok'])
 
     def test_unavailable_line_rejects_whole_cart_without_partial_payment(self):
         for invalid in [None, {'product_id': 'missing', 'size': 'M'},
-                        {'product_id': 'drop-hoodie-001', 'size': 'INVALID'}]:
+                        {'product_id': 'tee-sila-i-chest', 'size': 'INVALID'}]:
             with self.subTest(invalid=invalid):
                 payload = copy.deepcopy(self.payload)
                 payload['items'].append(invalid)
@@ -123,7 +123,7 @@ class CheckoutRegressionTests(unittest.TestCase):
 
     def test_cancel_invalidates_whole_payment_and_late_payment_needs_refund(self):
         payload = copy.deepcopy(self.payload)
-        payload['items'].append({'product_id': 'drop-hoodie-001', 'size': 'M', 'quantity': 1})
+        payload['items'].append({'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1})
         receipt = self.checkout(payload)
         self.bot.cancel_own_order(420, 420, receipt['order_ids'][0])
         self.assertTrue(all(r['status'] == 'cancelled' for r in self.db.orders_for_payment(receipt['payment_id'])))
@@ -163,7 +163,7 @@ class CheckoutRegressionTests(unittest.TestCase):
 
     def test_manual_payment_settles_all_positions(self):
         payload = copy.deepcopy(self.payload)
-        payload['items'].append({'product_id': 'drop-hoodie-001', 'size': 'M', 'quantity': 1})
+        payload['items'].append({'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1})
         receipt = self.checkout(payload)
         self.bot.update_order_status(1, receipt['order_ids'][0], 'paid')
         self.assertEqual(self.db.get_payment(receipt['payment_id'])['status'], 'paid')
@@ -195,9 +195,9 @@ class CheckoutRegressionTests(unittest.TestCase):
 
     def test_late_line_failure_rolls_back_payment_receipt_and_outbox(self):
         payload = copy.deepcopy(self.payload)
-        payload['items'].append({'product_id': 'drop-hoodie-001', 'size': 'M', 'quantity': 1})
+        payload['items'].append({'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1})
         self.db.connection().executescript("""CREATE TRIGGER reject_hoodie BEFORE INSERT ON orders
-            WHEN NEW.product_id='drop-hoodie-001' BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END;""")
+            WHEN NEW.product_id='tag-sila-i-chest' BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END;""")
         import sqlite3
         with self.assertRaises(sqlite3.IntegrityError):
             self.checkout(payload, notify=420)
@@ -209,7 +209,7 @@ class CheckoutRegressionTests(unittest.TestCase):
     def test_legacy_request_does_not_create_another_checkout(self):
         self.db.upsert_user(self.user)
         self.db.create_payment('legacy', 420, 4900, 2450)
-        self.db.create_order('checkout-test-1-drop-tee-001-M', 420, self.catalog.get('drop-tee-001'),
+        self.db.create_order('checkout-test-1-tee-sila-i-chest-M', 420, self.catalog.get('tee-sila-i-chest'),
                              'M', '+79990000000', status='awaiting_payment', payment_id='legacy', amount_rub=4900)
         response = self.checkout()
         self.assertFalse(response['ok'])
@@ -219,9 +219,9 @@ class CheckoutRegressionTests(unittest.TestCase):
     def test_legacy_chat_callback_does_not_duplicate_order(self):
         self.db.upsert_user(self.user)
         self.db.create_payment('legacy-chat', 420, 4900, 2450)
-        self.db.create_order('telegram-callback-123', 420, self.catalog.get('drop-tee-001'),
+        self.db.create_order('telegram-callback-123', 420, self.catalog.get('tee-sila-i-chest'),
                              'M', '+79990000000', status='awaiting_payment', payment_id='legacy-chat', amount_rub=4900)
-        self.bot.finish_order(420, 420, self.catalog.get('drop-tee-001'), 'M', '+79990000000', 'telegram-callback-123')
+        self.bot.finish_order(420, 420, self.catalog.get('tee-sila-i-chest'), 'M', '+79990000000', 'telegram-callback-123')
         self.assertEqual(self.db.stats()['orders'], 1)
         self.assertEqual(self.db.connection().execute('SELECT COUNT(*) FROM payments').fetchone()[0], 1)
 
@@ -258,7 +258,7 @@ class CheckoutRegressionTests(unittest.TestCase):
         invalid = [dict(self.payload, consent=False), dict(self.payload, customer={'phone': '123'}),
                    dict(self.payload, items=[]), dict(self.payload, items='not-a-list'),
                    dict(self.payload, items=[None]),
-                   dict(self.payload, items=[{'product_id': 'drop-tee-001', 'size': 'INVALID'}])]
+                   dict(self.payload, items=[{'product_id': 'tee-sila-i-chest', 'size': 'INVALID'}])]
         for payload in invalid:
             with self.subTest(payload=payload):
                 self.assertFalse(self.checkout(payload)['ok'])
@@ -370,7 +370,7 @@ class CheckoutRegressionTests(unittest.TestCase):
         self.assertEqual(status, 409)
 
     def test_waitlist_http_is_authenticated_and_idempotent(self):
-        body = {'product_id': 'drop-tee-001', 'size': 'M'}
+        body = {'product_id': 'tee-sila-i-chest', 'size': 'M'}
         self.assertEqual(self.http('/api/waitlist', body, signed=False)[0], 401)
         self.assertEqual(self.http('/api/waitlist', body)[0], 200)
         self.assertEqual(self.http('/api/waitlist', body)[0], 200)

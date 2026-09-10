@@ -17,7 +17,7 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
 (async()=>{
  browser=await chromium.launch({headless:true,channel:'chrome'});
  const {page,context}=await make();await enter(page);
- await check('two real products and mobile primary action',async()=>{
+ await check('2 products and mobile primary action',async()=>{
   assert.equal(await page.locator('.product-card').count(),2);
   assert.equal(await page.locator('#productCount').textContent(),'02 ВЕЩИ');
   const box=await page.locator('#heroProductButton').boundingBox();assert.ok(box.y+box.height<780);
@@ -56,7 +56,7 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
  for(const width of [320,360,768,1440]){
   const{page,context}=await make(width);await enter(page);await check('layout '+width+'px',async()=>{
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);await shot(page,'home-'+width);if(width===1440)await shot(page,'desktop-full',{fullPage:true});
-   await page.locator('#heroProductButton').click();assert.equal(await page.locator('#productModal').isVisible(),false);assert.equal(await page.locator('.product-card').count(),2);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);if(width===1440)await shot(page,'desktop-catalog');
+   await page.locator('#heroProductButton').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);if(width===1440)await shot(page,'desktop-product');
   });await context.close();
  }
  await check('catalog outage retry has no fabricated products',async()=>{

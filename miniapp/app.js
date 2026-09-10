@@ -323,7 +323,7 @@
 
   function showToast(message) {
     const toast = $("#toast");
-    toast.textContent = message;
+    toast.innerHTML = '<span class="toast-mark" aria-hidden="true">V</span><span>' + escapeHTML(message) + "</span>";
     toast.classList.add("visible");
     clearTimeout(state.toastTimer);
     state.toastTimer = setTimeout(() => toast.classList.remove("visible"), 2800);
@@ -391,6 +391,7 @@
     if (id === "productModal") stop3D();
     if (id === "payModal") stopPayPoll();
     if (id === "teaserModal") closeTeaser();
+    if (id === "storiesModal") stopStories();
     syncModalLayers();
     const previous = state.modalFocus.get(id);
     state.modalFocus.delete(id);
@@ -516,14 +517,17 @@
     updateCounters();
   }
 
-  function renderLookbook() {
+  function lookbookList() {
     const items = (state.data.lookbook || []).filter(item => item.image || item.photo_url);
-    const fallback = FALLBACK_CATALOG.lookbook;
-    const list = items.length ? items : fallback;
-    $("#lookbookGrid").innerHTML = list.map(item => {
+    return items.length ? items : FALLBACK_CATALOG.lookbook;
+  }
+
+  function renderLookbook() {
+    const list = lookbookList();
+    $("#lookbookGrid").innerHTML = list.map((item, index) => {
       const src = item.image || item.photo_url;
       const caption = item.caption || "ЗАМЕТКА";
-      return `<figure class="lookbook-card" tabindex="0" role="button" data-lightbox="${escapeHTML(src)}" data-caption="${escapeHTML(caption)}"><img src="${escapeHTML(src)}" alt="${escapeHTML(caption)}" loading="lazy"><figcaption><strong>${escapeHTML(caption)}</strong></figcaption></figure>`;
+      return `<figure class="lookbook-card" tabindex="0" role="button" data-story-index="${index}" data-caption="${escapeHTML(caption)}"><img src="${escapeHTML(src)}" alt="${escapeHTML(caption)}" loading="lazy"><figcaption><strong>${escapeHTML(caption)}</strong></figcaption></figure>`;
     }).join("") + `<div class="lookbook-note"><span class="red-slash">//</span><p>Кадры выпуска. Посадка, ткань, крой.</p><button class="button button-outline" data-scroll="catalog" type="button">В ВИТРИНУ <span>↗</span></button></div>`;
     $("#lookbookGrid").querySelector("[data-scroll]")?.addEventListener("click", () => scrollToId("catalog"));
   }
@@ -612,11 +616,19 @@
     $("#sizeHint").classList.remove("error");
     $("#sheetDetails").innerHTML = `<strong>ДЕТАЛИ</strong><br>${(product.details || []).map(escapeHTML).join(" · ")}`;
     renderPersonalization(product);
-    $("#sizeGuideButton").classList.toggle("hidden", product.sizes.length === 1 && product.sizes[0] === "ОДИН");
+    sheetProduct = product;
+    drawPersonPreview();
+    const singleSize = (product.sizes || []).length === 1 ? product.sizes[0] : "";
+    const letterSizes = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL"];
+    $("#sizeGuideButton").classList.toggle("hidden", singleSize !== "" && !letterSizes.includes(singleSize));
+    const tryon = $("#tryonButton");
+    if (tryon) tryon.classList.toggle("hidden", !(product.sizes || []).some(size => letterSizes.includes(size)));
     const saved = state.saved.includes(product.id);
     $("#sheetSave").classList.toggle("saved", saved);
     $("#sheetSave").setAttribute("aria-label", saved ? "Удалить из сохранённых" : "Сохранить");
-    const related = state.data.products.filter(item => item.id !== product.id && item.category === product.category && item.active !== false).slice(0, 2);
+    const others = state.data.products.filter(item => item.id !== product.id && item.active !== false);
+    const related = others.filter(item => item.category === product.category).slice(0, 2);
+    if (!related.length) related.push(...others.slice(0, 2));
     $("#related").innerHTML = related.length
       ? `<h4>С ЭТИМ БЕРУТ</h4>${related.map(item => `<button type="button" class="related-card" data-related="${escapeHTML(item.id)}"><img src="${escapeHTML(imageFor(item))}" alt="${escapeHTML(item.name)}"><span>${escapeHTML(item.name)}</span></button>`).join("")}`
       : "";
@@ -787,7 +799,7 @@
       return;
     }
     if (!state.cart.length) {
-      content.innerHTML = `<div class="cart-empty"><span class="empty-mark">∅</span><h3>Заявка пока пустая.</h3><p>Добавь вещь из выпуска — здесь соберём всё перед оплатой.</p></div>`;
+      content.innerHTML = `<div class="cart-empty"><span class="empty-mark">∅</span><h3>Заявка пока пустая.</h3><p>Тихо. Даже ткань не шуршит. Загляни в витрину — выпуск короткий.</p><button class="button button-outline" data-cart-shop type="button">К ВИТРИНЕ</button></div>`;
       $("#checkoutForm").classList.add("hidden");
       return;
     }
@@ -1121,10 +1133,11 @@
       result.classList.add("error");
       return;
     }
-    let size = "XL";
+    let size = "XXL";
     if (height < 172) size = "S";
     else if (height < 178) size = "M";
     else if (height < 186) size = "L";
+    else if (height < 194) size = "XL";
     result.classList.remove("error");
     result.textContent = `При росте ${height} см ориентир — ${size}. Посадка зависит от обхвата груди и модели: сравни замеры со своей футболкой.`;
   }
@@ -1209,7 +1222,7 @@
         privacy.classList.remove("hidden");
       }
       $("#sizeFilters").innerHTML = ["all", ...Core.sizesFor(state.data.products)].map(size => `<button class="filter-chip ${size === state.sizeFilter ? "active" : ""}" data-size-filter="${escapeHTML(size)}" type="button" aria-pressed="${size === state.sizeFilter}">${size === "all" ? "Любой" : escapeHTML(size)}</button>`).join("");
-      $("#profileSizeRow").innerHTML = Core.sizesFor(state.data.products).filter(size => size !== "ОДИН").map(size => `<button class="filter-chip" data-profile-size="${escapeHTML(size)}" type="button">${escapeHTML(size)}</button>`).join("");
+      $("#profileSizeRow").innerHTML = Core.sizesFor(state.data.products).filter(size => size !== "ОДИН" && size !== "ONE SIZE").map(size => `<button class="filter-chip" data-profile-size="${escapeHTML(size)}" type="button">${escapeHTML(size)}</button>`).join("");
       applyMedia();
       renderCategoryChips();
       renderProducts();
@@ -1217,7 +1230,7 @@
       if (state.modalStack.includes("cartModal")) renderCart();
     } catch (_) {
       $("#catalogError").classList.remove("hidden");
-      $("#emptyState").classList.add("hidden");
+      renderProducts();
     } finally {
       clearTimeout(timeout);
       state.catalogLoading = false;
@@ -1232,9 +1245,8 @@
     const media = (state.data && state.data.media) || {};
     return {
       welcomeLoop: media.welcome_loop || "assets/video/welcome-final-30s.mp4",
-      welcomePoster: media.welcome_poster || "assets/drop/tee-gym-with-tag-v3.jpg",
+      welcomePoster: media.welcome_poster || "assets/drop/hero-sila-chest-v1.jpg",
       teaser: media.teaser || "assets/video/campaign-v6.mp4",
-      teaserPoster: media.teaser_poster || "assets/drop/tee-gym-with-tag-v3.jpg",
       title: media.teaser_title || "СИЛА И ЧЕСТЬ",
       caption: media.teaser_caption || "Выпуск 001 · Никита Ворожбитов",
       storyUrl: media.teaser_story_url || ""
@@ -1255,12 +1267,8 @@
   function applyMedia() {
     const media = mediaConfig();
     if (state.data.media && state.data.media.hero_image) $("#heroFallback").src = state.data.media.hero_image;
-    const poster = $("#teaserPoster");
-    if (poster) poster.src = media.teaserPoster;
     if ($("#teaserTitle")) $("#teaserTitle").textContent = media.title;
     if ($("#teaserCaption")) $("#teaserCaption").textContent = media.caption;
-    const teaserVideo = $("#teaserVideo");
-    if (teaserVideo) teaserVideo.poster = media.teaserPoster;
     setupWelcomeVideo(media);
     // Тираж на заставке берём из каталога, а не пишем руками.
     const stock = $("#welcomeStock");
@@ -1284,7 +1292,10 @@
     control.setAttribute("aria-label", welcomePlayback.paused ? "Продолжить видео" : "Остановить видео");
     control.setAttribute("aria-pressed", String(welcomePlayback.paused));
     $("#welcomeMotionIcon").textContent = welcomePlayback.paused ? "▷" : "Ⅱ";
-    if (!welcomeCanPlay()) {
+    const canPlay = welcomeCanPlay();
+    const fallback = $("#welcomeFallback");
+    if (fallback) fallback.classList.toggle("hidden", canPlay || (!welcomePlayback.failed && !reducedMotion()));
+    if (!canPlay) {
       video.pause();
       if (saverMode() || reducedMotion()) video.classList.remove("is-playing");
       return;
@@ -1313,7 +1324,6 @@
       welcomePlayback.source = media.welcomeLoop;
       welcomePlayback.failed = false;
     }
-    video.poster = media.welcomePoster;
     $("#welcomeFallback").src = media.welcomePoster;
     welcomePlayback.ready = Boolean(media.welcomeLoop);
     if (!welcomePlayback.bound) {
@@ -1411,8 +1421,337 @@
     }
   }
 
+
+  /* --- Скелетоны каталога --- */
+
+  function renderSkeletons() {
+    const root = $("#productGrid");
+    if (!root || root.children.length) return;
+    const card = '<article class="product-card skeleton-card" aria-hidden="true"><div class="sk-media"></div><div class="sk-line"></div><div class="sk-line short"></div></article>';
+    root.innerHTML = card + card;
+  }
+
+  /* --- Reveal-анимации секций и hero-tilt --- */
+
+  function initMotion() {
+    ["catalog", "store", "lookbook"].forEach(id => {
+      const section = document.getElementById(id);
+      if (section) section.classList.add("reveal");
+    });
+    if ("IntersectionObserver" in window && !reducedMotion()) {
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) { entry.target.classList.add("in"); observer.unobserve(entry.target); }
+        });
+      }, { threshold: 0.12 });
+      $$(".reveal").forEach(node => observer.observe(node));
+    } else {
+      $$(".reveal").forEach(node => node.classList.add("in"));
+    }
+    const heroMedia = $(".hero-media");
+    const fine = window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches;
+    if (!heroMedia || !fine || reducedMotion()) return;
+    const img = heroMedia.querySelector("img");
+    if (!img) return;
+    heroMedia.addEventListener("mousemove", event => {
+      const rect = heroMedia.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width - 0.5;
+      const y = (event.clientY - rect.top) / rect.height - 0.5;
+      img.style.setProperty("--tilt-y", (-x * 6).toFixed(2) + "deg");
+      img.style.setProperty("--tilt-x", (y * 6).toFixed(2) + "deg");
+      img.style.setProperty("--tilt-s", "1.04");
+    });
+    heroMedia.addEventListener("mouseleave", () => {
+      img.style.setProperty("--tilt-x", "0deg");
+      img.style.setProperty("--tilt-y", "0deg");
+      img.style.setProperty("--tilt-s", "1");
+    });
+  }
+
+  /* --- Lookbook-истории --- */
+
+  const stories = { index: 0, timer: 0, list: [] };
+
+  function storyTarget(item) {
+    if (/ЗНАК|ЖЕТ/i.test(String(item.caption || ""))) return { id: "tag-sila-i-chest", label: "СМОТРЕТЬ ЖЕТОН" };
+    return { id: "tee-sila-i-chest", label: "СМОТРЕТЬ ФУТБОЛКУ" };
+  }
+
+  function openStories(index) {
+    stories.list = lookbookList();
+    if (!stories.list.length) return;
+    stories.index = Math.min(Math.max(index || 0, 0), stories.list.length - 1);
+    openModal("storiesModal");
+    showStory(stories.index);
+    haptic("light");
+  }
+
+  function showStory(index) {
+    const list = stories.list.length ? stories.list : lookbookList();
+    stories.list = list;
+    if (!list.length) return;
+    stories.index = (index + list.length) % list.length;
+    const item = list[stories.index];
+    const caption = item.caption || "ЗАМЕТКА";
+    const img = $("#storiesImage");
+    img.alt = caption;
+    img.src = item.image || item.photo_url || "";
+    $("#storiesCaption").textContent = caption;
+    const target = storyTarget(item);
+    const cta = $("#storiesCta");
+    if (productById(target.id)) {
+      cta.textContent = target.label;
+      cta.dataset.productId = target.id;
+      cta.classList.remove("hidden");
+    } else {
+      cta.classList.add("hidden");
+    }
+    $("#storiesProgress").innerHTML = list.map((_, i) => `<i class="${i < stories.index ? "done" : i === stories.index ? "active" : ""}"><b></b></i>`).join("");
+    const next = list[(stories.index + 1) % list.length];
+    if (next && (next.image || next.photo_url)) { const pre = new Image(); pre.src = next.image || next.photo_url; }
+    clearTimeout(stories.timer);
+    stories.timer = 0;
+    if (reducedMotion()) return;
+    const fill = $("#storiesProgress i.active b");
+    if (fill) {
+      fill.style.transition = "none";
+      fill.style.width = "0";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        fill.style.transition = "width 5s linear";
+        fill.style.width = "100%";
+      }));
+    }
+    stories.timer = setTimeout(() => {
+      if (stories.index >= list.length - 1) closeModal("storiesModal");
+      else showStory(stories.index + 1);
+    }, 5000);
+  }
+
+  function stopStories() {
+    clearTimeout(stories.timer);
+    stories.timer = 0;
+  }
+
+  /* --- Квиз «Найди посадку» --- */
+
+  const QUIZ_SIZES = ["S", "M", "L", "XL", "XXL"];
+  const QUIZ_HEIGHTS = [
+    { label: "До 172", size: "S" },
+    { label: "173–178", size: "M" },
+    { label: "179–186", size: "L" },
+    { label: "187–194", size: "XL" },
+    { label: "Выше 194", size: "XXL" }
+  ];
+  const quiz = { step: 0, height: "", build: "", fit: "" };
+
+  function openQuiz() {
+    quiz.step = 0;
+    quiz.height = "";
+    quiz.build = "";
+    quiz.fit = "";
+    openModal("quizModal");
+    renderQuiz();
+  }
+
+  function renderQuiz() {
+    const steps = [
+      { key: "height", q: "Твой рост?", options: QUIZ_HEIGHTS.map(entry => entry.label) },
+      { key: "build", q: "Телосложение?", options: ["Худощавое", "Среднее", "Крепкое"] },
+      { key: "fit", q: "Как должно сидеть?", options: ["Впритык", "Как обычно", "Свободно / оверсайз"] }
+    ];
+    const body = $("#quizBody");
+    if (quiz.step < steps.length) {
+      const current = steps[quiz.step];
+      $("#quizStep").textContent = `Вопрос ${quiz.step + 1} из 3`;
+      body.innerHTML = `<p class="quiz-q">${escapeHTML(current.q)}</p><div class="quiz-options">` +
+        current.options.map(option => `<button class="button button-outline" data-quiz="${escapeHTML(option)}" type="button">${escapeHTML(option)}</button>`).join("") +
+        "</div>" + (quiz.step ? '<button class="quiz-back" data-quiz-back type="button">← НАЗАД</button>' : "");
+      return;
+    }
+    const base = QUIZ_HEIGHTS.find(entry => entry.label === quiz.height) || QUIZ_HEIGHTS[1];
+    let at = QUIZ_SIZES.indexOf(base.size);
+    if (quiz.build === "Худощавое") at -= 1;
+    if (quiz.build === "Крепкое") at += 1;
+    if (quiz.fit === "Впритык") at -= 1;
+    if (quiz.fit === "Свободно / оверсайз") at += 1;
+    const size = QUIZ_SIZES[Math.min(Math.max(at, 0), QUIZ_SIZES.length - 1)];
+    $("#quizStep").textContent = "Готово";
+    const picks = (state.data.products || []).filter(item => item.active !== false && (item.sizes || []).includes(size)).slice(0, 3);
+    body.innerHTML = `<p class="quiz-q">Твоя посадка —</p><div class="quiz-result-size">${escapeHTML(size)}</div>` +
+      `<p class="quiz-result-note">Рост ${escapeHTML(quiz.height.toLowerCase())} · ${escapeHTML(quiz.build.toLowerCase())} · ${escapeHTML(quiz.fit.toLowerCase())}.</p>` +
+      `<div class="quiz-options"><button class="button" data-quiz-apply="${escapeHTML(size)}" type="button">ВЗЯТЬ ${escapeHTML(size)}</button></div>` +
+      (picks.length ? `<p class="quiz-q quiz-sub">В этом размере:</p>` + picks.map(item =>
+        `<button class="quiz-pick" data-quiz-open="${escapeHTML(item.id)}" type="button"><img src="${escapeHTML(imageFor(item))}" alt="" loading="lazy"><span><b>${escapeHTML(item.name)}</b><span>${escapeHTML(item.price || "")}</span></span></button>`).join("") : "");
+  }
+
+  function applyQuizSize(size) {
+    state.profile.size = size;
+    saveJSON("vorozhbitov_profile", state.profile);
+    const button = document.querySelector(`#sizeList [data-size="${size}"]`);
+    if (button) {
+      state.selectedSize = size;
+      $$(".size-button", $("#sizeList")).forEach(node => { node.classList.toggle("selected", node === button); node.setAttribute("aria-pressed", String(node === button)); });
+      updatePurchaseSummary();
+      $("#sizeHint").textContent = `Размер ${size} выбран.`;
+      $("#sizeHint").classList.remove("error");
+    }
+    closeModal("quizModal");
+    showToast(`Размер ${size} записан.`);
+    haptic("success");
+  }
+
+  /* --- Конфигуратор гравировки жетона --- */
+
+  let sheetProduct = null;
+  const personArt = { img: null, ready: false };
+
+  function drawPersonPreview() {
+    const wrap = $("#personPreview");
+    const canvas = $("#personCanvas");
+    if (!wrap || !canvas) return;
+    if (!sheetProduct || sheetProduct.id !== "tag-sila-i-chest") { wrap.classList.add("hidden"); return; }
+    wrap.classList.remove("hidden");
+    const input = $("#personInput");
+    const digits = input ? input.value.replace(/\D/g, "").slice(0, 5) : "";
+    const render = () => {
+      const ctx = canvas.getContext("2d");
+      if (!ctx || !personArt.img) return;
+      const w = canvas.width, h = canvas.height;
+      const iw = personArt.img.naturalWidth, ih = personArt.img.naturalHeight;
+      const scale = Math.max(w / iw, h / ih);
+      const dw = iw * scale, dh = ih * scale;
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(personArt.img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      const text = digits || "00063";
+      ctx.save();
+      if (!digits) ctx.globalAlpha = 0.45;
+      ctx.font = `700 ${Math.round(h * 0.13)}px "Arial Narrow", Arial, sans-serif`;
+      try { ctx.letterSpacing = "6px"; } catch (_) { /* older canvas */ }
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "rgba(255,255,255,.45)";
+      ctx.fillText(text, w * 0.59, h * 0.80 + 2);
+      ctx.fillStyle = "#232326";
+      ctx.fillText(text, w * 0.59, h * 0.80);
+      ctx.restore();
+    };
+    if (personArt.ready) { render(); return; }
+    const img = new Image();
+    img.onload = () => { personArt.img = img; personArt.ready = true; render(); };
+    img.src = "assets/spin/tag-sich-01.jpg";
+  }
+
+  /* --- Примерка футболки по фото --- */
+
+  const tryon = { photo: null, tee: null, teeReady: false, scale: 0.8, dx: 0, dy: 0, drag: null };
+
+  function openTryon() {
+    openModal("tryonModal");
+    if (!tryon.tee && !tryon.teeReady) {
+      const img = new Image();
+      img.onload = () => { tryon.tee = img; tryon.teeReady = true; drawTryon(); };
+      img.src = "assets/tryon-tee.jpg";
+    } else {
+      drawTryon();
+    }
+  }
+
+  function drawTryon() {
+    const canvas = $("#tryonCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const w = canvas.width, h = canvas.height;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "#141416";
+    ctx.fillRect(0, 0, w, h);
+    if (tryon.photo) {
+      const iw = tryon.photo.naturalWidth, ih = tryon.photo.naturalHeight;
+      const scale = Math.max(w / iw, h / ih);
+      const dw = iw * scale, dh = ih * scale;
+      ctx.drawImage(tryon.photo, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    }
+    if (tryon.photo && tryon.teeReady && tryon.tee) {
+      const tw = w * tryon.scale;
+      const th = tw * (tryon.tee.naturalHeight / tryon.tee.naturalWidth);
+      ctx.globalCompositeOperation = "multiply";
+      ctx.drawImage(tryon.tee, (w - tw) / 2 + tryon.dx, h * 0.10 + tryon.dy, tw, th);
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
+
   function bindEvents() {
     $("#retryCatalog").addEventListener("click", loadCatalog);
+    initMotion();
+    renderSkeletons();
+    $("#quizOpenButton").addEventListener("click", openQuiz);
+    $("#quizBody").addEventListener("click", event => {
+      const back = event.target.closest("[data-quiz-back]");
+      if (back) { quiz.step = Math.max(quiz.step - 1, 0); renderQuiz(); return; }
+      const option = event.target.closest("[data-quiz]");
+      if (option) {
+        quiz[["height", "build", "fit"][Math.min(quiz.step, 2)]] = option.dataset.quiz;
+        quiz.step += 1;
+        renderQuiz();
+        haptic("light");
+        return;
+      }
+      const apply = event.target.closest("[data-quiz-apply]");
+      if (apply) { applyQuizSize(apply.dataset.quizApply); return; }
+      const pick = event.target.closest("[data-quiz-open]");
+      if (pick) { closeModal("quizModal"); openProduct(pick.dataset.quizOpen); }
+    });
+    $("#storiesPrev").addEventListener("click", () => { showStory(stories.index - 1); haptic("light"); });
+    $("#storiesNext").addEventListener("click", () => { showStory(stories.index + 1); haptic("light"); });
+    $("#storiesCta").addEventListener("click", event => {
+      const id = event.currentTarget.dataset.productId;
+      closeModal("storiesModal");
+      if (id) openProduct(id);
+    });
+    $("#tryonButton").addEventListener("click", openTryon);
+    $("#tryonFile").addEventListener("change", event => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const img = new Image();
+      img.onload = () => {
+        tryon.photo = img;
+        tryon.dx = 0;
+        tryon.dy = 0;
+        $("#tryonUpload").classList.add("hidden");
+        $("#tryonChange").classList.remove("hidden");
+        $("#tryonDownload").disabled = false;
+        drawTryon();
+        haptic("light");
+      };
+      img.src = URL.createObjectURL(file);
+    });
+    $("#tryonChange").addEventListener("click", () => $("#tryonFile").click());
+    $("#tryonScale").addEventListener("input", event => { tryon.scale = Number(event.target.value) / 100; drawTryon(); });
+    $("#tryonDownload").addEventListener("click", () => {
+      const canvas = $("#tryonCanvas");
+      if (!canvas || !tryon.photo) return;
+      const link = document.createElement("a");
+      link.download = "vorozhbitov-tryon.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      haptic("success");
+    });
+    const tryCanvas = $("#tryonCanvas");
+    tryCanvas.addEventListener("pointerdown", event => {
+      if (!tryon.photo) return;
+      try { tryCanvas.setPointerCapture(event.pointerId); } catch (_) { /* noop */ }
+      tryon.drag = { x: event.clientX - tryon.dx, y: event.clientY - tryon.dy };
+    });
+    tryCanvas.addEventListener("pointermove", event => {
+      if (!tryon.drag) return;
+      tryon.dx = Math.min(Math.max(event.clientX - tryon.drag.x, -180), 180);
+      tryon.dy = Math.min(Math.max(event.clientY - tryon.drag.y, -240), 240);
+      drawTryon();
+    });
+    tryCanvas.addEventListener("pointerup", () => { tryon.drag = null; });
+    tryCanvas.addEventListener("pointercancel", () => { tryon.drag = null; });
+    const personInput = $("#personInput");
+    if (personInput) personInput.addEventListener("input", drawPersonPreview);
     $("#heroProductButton").addEventListener("click", () => {
       browseCollection();
       scrollToId("catalog");
@@ -1554,6 +1893,7 @@
 
     $("#cartContent").addEventListener("click", event => {
       if (event.target.closest("[data-cart-retry]")) { loadCatalog(); return; }
+      if (event.target.closest("[data-cart-shop]")) { closeModal("cartModal"); scrollToId("catalog"); return; }
       const row = event.target.closest("[data-cart-key]");
       if (!row) return;
       const key = row.dataset.cartKey;
@@ -1639,6 +1979,11 @@
       if (shot.closest(".modal-backdrop")) return;
       openLightbox(shot.dataset.lightbox, shot.dataset.caption || "");
     });
+    document.addEventListener("click", event => {
+      const card = event.target.closest("[data-story-index]");
+      if (!card || card.closest(".modal-backdrop")) return;
+      openStories(Number(card.dataset.storyIndex) || 0);
+    });
 
     $$("[data-scroll]").forEach(button => button.addEventListener("click", () => scrollToId(button.dataset.scroll)));
     $$("[data-close]").forEach(button => button.addEventListener("click", () => closeModal(button.dataset.close)));
@@ -1656,6 +2001,9 @@
       }
       if (event.target.matches('[data-lightbox]') && ["Enter", " "].includes(event.key)) {
         event.preventDefault(); openLightbox(event.target.dataset.lightbox, event.target.dataset.caption);
+      }
+      if (event.target.matches('[data-story-index]') && ["Enter", " "].includes(event.key)) {
+        event.preventDefault(); openStories(Number(event.target.dataset.storyIndex) || 0);
       }
       if (top && top.id === "productModal" && state.stage === "photo" && !event.target.matches('input,select,textarea') && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
         event.preventDefault(); stepMedia(event.key === "ArrowLeft" ? -1 : 1);

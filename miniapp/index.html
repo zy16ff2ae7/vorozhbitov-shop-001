@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#070708">
   <meta name="description" content="ВОРОЖБИТОВ — одежда и аксессуары Никиты Ворожбитова. Сила и честь. Характер в деталях.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23070708'/%3E%3Ctext x='32' y='45' font-family='Arial%20Black,Arial' font-size='38' font-weight='900' fill='%23e10600' text-anchor='middle'%3EV%3C/text%3E%3C/svg%3E">
   <title>ВОРОЖБИТОВ</title>
   <link rel="preload" href="fonts/unbounded-900.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/manrope-400.woff2" as="font" type="font/woff2" crossorigin>
@@ -24,9 +25,8 @@
   </div>
 
   <section class="welcome hidden" id="welcome" aria-label="Приветствие">
-    <video class="welcome-media" id="welcomeVideo" muted loop playsinline preload="none"
-           poster="assets/drop/tee-gym-with-tag-v3.jpg" aria-hidden="true"></video>
-    <img class="welcome-media" id="welcomeFallback" src="assets/drop/tee-gym-with-tag-v3.jpg" alt="ВОРОЖБИТОВ — приветствие">
+    <video class="welcome-media" id="welcomeVideo" muted loop playsinline preload="none" aria-hidden="true"></video>
+    <img class="welcome-media hidden" id="welcomeFallback" src="assets/drop/hero-sila-chest-v1.jpg" alt="ВОРОЖБИТОВ — приветствие">
     <div class="welcome-shade"></div>
     <button class="welcome-motion hidden" id="welcomeMotion" type="button" aria-label="Остановить видео"><span id="welcomeFrameCount" aria-hidden="true">ФИЛЬМ · 30 СЕК</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
     <div class="welcome-frame">
@@ -40,6 +40,7 @@
           <li>Честная посадка</li>
           <li>Первый тираж</li>
         </ul>
+        <p class="welcome-cta">Бери размер, пока он есть.</p>
       </div>
       <div class="welcome-actions">
         <button class="button button-primary punch" id="enterShop" type="button">ВОЙТИ В МАГАЗИН <span>↗</span></button>
@@ -89,7 +90,7 @@
     <main>
       <section class="hero" id="home" aria-labelledby="heroTitle">
         <div class="hero-media">
-          <img src="assets/drop/tee-gym-with-tag-v3.jpg" alt="Никита Ворожбитов в футболке «Сила и честь» и фирменном жетоне" fetchpriority="high" decoding="async" id="heroFallback" width="1120" height="1400">
+          <img src="assets/drop/hero-sila-chest-v1.jpg" alt="Никита Ворожбитов в футболке «Сила и честь» и фирменном жетоне" fetchpriority="high" decoding="async" id="heroFallback" width="1024" height="1536">
           <div class="hero-shade"></div>
           <div class="hero-live"><span class="pulse-dot"></span> НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ</div>
         </div>
@@ -163,12 +164,12 @@
         <div class="empty-state hidden" id="emptyState">
           <span class="empty-mark">∅</span>
           <h3>Ничего не нашлось</h3>
-          <p>Другой запрос или сброс фильтров.</p>
+          <p>Такой вещи нет. Другой запрос — или сбрось фильтры и начни с витрины.</p>
           <button class="button button-dark" id="emptyReset" type="button">ПОКАЗАТЬ ВСЁ</button>
         </div>
       </section>
 
-      <section class="product-story section-pad" id="store" aria-labelledby="detailTitle">
+      <section class="product-story section-pad" id="details" aria-labelledby="detailTitle">
         <div class="detail-heading"><span class="section-kicker">ПЕРВЫЙ ВЫПУСК / КРУПНЫМ ПЛАНОМ</span><h2 id="detailTitle">ХАРАКТЕР<br>В ДЕТАЛЯХ.</h2></div>
         <button class="detail-shot" type="button" data-detail-product="tee-sila-i-chest" data-detail-photo="1" aria-label="Рассмотреть спину футболки">
           <img src="assets/drop/tee-back-final.jpg" alt="Постоянная нашивка у горловины и узкий клинок по спине" loading="lazy" decoding="async" width="1122" height="1402">
@@ -182,6 +183,33 @@
           <img src="assets/spin/tag-sich-01.jpg" alt="Жетон с монограммой" loading="lazy" decoding="async" width="1408" height="768">
           <span class="detail-caption"><small>03 / ЖЕТОН</small><strong>Личный знак.</strong><span>Рассмотреть гравировку ↗</span></span>
         </button>
+      </section>
+
+      <section class="store-section" id="store" aria-labelledby="storeTitle">
+        <div class="store-head">
+          <span class="section-kicker">02 / МАГАЗИН</span>
+          <h2 id="storeTitle">ТЕРРИТОРИЯ<br><em>БРЕНДА.</em></h2>
+          <p class="store-lead">Бетон, красный сигнал и вещи, которые можно потрогать до покупки. Заходи — покажем всё руками.</p>
+        </div>
+        <figure class="store-hero" tabindex="0" role="button" data-lightbox="assets/store-rack.jpg" data-caption="Магазин ВОРОЖБИТОВ — территория бренда" aria-label="Магазин ВОРОЖБИТОВ — территория бренда. Открыть фото">
+          <img src="assets/store-rack.jpg" alt="Зал магазина: неоновая вывеска ВОРОЖБИТОВ, вешалки с вещами, боксёрская груша" loading="lazy" decoding="async">
+          <figcaption><span>ТОЧКА БРЕНДА · МАГАЗИН</span><strong>ЗАХОДИ К СВОИМ.</strong><small>Первый тираж на вешалках — примерка на месте</small></figcaption>
+        </figure>
+        <div class="store-grid">
+          <figure class="store-shot" tabindex="0" role="button" data-lightbox="assets/store.jpg" data-caption="Вешалки — первый тираж" aria-label="Вешалки — первый тираж. Открыть фото">
+            <img src="assets/store.jpg" alt="Чёрные худи первого тиража на вешалке под красным неоном" loading="lazy" decoding="async">
+            <figcaption>ВЕШАЛКИ / ТИРАЖ 001</figcaption>
+          </figure>
+          <figure class="store-shot" tabindex="0" role="button" data-lightbox="assets/look-street.jpg" data-caption="Городская форма — красный сигнал" aria-label="Городская форма — красный сигнал. Открыть фото">
+            <img src="assets/look-street.jpg" alt="Свой в чёрной форме бренда в ночном городе у красного света" loading="lazy" decoding="async">
+            <figcaption>СИГНАЛ / ГОРОДСКАЯ ФОРМА</figcaption>
+          </figure>
+          <div class="store-facts">
+            <div><span>01</span><strong>ПРИМЕРКА НА МЕСТЕ</strong><small>Подберём размер руками — без гаданий по таблице.</small></div>
+            <div><span>02</span><strong>САМОВЫВОЗ</strong><small>Забери заказ сам после оплаты. Детали подскажет менеджер.</small></div>
+            <div><span>03</span><strong>ДОСТАВКА ПО СТРАНЕ</strong><small>СДЭК и Яндекс. Срок и цена зависят от города.</small></div>
+          </div>
+        </div>
       </section>
 
       <section class="manifesto section-pad" id="manifesto">
@@ -209,7 +237,6 @@
 
         </div>
         <button class="teaser-card" id="teaserCard" type="button" aria-label="Смотреть тизер выпуска">
-          <img id="teaserPoster" src="assets/drop/tee-gym-with-tag-v3.jpg" alt="Тизер выпуска 001" loading="lazy" decoding="async">
           <span class="teaser-shade" aria-hidden="true"></span>
           <span class="teaser-play" aria-hidden="true">▶</span>
           <span class="teaser-meta">
@@ -283,7 +310,7 @@
   <nav class="bottom-nav" aria-label="Навигация">
     <button class="bottom-link active" data-scroll="home" type="button"><span class="icon" data-icon="home"></span><small>Главная</small></button>
     <button class="bottom-link" data-scroll="catalog" type="button"><span class="icon" data-icon="grid"></span><small>Каталог</small></button>
-    <button class="bottom-link" data-scroll="store" type="button"><span class="icon" data-icon="pin"></span><small>Детали</small></button>
+    <button class="bottom-link" data-scroll="store" type="button"><span class="icon" data-icon="pin"></span><small>Магазин</small></button>
     <button class="bottom-link" id="bottomSaved" type="button"><span class="icon" data-icon="bookmark"></span><small>Избранное</small></button>
     <button class="bottom-link bottom-cart" id="bottomCartButton" type="button"><span class="icon" data-icon="bag"></span><small>Заявка</small><b class="nav-badge hidden" id="bottomCartCount">0</b></button>
   </nav>
@@ -330,6 +357,10 @@
           <label class="person-label" for="personInput" id="personLabel">НОМЕР ЖЕТОНА</label>
           <input class="person-input" id="personInput" type="text" inputmode="numeric" autocomplete="off" placeholder="например, 00063">
           <p class="person-hint" id="personHint"></p>
+          <div class="person-preview hidden" id="personPreview">
+            <canvas id="personCanvas" width="640" height="360" role="img" aria-label="Предпросмотр гравировки"></canvas>
+            <p class="person-preview-note">Так номер будет смотреться на жетоне.</p>
+          </div>
         </div>
         <div class="qty-row">
           <span>КОЛ-ВО</span>
@@ -341,6 +372,7 @@
         </div>
         <div class="purchase-bar"><span id="purchaseSummary">Выбери размер</span><button class="button button-primary full-button" id="addToCartButton" type="button">ДОБАВИТЬ В ЗАЯВКУ <span>+</span></button></div>
         <button class="button button-ghost full-button" id="waitlistButton" type="button">ЖДАТЬ РАЗМЕР</button>
+        <button class="button button-outline tryon-entry hidden" id="tryonButton" type="button">ПРИМЕРИТЬ ПО ФОТО</button>
         <div class="sheet-details" id="sheetDetails"></div>
         <div class="related" id="related"></div>
       </div>
@@ -440,12 +472,14 @@
         <button class="button button-outline" id="adviseSize" type="button">ПОДСКАЗАТЬ</button>
         <p class="size-hint" id="adviseResult"></p>
       </div>
+      <button class="button button-outline quiz-entry" id="quizOpenButton" type="button">ПОДОБРАТЬ ЗА 30 СЕКУНД</button>
       <div class="size-table">
         <div><span>РАЗМЕР</span><span>ГРУДЬ</span><span>ДЛИНА</span><span>РОСТ</span></div>
         <div><b>S</b><span>112</span><span>70</span><span>164–172</span></div>
         <div><b>M</b><span>118</span><span>72</span><span>172–178</span></div>
         <div><b>L</b><span>124</span><span>74</span><span>178–186</span></div>
         <div><b>XL</b><span>130</span><span>76</span><span>186–194</span></div>
+        <div><b>XXL</b><span>136</span><span>78</span><span>194–202</span></div>
       </div>
       <p class="form-note">Замеры ориентировочные. Точно скажет менеджер.</p>
     </div>
@@ -454,7 +488,7 @@
   <div class="modal-backdrop hidden" id="teaserModal" role="dialog" aria-modal="true" aria-label="Тизер выпуска">
     <div class="teaser-sheet">
       <button class="sheet-close" data-close="teaserModal" type="button" aria-label="Закрыть">×</button>
-      <video id="teaserVideo" tabindex="0" controls playsinline preload="none" poster="assets/drop/tee-gym-with-tag-v3.jpg"></video>
+      <video id="teaserVideo" tabindex="0" controls playsinline preload="none"></video>
       <div class="teaser-actions">
         <button class="button button-primary punch" id="teaserToShop" type="button">СМОТРЕТЬ ВЕЩИ <span>↗</span></button>
         <button class="text-button hidden" id="teaserReplay" type="button">Посмотреть ещё раз <span aria-hidden="true">↻</span></button>
@@ -472,6 +506,50 @@
     </div>
   </div>
 
+  <div class="modal-backdrop hidden" id="storiesModal" role="dialog" aria-modal="true" aria-label="Истории">
+    <div class="modal-sheet stories-sheet">
+      <div class="stories-progress" id="storiesProgress"></div>
+      <button class="sheet-close stories-close" data-close="storiesModal" type="button" aria-label="Закрыть истории">✕</button>
+      <img class="stories-image" id="storiesImage" alt="">
+      <div class="stories-shade"></div>
+      <div class="stories-body">
+        <p class="stories-caption" id="storiesCaption"></p>
+        <button class="button stories-cta hidden" id="storiesCta" type="button"></button>
+      </div>
+      <button class="stories-zone stories-prev" id="storiesPrev" type="button" aria-label="Предыдущая история"></button>
+      <button class="stories-zone stories-next" id="storiesNext" type="button" aria-label="Следующая история"></button>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="quizModal" role="dialog" aria-modal="true" aria-label="Подбор размера">
+    <div class="modal-sheet">
+      <button class="sheet-close" data-close="quizModal" type="button" aria-label="Закрыть подбор">✕</button>
+      <h3>НАЙДИ СВОЮ ПОСАДКУ</h3>
+      <p class="quiz-step" id="quizStep"></p>
+      <div class="quiz-body" id="quizBody"></div>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="tryonModal" role="dialog" aria-modal="true" aria-label="Примерка по фото">
+    <div class="modal-sheet tryon-sheet">
+      <button class="sheet-close" data-close="tryonModal" type="button" aria-label="Закрыть примерку">✕</button>
+      <h3>ПРИМЕРКА ПО ФОТО</h3>
+      <p class="tryon-hint">Фото по пояс на светлом фоне — футболка ляжет поверх. Двигай пальцем, размер — ползунком.</p>
+      <div class="tryon-stage">
+        <canvas id="tryonCanvas" width="720" height="900"></canvas>
+        <label class="tryon-upload" id="tryonUpload">
+          <input type="file" id="tryonFile" accept="image/*" hidden>
+          <span class="tryon-upload-mark" aria-hidden="true">↑</span>
+          <span>ЗАГРУЗИТЬ ФОТО</span>
+        </label>
+      </div>
+      <div class="tryon-controls">
+        <label class="tryon-scale">РАЗМЕР ФУТБОЛКИ<input type="range" id="tryonScale" min="40" max="130" value="80"></label>
+        <div class="tryon-actions">
+          <button class="tryon-change hidden" id="tryonChange" type="button">Сменить фото</button>
+          <button class="button button-outline" id="tryonDownload" type="button" disabled>СКАЧАТЬ РЕЗУЛЬТАТ</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div class="modal-backdrop hidden" id="payModal" role="dialog" aria-modal="true" aria-label="Оплата">
     <div class="pay-sheet">
       <div class="sheet-handle" aria-hidden="true"></div>

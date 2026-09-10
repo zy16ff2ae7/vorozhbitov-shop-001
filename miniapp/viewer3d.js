@@ -128,6 +128,10 @@
     const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.vel = reduce ? 0 : Math.max(-5, Math.min(5, dx / 6));
     this.show();
+    if (this.img && !reduce) {
+      const shift = Math.max(-14, Math.min(14, (event.clientX - this.startX) * 0.12));
+      this.img.style.transform = "translateX(" + shift.toFixed(1) + "px)";
+    }
   };
 
   Viewer.prototype.onUp = function () {
@@ -135,6 +139,7 @@
     this.dragging = false;
     this.lastTime = 0;
     this.schedule();
+    if (this.img) this.img.style.transform = "";
   };
 
   Viewer.prototype.onWheel = function (event) {

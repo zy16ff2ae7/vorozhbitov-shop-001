@@ -1,0 +1,72 @@
+name: video-surgery
+on:
+  push:
+    branches: [arena/01a08bf6-vorozhbitov-shop-001]
+    paths: [.github/workflows/video-surgery.yml, surgery-request]
+jobs:
+  surgery:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - name: tools
+        run: |
+          command -v ffmpeg >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg; }
+          ffmpeg -version | head -1
+      - name: operate
+        id: operate
+        run: |
+          mkdir -p surgery/stage
+          exec > >(tee surgery/build.log) 2>&1
+          set -x
+          cd surgery/stage || { echo "::error::no stage dir"; exit 1; }
+          W=../orig-welcome.mp4
+          V6=../orig-v6.mp4
+          P=../../miniapp/assets/drop/hero-sila-chest-v1.jpg
+          XV() { ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 "$1"; }
+          E() { echo "::error::$1"; exit 1; }
+          ENC="-c:v libx264 -preset fast -crf 18 -video_track_timescale 15360"
+                    ffmpeg -y -v error -i $W -vf "select='between(n,0,273)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 274 $ENC w0.mp4 || E "w0"
+          ffmpeg -y -v error -i $W -vf "select='between(n,326,507)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 182 $ENC w1.mp4 || E "w1"
+          ffmpeg -y -v error -i $W -vf "select='between(n,594,733)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 140 $ENC w2.mp4 || E "w2"
+          ffmpeg -y -v error -loop 1 -framerate 24 -i $P -vf "scale=1080:-2,crop=880:1174:100:300,zoompan=z='1.035-on*0.0004':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=540x720:fps=24,eq=contrast=1.03:saturation=0.85,setsar=1,format=yuv420p" -frames:v 86 -an $ENC wn1.mp4 || E "wn1"
+          printf "file 'w0.mp4'\nfile 'w1.mp4'\nfile 'wn1.mp4'\nfile 'w2.mp4'\n" > wlist.txt
+          ffmpeg -y -v error -f concat -safe 0 -i wlist.txt -c copy -movflags +faststart ../welcome-v2.mp4 || E "wconcat"
+          [ "$(XV ../welcome-v2.mp4)" = 682 ] || E "welcome frames: $(XV ../welcome-v2.mp4)"
+          ffmpeg -y -v error -i $V6 -vf "select='between(n,42,316)',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p" -an -frames:v 275 $ENC a1.mp4 || E "a1"
+          ffmpeg -y -v error -i $V6 -vf "select='between(n,350,588)',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p" -an -frames:v 239 $ENC a2.mp4 || E "a2"
+          ffmpeg -y -v error -loop 1 -framerate 30 -i $P -vf "scale=900:-2,crop=632:1124:134:112,zoompan=z='1+on*0.0003':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=720x1280:fps=30,eq=contrast=1.02:saturation=0.82,setsar=1,format=yuv420p" -frames:v 42 -an $ENC an0.mp4 || E "an0"
+          ffmpeg -y -v error -loop 1 -framerate 30 -i $P -vf "scale=1600:-2,crop=450:800:645:710,zoompan=z='1+on*0.0004':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=720x1280:fps=30,eq=contrast=1.02:saturation=0.82,setsar=1,format=yuv420p" -frames:v 33 -an $ENC an1.mp4 || E "an1"
+          printf "file 'an0.mp4'\nfile 'a1.mp4'\nfile 'an1.mp4'\nfile 'a2.mp4'\n" > alist.txt
+          ffmpeg -y -v error -f concat -safe 0 -i alist.txt -i $V6 -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy -movflags +faststart ../v6a-replace.mp4 || E "aconcat"
+          [ "$(XV ../v6a-replace.mp4)" = 589 ] || E "v6a frames: $(XV ../v6a-replace.mp4)"
+          ffmpeg -y -v error -i $V6 -vf "trim=start_frame=42,setpts=PTS-STARTPTS,fps=30,setsar=1,format=yuv420p" -af "atrim=start=1.4,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.15" -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k -ar 48000 -movflags +faststart ../v6b-cut.mp4 || E "v6b"
+          [ "$(XV ../v6b-cut.mp4)" = 547 ] || E "v6b frames: $(XV ../v6b-cut.mp4)"
+          printf "file 'a1.mp4'\nfile 'an1.mp4'\nfile 'a2.mp4'\n" > clist.txt
+          ffmpeg -y -v error -f concat -safe 0 -i clist.txt -i $V6 -map 0:v:0 -map 1:a:0 -af "atrim=start=1.4,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.15" -c:v copy -c:a aac -b:a 192k -ar 48000 -movflags +faststart ../v6c-cut-replace.mp4 || E "cconcat"
+          [ "$(XV ../v6c-cut-replace.mp4)" = 547 ] || E "v6c frames: $(XV ../v6c-cut-replace.mp4)"
+          cd ..
+          ffmpeg -y -v error -i welcome-v2.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x6" welcome-v2-sheet.jpg || E "sheet-w"
+          ffmpeg -y -v error -i v6a-replace.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6a-sheet.jpg || E "sheet-a"
+          ffmpeg -y -v error -i v6b-cut.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6b-sheet.jpg || E "sheet-b"
+          ffmpeg -y -v error -i v6c-cut-replace.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6c-sheet.jpg || E "sheet-c"
+          for f in welcome-v2.mp4 v6a-replace.mp4 v6b-cut.mp4 v6c-cut-replace.mp4; do ffmpeg -nostdin -v error -xerror -i $f -f null - || E "decode $f"; done
+          echo DECODE_OK
+          echo QA_DONE
+          ls -la
+      - name: commit
+        if: always()
+        run: |
+          git config user.name "arena-bot"
+          git config user.email "arena-bot@local"
+          git status --short | head -20
+          git add surgery/build.log
+          if [ "${{ steps.operate.outcome }}" = "success" ]; then git add surgery/ ':!surgery/stage'; else echo "mp4s/sheets skipped (operate ${{ steps.operate.outcome }})"; fi
+          if git diff --cached --quiet; then echo "no changes";
+          else
+            git commit -m "surgery: кандидаты монтажа" || echo "::error::git commit failed"
+            git push origin HEAD:${{ github.ref_name }} && echo PUSHED || echo "::error::git push failed"
+          fi
