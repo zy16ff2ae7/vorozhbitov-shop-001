@@ -1390,7 +1390,7 @@
   }
 
   // Фото-стопкадр в начале монтажа тизера — столько секунд пропускаем при старте.
-  const TEASER_SKIP_SECONDS = 2.5;
+  const TEASER_SKIP_SECONDS = 1.4;
 
   function cueTeaserStart(video) {
     const start = () => { try { video.currentTime = TEASER_SKIP_SECONDS; } catch (_) { /* метаданные ещё не готовы */ } };
