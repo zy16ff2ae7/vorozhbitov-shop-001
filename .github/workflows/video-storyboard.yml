@@ -1,11 +1,16 @@
 name: video-storyboard
 on:
+  push:
+    branches: [arena/01a08bf6-vorozhbitov-shop-001]
+    paths: [.github/workflows/video-storyboard.yml, storyboard-request]
   workflow_dispatch:
     inputs:
       files:
         description: "mp4 files (space separated, repo-relative)"
         required: false
         default: "miniapp/assets/video/welcome-final-30s.mp4 miniapp/assets/video/campaign-v6.mp4"
+env:
+  FILES: ${{ github.event.inputs.files || 'miniapp/assets/video/welcome-final-30s.mp4 miniapp/assets/video/campaign-v6.mp4' }}
 jobs:
   storyboard:
     runs-on: ubuntu-latest
@@ -18,11 +23,11 @@ jobs:
       - name: probe
         run: |
           ffmpeg -version | head -1
-          for f in ${{ inputs.files }}; do echo "== $f"; ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 "$f"; done
+          for f in $FILES; do echo "== $f"; ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 "$f"; done
       - name: storyboard
         run: |
           mkdir -p storyboard
-          for f in ${{ inputs.files }}; do
+          for f in $FILES; do
             base=$(basename "$f" .mp4)
             ffmpeg -y -i "$f" -frames:v 30 -vf "fps=1,scale=320:-1,tile=5x6" "storyboard/$base-sheet.jpg"
           done
@@ -32,5 +37,4 @@ jobs:
           git config user.name "arena-bot"
           git config user.email "arena-bot@local"
           git add storyboard/
-          git diff --cached --quiet && echo "no changes" || git commit -m "storyboard: раскадровки видео"
-          git push origin HEAD:${{ github.ref_name }}
+          git diff --cached --quiet && echo "no changes" || { git commit -m "storyboard: раскадровки видео"; git push origin HEAD:${{ github.ref_name }}; }
