@@ -1277,22 +1277,33 @@
     if (stock && lead) stock.textContent = String(lead.stock_label).toUpperCase();
   }
 
-  const welcomePlayback = { source: "", ready: false, paused: false, failed: false, bound: false, pending: false, watchdog: 0 };
+  const welcomePlayback = { source: "", ready: false, paused: false, blocked: false, saverOk: false, failed: false, bound: false, pending: false, watchdog: 0 };
+
+  function welcomeSaverBlocked() {
+    // Экономия трафика: ролик молча не грузим, пока человек сам не нажмёт «ФИЛЬМ · 25 СЕК».
+    return saverMode() && !welcomePlayback.saverOk;
+  }
 
   function welcomeCanPlay() {
     const welcome = $("#welcome");
     return welcomePlayback.ready && !welcomePlayback.paused && !welcomePlayback.failed
-      && !saverMode() && !reducedMotion() && !document.hidden && !state.modalStack.length
+      && !welcomeSaverBlocked() && !reducedMotion() && !document.hidden && !state.modalStack.length
       && !welcome.classList.contains("hidden") && !welcome.classList.contains("is-leaving");
   }
 
   function syncWelcomeVideo() {
     const video = $("#welcomeVideo");
+    // Беззвучие — и атрибутом, и свойством: часть WebView для автоплея смотрит только на свойство.
+    video.muted = true;
+    video.defaultMuted = true;
     const control = $("#welcomeMotion");
-    control.classList.toggle("hidden", !welcomePlayback.ready || welcomePlayback.failed || saverMode() || reducedMotion());
-    control.setAttribute("aria-label", welcomePlayback.paused ? "Продолжить видео" : "Остановить видео");
-    control.setAttribute("aria-pressed", String(welcomePlayback.paused));
-    $("#welcomeMotionIcon").textContent = welcomePlayback.paused ? "▷" : "Ⅱ";
+    const saverBlocked = welcomeSaverBlocked();
+    // Кнопка видна и в экономии трафика: на ней ▷ — осознанный тап запускает показ.
+    control.classList.toggle("hidden", !welcomePlayback.ready || welcomePlayback.failed || reducedMotion());
+    const waiting = welcomePlayback.paused || welcomePlayback.blocked || saverBlocked;
+    control.setAttribute("aria-label", waiting ? "Запустить видео" : "Остановить видео");
+    control.setAttribute("aria-pressed", String(welcomePlayback.paused || welcomePlayback.blocked));
+    $("#welcomeMotionIcon").textContent = waiting ? "▷" : "Ⅱ";
     const canPlay = welcomeCanPlay();
     const fallback = $("#welcomeFallback");
     // Фото — только для режима без движения. Во всех остальных случаях фон чёрный,
@@ -1300,7 +1311,7 @@
     if (fallback) fallback.classList.toggle("hidden", canPlay || !reducedMotion());
     // Источник ставим сразу, не дожидаясь конца загрузки и гейта воспроизведения:
     // ролик буферизуется уже под бут-штампом и стартует мгновенно.
-    if (!saverMode() && !reducedMotion() && welcomePlayback.source && video.getAttribute("src") !== welcomePlayback.source) {
+    if (!saverBlocked && !reducedMotion() && welcomePlayback.source && video.getAttribute("src") !== welcomePlayback.source) {
       video.src = welcomePlayback.source;
       video.load();
     }
@@ -1313,19 +1324,28 @@
     welcomePlayback.pending = true;
     const attempt = video.play();
     Promise.resolve(attempt).catch(error => {
-      if (error.name !== "AbortError" && welcomeCanPlay()) {
+      // Запрет автоплея (строгая политика WebView, энергосбережение iOS) — это не пауза:
+      // помечаем отдельно, первый же жест снимет запрет и запустит фильм.
+      if (error.name === "NotAllowedError") {
+        welcomePlayback.blocked = true;
+        syncWelcomeVideo();
+      } else if (error.name !== "AbortError" && welcomeCanPlay()) {
         welcomePlayback.paused = true;
         syncWelcomeVideo();
       }
     }).finally(() => {
       welcomePlayback.pending = false;
       if (!welcomeCanPlay()) video.pause();
-      else if (video.paused) syncWelcomeVideo();
+      // При запрете автоплея ретрай бесполезен — ждём жест, иначе цикл отказов.
+      else if (video.paused && !welcomePlayback.blocked) syncWelcomeVideo();
     });
   }
 
   function setupWelcomeVideo(media) {
     const video = $("#welcomeVideo");
+    // Беззвучие прописываем и свойством: без muted-флага WebView не даст автоплей.
+    video.muted = true;
+    video.defaultMuted = true;
     // Каталог приходит позже старта и приносит тот же файл с новым ?v-штампом.
     // Уже идущий ролик не трогаем, иначе начало проиграется дважды.
     const playing = video.classList.contains("is-playing") || (!video.paused && video.currentTime > 0);
@@ -1334,18 +1354,34 @@
       video.classList.remove("is-playing");
       welcomePlayback.source = media.welcomeLoop;
       welcomePlayback.failed = false;
+      welcomePlayback.blocked = false;
     }
     $("#welcomeFallback").src = media.welcomePoster;
     welcomePlayback.ready = Boolean(media.welcomeLoop);
     if (!welcomePlayback.bound) {
       welcomePlayback.bound = true;
       $("#welcomeMotion").addEventListener("click", () => {
-        welcomePlayback.paused = !welcomePlayback.paused;
+        if (welcomeSaverBlocked()) {
+          // Тап по «ФИЛЬМ · 25 СЕК» в экономии трафика — согласие загрузить ролик.
+          welcomePlayback.saverOk = true;
+          welcomePlayback.paused = false;
+          welcomePlayback.blocked = false;
+        } else if (welcomePlayback.blocked) {
+          // Тап по кнопке со ▷ — пользовательский жест, он снимает запрет автоплея.
+          welcomePlayback.blocked = false;
+          welcomePlayback.paused = false;
+        } else {
+          welcomePlayback.paused = !welcomePlayback.paused;
+        }
         syncWelcomeVideo();
       });
       video.addEventListener("playing", () => {
         if (welcomeCanPlay()) video.classList.add("is-playing");
         else video.pause();
+      });
+      video.addEventListener("canplay", () => {
+        // Первая попытка play() могла уйти в пустоту до данных — повторяем по готовности.
+        if (!video.classList.contains("is-playing") && !welcomePlayback.blocked) syncWelcomeVideo();
       });
       video.addEventListener("error", () => {
         // Removing a source when leaving is cleanup, not a failed media request.
@@ -1356,8 +1392,14 @@
       });
       window.matchMedia?.("(prefers-reduced-motion: reduce)").addEventListener?.("change", syncWelcomeVideo);
       navigator.connection?.addEventListener?.("change", syncWelcomeVideo);
-      // WebView может резать автоплей: первый жест и возврат во вкладку — повод повторить.
-      window.addEventListener("pointerdown", () => { if (!video.classList.contains("is-playing")) syncWelcomeVideo(); }, { passive: true });
+      // WebView может резать автоплей: первый жест снимает запрет, возврат во вкладку — повод повторить.
+      window.addEventListener("pointerdown", event => {
+        if (video.classList.contains("is-playing")) return;
+        // Тап по кнопке обработает её click: не запускаем видео под его будущий тоггл.
+        if (event.target.closest && event.target.closest("#welcomeMotion")) return;
+        welcomePlayback.blocked = false;
+        syncWelcomeVideo();
+      }, { passive: true });
       document.addEventListener("visibilitychange", () => { if (!document.hidden) syncWelcomeVideo(); });
     }
     // Сторожевой таймер: не заиграло за 4 секунды — перезагружаем и повторяем попытку.
@@ -1378,6 +1420,8 @@
     // Гасим источник и сторожевой таймер, иначе syncWelcomeVideo вернёт src
     // и ролик будет грузиться фоном, пока человек в магазине.
     welcomePlayback.source = "";
+    welcomePlayback.blocked = false;
+    welcomePlayback.pending = false;
     window.clearTimeout(welcomePlayback.watchdog);
     if (video.hasAttribute("src")) {
       video.removeAttribute("src");

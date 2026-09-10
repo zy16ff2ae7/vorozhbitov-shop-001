@@ -1153,6 +1153,53 @@ class BotTests(unittest.TestCase):
         self.assertIn('video.classList.contains("is-playing") || (!video.paused && video.currentTime > 0)', app)
         self.assertIn("welcomePlayback.source !== media.welcomeLoop && !playing", app)
 
+    def test_welcome_video_autostarts_itself(self):
+        """Фоновое видео включается само: атрибут autoplay в разметке, беззвучие задано и свойством
+        (часть WebView для автоплея смотрит только на свойство), старт повторяется по canplay."""
+        miniapp = Path(__file__).with_name("miniapp")
+        video = next(line for line in (miniapp / "index.html").read_text(encoding="utf-8").splitlines() if 'id="welcomeVideo"' in line)
+        self.assertIn("autoplay", video)
+        self.assertIn("muted", video)
+        app = (miniapp / "app.js").read_text(encoding="utf-8")
+        self.assertIn("video.muted = true", app)
+        self.assertIn("video.defaultMuted = true", app)
+        self.assertIn('video.addEventListener("canplay"', app)
+
+    def test_welcome_autoplay_block_released_by_first_gesture(self):
+        """Запрет автоплея (строгая политика, энергосбережение iOS) — не вечная пауза:
+        NotAllowedError ставит отдельный флаг blocked, первый же жест его снимает,
+        а ретрай-цепочка не крутится вхолостую, пока запрет ждёт жест."""
+        app = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
+        self.assertIn("blocked: false", app)
+        self.assertIn('error.name === "NotAllowedError"', app)
+        self.assertIn("welcomePlayback.blocked = true", app)
+        gesture = app[app.find('"pointerdown"'):][:400]
+        self.assertIn("welcomePlayback.blocked = false", gesture)
+        self.assertIn("video.paused && !welcomePlayback.blocked", app)
+
+    def test_welcome_data_saver_shows_play_button(self):
+        """Экономия трафика: автозагрузка не тратит мегабайты, но кнопка «ФИЛЬМ · 25 СЕК»
+        видна со значком ▷ — осознанный тап даёт согласие на загрузку и запускает показ."""
+        app = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
+        # Кнопку больше не прячет saver-режим — только отсутствие ролика, ошибка
+        # или режим без движения.
+        self.assertIn('control.classList.toggle("hidden", !welcomePlayback.ready || welcomePlayback.failed || reducedMotion())', app)
+        self.assertNotIn("welcomePlayback.failed || saverMode() || reducedMotion()", app)
+        # Тап по кнопке — согласие, после которого гейт экономии снят.
+        self.assertIn("saverMode() && !welcomePlayback.saverOk", app)
+        self.assertIn("welcomePlayback.saverOk = true", app)
+
+    def test_welcome_video_not_cropped_on_narrow_screens(self):
+        """Ролик 3:4 на узком экране показан целиком (contain): иначе cover режет
+        титр «ВОРОЖБИТОВ» по бокам. Чёрные поля сливаются с фоном заставки."""
+        styles = (Path(__file__).with_name("miniapp") / "styles.css").read_text(encoding="utf-8")
+        marker = "@media (max-aspect-ratio: 3/4)"
+        at = styles.find(marker)
+        self.assertNotEqual(at, -1, "нет медиа-правила под узкие экраны")
+        block = styles[at:at + 240]
+        self.assertIn("video.welcome-media", block)
+        self.assertIn("object-fit: contain", block)
+
     def test_welcome_has_solid_background(self):
         """У заставки сплошной фон: пока видео грузится, магазин под ней не просвечивает."""
         styles = (Path(__file__).with_name("miniapp") / "styles.css").read_text(encoding="utf-8")
