@@ -22,20 +22,11 @@ jobs:
         run: |
           mkdir -p storyboard
           {
-            for f in $FILES; do echo "== $f"; ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 "$f"; done
-            for f in $FILES; do
-              base=$(basename "$f" .mp4)
-              echo "== sheet $base"
-              ffmpeg -y -v error -i "$f" -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x6" "storyboard/$base-sheet.jpg" && echo OK || echo FAIL
-            done
-            echo "== welcome head strip"
-            ffmpeg -y -v error -i miniapp/assets/video/welcome-final-30s.mp4 -t 3 -frames:v 1 -vf "fps=10,scale=320:-1,tile=10x3" storyboard/welcome-head.jpg && echo OK || echo FAIL
-            echo "== scene cuts"
-            for f in $FILES; do
-              base=$(basename "$f" .mp4)
-              ffmpeg -nostdin -v info -i "$f" -filter:v "select='gt(scene,0.4)',showinfo" -f null - 2>&1 | grep -o "pts_time:[0-9.]*" > "storyboard/$base-cuts.txt" || true
-              wc -l "storyboard/$base-cuts.txt"
-            done
+            for f in $FILES; do echo "== $f"; ffprobe -v error -show_entries format=duration:stream=width,height,r_frame_rate,nb_frames,codec_type -of default=noprint_wrappers=1 "$f"; done
+            echo "== welcome span A [10,16]"
+            ffmpeg -y -v error -ss 10 -t 6 -i miniapp/assets/video/welcome-final-30s.mp4 -frames:v 1 -vf "fps=5,scale=320:-1,tile=6x5" storyboard/welcome-span-a.jpg && echo OK || echo FAIL
+            echo "== welcome span B [20,26]"
+            ffmpeg -y -v error -ss 20 -t 6 -i miniapp/assets/video/welcome-final-30s.mp4 -frames:v 1 -vf "fps=5,scale=320:-1,tile=6x5" storyboard/welcome-span-b.jpg && echo OK || echo FAIL
             ls -la storyboard/
           } 2>&1 | tee storyboard/build.log
       - name: commit
