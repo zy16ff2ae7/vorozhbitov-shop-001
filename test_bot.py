@@ -1091,11 +1091,11 @@ class BotTests(unittest.TestCase):
         video = next(line for line in index.splitlines() if 'id="teaserVideo"' in line)
         self.assertNotIn("poster=", video)
 
-    def test_teaser_skips_photo_lead(self):
-        """Тизер стартует с видео, а не со стопкадра: пропуск начала прошит в open/close/replay."""
+    def test_teaser_starts_from_zero(self):
+        """Монтаж тизера начинается с видео: никаких пропусков начала в плеере."""
         app = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
-        self.assertIn("TEASER_SKIP_SECONDS", app)
-        self.assertNotIn("currentTime = 0", app)
+        self.assertNotIn("TEASER_SKIP_SECONDS", app)
+        self.assertNotIn("cueTeaserStart", app)
 
     def test_welcome_video_has_no_poster_flash(self):
         """Фоновое видео стартует с чёрного/титра: у video нет постера, подложка прячется при воспроизведении."""
