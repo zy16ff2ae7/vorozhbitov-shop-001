@@ -496,11 +496,11 @@
     "welcome_loop": "assets/video/welcome-final-30s.mp4",
     "welcome_poster": "assets/drop/hero-sila-chest-v1.jpg",
     "teaser": "assets/video/campaign-v6.mp4",
-    "teaser_poster": "assets/video/campaign-v6.jpg",
+    "teaser_poster": "assets/drop/hero-sila-chest-v1.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",
     "teaser_caption": "Фильм выпуска · 20 сек",
     "teaser_story_url": "",
-    "teaser_thumbnail": "assets/video/campaign-v6-thumb.jpg",
+    "teaser_thumbnail": "assets/drop/hero-sila-chest-v1-thumb.jpg",
     "hero_image": "assets/drop/hero-sila-chest-v1.jpg",
     "welcome_motion": true
   }

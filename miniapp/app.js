@@ -1247,7 +1247,7 @@
       welcomeLoop: media.welcome_loop || "assets/video/welcome-final-30s.mp4",
       welcomePoster: media.welcome_poster || "assets/drop/hero-sila-chest-v1.jpg",
       teaser: media.teaser || "assets/video/campaign-v6.mp4",
-      teaserPoster: media.teaser_poster || "assets/drop/tee-gym-with-tag-v3.jpg",
+      teaserPoster: media.teaser_poster || "assets/drop/hero-sila-chest-v1.jpg",
       title: media.teaser_title || "СИЛА И ЧЕСТЬ",
       caption: media.teaser_caption || "Выпуск 001 · Никита Ворожбитов",
       storyUrl: media.teaser_story_url || ""
