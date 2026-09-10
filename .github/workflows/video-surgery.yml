@@ -34,7 +34,7 @@ jobs:
           ffmpeg -y -v error -loop 1 -framerate 24 -i $P -vf "scale=1080:-2,crop=880:1174:100:222,zoompan=z='1+on*0.0006':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=540x720:fps=24,eq=contrast=1.03:saturation=0.85,setsar=1,format=yuv420p" -frames:v 52 -an $ENC wn0.mp4 || E "wn0"
           ffmpeg -y -v error -loop 1 -framerate 24 -i $P -vf "scale=1080:-2,crop=880:1174:100:300,zoompan=z='1.035-on*0.0004':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=540x720:fps=24,eq=contrast=1.03:saturation=0.85,setsar=1,format=yuv420p" -frames:v 86 -an $ENC wn1.mp4 || E "wn1"
           printf "file 'w0.mp4'\nfile 'wn0.mp4'\nfile 'w1.mp4'\nfile 'wn1.mp4'\nfile 'w2.mp4'\n" > wlist.txt
-          ffmpeg -y -v error -f concat -safe 0 -i wlist.txt -c copy ../welcome-v2.mp4 || E "wconcat"
+          ffmpeg -y -v error -f concat -safe 0 -i wlist.txt -c copy -movflags +faststart ../welcome-v2.mp4 || E "wconcat"
           [ "$(XV ../welcome-v2.mp4)" = 734 ] || E "welcome frames: $(XV ../welcome-v2.mp4)"
           ffmpeg -y -v error -i $V6 -vf "select='between(n,42,316)',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p" -an -frames:v 275 $ENC a1.mp4 || E "a1"
           ffmpeg -y -v error -i $V6 -vf "select='between(n,350,588)',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p" -an -frames:v 239 $ENC a2.mp4 || E "a2"
@@ -53,6 +53,12 @@ jobs:
           ffmpeg -y -v error -i v6a-replace.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6a-sheet.jpg || E "sheet-a"
           ffmpeg -y -v error -i v6b-cut.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6b-sheet.jpg || E "sheet-b"
           ffmpeg -y -v error -i v6c-cut-replace.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6c-sheet.jpg || E "sheet-c"
+          for f in welcome-v2.mp4 v6a-replace.mp4 v6b-cut.mp4 v6c-cut-replace.mp4; do ffmpeg -nostdin -v error -xerror -i $f -f null - || E "decode $f"; done
+          echo DECODE_OK
+          python3 -c "import glob
+for f in sorted(glob.glob('*.mp4')):
+    d = open(f,'rb').read()
+    print(f, len(d), 'faststart=', 0 < d.find(b'moov') < d.find(b'mdat'))"
           ls -la
       - name: commit
         if: always()
