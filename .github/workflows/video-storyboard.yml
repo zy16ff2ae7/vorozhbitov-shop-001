@@ -3,14 +3,8 @@ on:
   push:
     branches: [arena/01a08bf6-vorozhbitov-shop-001]
     paths: [.github/workflows/video-storyboard.yml, storyboard-request]
-  workflow_dispatch:
-    inputs:
-      files:
-        description: "mp4 files (space separated, repo-relative)"
-        required: false
-        default: "miniapp/assets/video/welcome-final-30s.mp4 miniapp/assets/video/campaign-v6.mp4"
 env:
-  FILES: ${{ github.event.inputs.files || 'miniapp/assets/video/welcome-final-30s.mp4 miniapp/assets/video/campaign-v6.mp4' }}
+  FILES: 'miniapp/assets/video/welcome-final-30s.mp4 miniapp/assets/video/campaign-v6.mp4'
 jobs:
   storyboard:
     runs-on: ubuntu-latest
@@ -20,19 +14,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
-      - name: probe
+      - name: tools
         run: |
+          command -v ffmpeg >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg; }
           ffmpeg -version | head -1
-          for f in $FILES; do echo "== $f"; ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 "$f"; done
       - name: storyboard
         run: |
           mkdir -p storyboard
-          for f in $FILES; do
-            base=$(basename "$f" .mp4)
-            ffmpeg -y -i "$f" -frames:v 30 -vf "fps=1,scale=320:-1,tile=5x6" "storyboard/$base-sheet.jpg"
-          done
-          ls -la storyboard/
+          {
+            for f in $FILES; do echo "== $f"; ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 "$f"; done
+            for f in $FILES; do
+              base=$(basename "$f" .mp4)
+              ffmpeg -y -i "$f" -frames:v 30 -vf "fps=1,scale=320:-1,tile=5x6" "storyboard/$base-sheet.jpg"
+            done
+            ls -la storyboard/
+          } 2>&1 | tee storyboard/build.log
       - name: commit
+        if: always()
         run: |
           git config user.name "arena-bot"
           git config user.email "arena-bot@local"
