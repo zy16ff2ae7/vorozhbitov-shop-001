@@ -1276,6 +1276,9 @@
     if (stock && lead) stock.textContent = String(lead.stock_label).toUpperCase();
   }
 
+  // Стопкадр в начале фонового ролика — пропускаем при старте и на каждом витке петли.
+  const WELCOME_SKIP_SECONDS = 0.5;
+
   const welcomePlayback = { source: "", ready: false, paused: false, failed: false, bound: false, pending: false };
 
   function welcomeCanPlay() {
@@ -1333,6 +1336,18 @@
       video.addEventListener("playing", () => {
         if (welcomeCanPlay()) video.classList.add("is-playing");
         else video.pause();
+      });
+      video.addEventListener("loadedmetadata", () => {
+        if (video.currentTime < WELCOME_SKIP_SECONDS) {
+          try { video.currentTime = WELCOME_SKIP_SECONDS; } catch (_) { /* метаданные ещё не готовы */ }
+        }
+      });
+      video.addEventListener("timeupdate", () => {
+        const wrapped = welcomePlayback.lastTime - video.currentTime > 1;
+        welcomePlayback.lastTime = video.currentTime;
+        if (wrapped && !video.paused && video.currentTime < WELCOME_SKIP_SECONDS) {
+          try { video.currentTime = WELCOME_SKIP_SECONDS; } catch (_) { /* петля ещё не готова */ }
+        }
       });
       video.addEventListener("error", () => {
         // Removing a source when leaving is cleanup, not a failed media request.
