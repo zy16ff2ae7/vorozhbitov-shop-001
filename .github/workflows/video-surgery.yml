@@ -45,10 +45,14 @@ jobs:
           [ "$(XV ../v6a-replace.mp4)" = 589 ] || E "v6a frames: $(XV ../v6a-replace.mp4)"
           ffmpeg -y -v error -i $V6 -vf "trim=start_frame=42,setpts=PTS-STARTPTS,fps=30,setsar=1,format=yuv420p" -af "atrim=start=1.4,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.15" -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k -ar 48000 -movflags +faststart ../v6b-cut.mp4 || E "v6b"
           [ "$(XV ../v6b-cut.mp4)" = 547 ] || E "v6b frames: $(XV ../v6b-cut.mp4)"
+          printf "file 'a1.mp4'\nfile 'an1.mp4'\nfile 'a2.mp4'\n" > clist.txt
+          ffmpeg -y -v error -f concat -safe 0 -i clist.txt -i $V6 -map 0:v:0 -map 1:a:0 -af "atrim=start=1.4,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.15" -c:v copy -c:a aac -b:a 192k -ar 48000 -movflags +faststart ../v6c-cut-replace.mp4 || E "cconcat"
+          [ "$(XV ../v6c-cut-replace.mp4)" = 547 ] || E "v6c frames: $(XV ../v6c-cut-replace.mp4)"
           cd ..
           ffmpeg -y -v error -i welcome-v2.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x6" welcome-v2-sheet.jpg || E "sheet-w"
           ffmpeg -y -v error -i v6a-replace.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6a-sheet.jpg || E "sheet-a"
           ffmpeg -y -v error -i v6b-cut.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6b-sheet.jpg || E "sheet-b"
+          ffmpeg -y -v error -i v6c-cut-replace.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6c-sheet.jpg || E "sheet-c"
           ls -la
       - name: commit
         if: always()
