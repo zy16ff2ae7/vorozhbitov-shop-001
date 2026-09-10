@@ -1097,12 +1097,15 @@ class BotTests(unittest.TestCase):
         self.assertIn("TEASER_SKIP_SECONDS", app)
         self.assertNotIn("currentTime = 0", app)
 
-    def test_welcome_skips_photo_lead(self):
-        """Фоновый ролик стартует мимо стопкадра и не показывает его на витках петли."""
-        app = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
-        self.assertIn("WELCOME_SKIP_SECONDS", app)
-        self.assertIn("loadedmetadata", app)
-        self.assertIn("timeupdate", app)
+    def test_welcome_video_has_no_poster_flash(self):
+        """Фоновое видео стартует с чёрного/титра: у video нет постера, подложка прячется при воспроизведении."""
+        miniapp = Path(__file__).with_name("miniapp")
+        lines = (miniapp / "index.html").read_text(encoding="utf-8").splitlines()
+        at = next(i for i, line in enumerate(lines) if 'id="welcomeVideo"' in line)
+        self.assertNotIn("poster=", "\n".join(lines[at:at + 3]))
+        app = (miniapp / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn("video.poster = media.welcomePoster", app)
+        self.assertIn('fallback.classList.toggle("hidden", canPlay)', app)
 
     def test_media_urls_carry_a_version_so_new_cuts_are_not_cached(self):
         """Видео кешируется на сутки по неизменному имени — без версии в адресе
