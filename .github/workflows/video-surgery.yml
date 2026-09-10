@@ -29,14 +29,13 @@ jobs:
           XV() { ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 "$1"; }
           E() { echo "::error::$1"; exit 1; }
           ENC="-c:v libx264 -preset fast -crf 18 -video_track_timescale 15360"
-          mkdir -p ../probe && for n in $(seq 40 4 84); do ffmpeg -y -v error -i $W -vf "select='eq(n,$n)',setpts=N/FRAME_RATE/TB,setsar=1,scale=360:-1" -frames:v 1 ../probe/welcome-f$n.jpg || E "probe$n"; done
-          ffmpeg -y -v error -i $W -vf "select='between(n,0,273)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 274 $ENC w0.mp4 || E "w0"
+          ffmpeg -y -v error -i $W -vf "select='between(n,64,273)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 210 $ENC w0.mp4 || E "w0"
           ffmpeg -y -v error -i $W -vf "select='between(n,326,507)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 182 $ENC w1.mp4 || E "w1"
           ffmpeg -y -v error -i $W -vf "select='between(n,594,733)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 140 $ENC w2.mp4 || E "w2"
           ffmpeg -y -v error -loop 1 -framerate 24 -i $P -vf "scale=1080:-2,crop=880:1174:100:300,zoompan=z='1.035-on*0.0004':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=540x720:fps=24,eq=contrast=1.03:saturation=0.85,setsar=1,format=yuv420p" -frames:v 86 -an $ENC wn1.mp4 || E "wn1"
           printf "file 'w0.mp4'\nfile 'w1.mp4'\nfile 'wn1.mp4'\nfile 'w2.mp4'\n" > wlist.txt
           ffmpeg -y -v error -f concat -safe 0 -i wlist.txt -c copy -movflags +faststart ../welcome-v2.mp4 || E "wconcat"
-          [ "$(XV ../welcome-v2.mp4)" = 682 ] || E "welcome frames: $(XV ../welcome-v2.mp4)"
+          [ "$(XV ../welcome-v2.mp4)" = 618 ] || E "welcome frames: $(XV ../welcome-v2.mp4)"
           ffmpeg -y -v error -i $V6 -vf "select='between(n,42,316)',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p" -an -frames:v 275 $ENC a1.mp4 || E "a1"
           ffmpeg -y -v error -i $V6 -vf "select='between(n,350,588)',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p" -an -frames:v 239 $ENC a2.mp4 || E "a2"
           ffmpeg -y -v error -loop 1 -framerate 30 -i $P -vf "scale=900:-2,crop=632:1124:134:112,zoompan=z='1+on*0.0003':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=720x1280:fps=30,eq=contrast=1.02:saturation=0.82,setsar=1,format=yuv420p" -frames:v 42 -an $ENC an0.mp4 || E "an0"
