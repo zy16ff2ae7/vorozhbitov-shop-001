@@ -18,45 +18,47 @@ jobs:
           ffmpeg -version | head -1
       - name: operate
         run: |
-          set -x
           mkdir -p surgery/stage
-          cd surgery/stage
+          exec > >(tee surgery/build.log) 2>&1
+          set -x
+          cd surgery/stage || { echo "::error::no stage dir"; exit 1; }
           W=../../miniapp/assets/video/welcome-final-30s.mp4
           V6=../../miniapp/assets/video/campaign-v6.mp4
           P=../../miniapp/assets/drop/hero-sila-chest-v1.jpg
           XV() { ffprobe -v error -show_entries stream=nb_frames -of default=noprint_wrappers=1:nokey=1 "$1"; }
-          # ---- welcome: keep segs (24fps, frame-exact) ----
-          ffmpeg -y -v error -i $W -vf "select='between(n,0,273)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 274 -c:v libx264 -preset fast -crf 18 w0.mp4
-          ffmpeg -y -v error -i $W -vf "select='between(n,326,507)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 182 -c:v libx264 -preset fast -crf 18 w1.mp4
-          ffmpeg -y -v error -i $W -vf "select='between(n,594,733)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 140 -c:v libx264 -preset fast -crf 18 w2.mp4
-          # ---- welcome: new portrait segs (52f zoom-in, 86f zoom-out) ----
-          ffmpeg -y -v error -loop 1 -framerate 24 -i $P -vf "scale=1080:-2,crop=880:1174:100:222,zoompan=z='1+on*0.0006':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=540x720:fps=24,eq=contrast=1.03:saturation=0.85,setsar=1,format=yuv420p" -frames:v 52 -an -c:v libx264 -preset fast -crf 18 wn0.mp4
-          ffmpeg -y -v error -loop 1 -framerate 24 -i $P -vf "scale=1080:-2,crop=880:1174:100:300,zoompan=z='1.035-on*0.0004':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=540x720:fps=24,eq=contrast=1.03:saturation=0.85,setsar=1,format=yuv420p" -frames:v 86 -an -c:v libx264 -preset fast -crf 18 wn1.mp4
+          E() { echo "::error::$1"; exit 1; }
+          ENC="-c:v libx264 -preset fast -crf 18 -video_track_timescale 15360"
+          ffmpeg -y -v error -i $W -vf "select='between(n,0,273)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 274 $ENC w0.mp4 || E "w0"
+          ffmpeg -y -v error -i $W -vf "select='between(n,326,507)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 182 $ENC w1.mp4 || E "w1"
+          ffmpeg -y -v error -i $W -vf "select='between(n,594,733)',setpts=N/FRAME_RATE/TB,fps=24,setsar=1,format=yuv420p" -an -frames:v 140 $ENC w2.mp4 || E "w2"
+          ffmpeg -y -v error -loop 1 -framerate 24 -i $P -vf "scale=1080:-2,crop=880:1174:100:222,zoompan=z='1+on*0.0006':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=540x720:fps=24,eq=contrast=1.03:saturation=0.85,setsar=1,format=yuv420p" -frames:v 52 -an $ENC wn0.mp4 || E "wn0"
+          ffmpeg -y -v error -loop 1 -framerate 24 -i $P -vf "scale=1080:-2,crop=880:1174:100:300,zoompan=z='1.035-on*0.0004':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=540x720:fps=24,eq=contrast=1.03:saturation=0.85,setsar=1,format=yuv420p" -frames:v 86 -an $ENC wn1.mp4 || E "wn1"
           printf "file 'w0.mp4'\nfile 'wn0.mp4'\nfile 'w1.mp4'\nfile 'wn1.mp4'\nfile 'w2.mp4'\n" > wlist.txt
-          ffmpeg -y -v error -f concat -safe 0 -i wlist.txt -c copy ../welcome-v2.mp4
-          echo "welcome frames: $(XV ../welcome-v2.mp4) (want 734)"
-          # ---- v6 variant A: replace stills, keep audio ----
-          ffmpeg -y -v error -i $V6 -vf "select='between(n,42,316)',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p" -an -frames:v 275 -c:v libx264 -preset fast -crf 18 a1.mp4
-          ffmpeg -y -v error -i $V6 -vf "select='between(n,350,588)',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p" -an -frames:v 239 -c:v libx264 -preset fast -crf 18 a2.mp4
-          ffmpeg -y -v error -loop 1 -framerate 30 -i $P -vf "scale=900:-2,crop=632:1124:134:112,zoompan=z='1+on*0.0003':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=720x1280:fps=30,eq=contrast=1.02:saturation=0.82,setsar=1,format=yuv420p" -frames:v 42 -an -c:v libx264 -preset fast -crf 18 an0.mp4
-          ffmpeg -y -v error -loop 1 -framerate 30 -i $P -vf "scale=1122:-2,crop=430:764:368:222,zoompan=z='1+on*0.00035':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=720x1280:fps=30,eq=contrast=1.02:saturation=0.82,setsar=1,format=yuv420p" -frames:v 33 -an -c:v libx264 -preset fast -crf 18 an1.mp4
+          ffmpeg -y -v error -f concat -safe 0 -i wlist.txt -c copy ../welcome-v2.mp4 || E "wconcat"
+          [ "$(XV ../welcome-v2.mp4)" = 734 ] || E "welcome frames: $(XV ../welcome-v2.mp4)"
+          ffmpeg -y -v error -i $V6 -vf "select='between(n,42,316)',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p" -an -frames:v 275 $ENC a1.mp4 || E "a1"
+          ffmpeg -y -v error -i $V6 -vf "select='between(n,350,588)',setpts=N/FRAME_RATE/TB,fps=30,setsar=1,format=yuv420p" -an -frames:v 239 $ENC a2.mp4 || E "a2"
+          ffmpeg -y -v error -loop 1 -framerate 30 -i $P -vf "scale=900:-2,crop=632:1124:134:112,zoompan=z='1+on*0.0003':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=720x1280:fps=30,eq=contrast=1.02:saturation=0.82,setsar=1,format=yuv420p" -frames:v 42 -an $ENC an0.mp4 || E "an0"
+          ffmpeg -y -v error -loop 1 -framerate 30 -i $P -vf "scale=1122:-2,crop=430:764:368:222,zoompan=z='1+on*0.00035':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=720x1280:fps=30,eq=contrast=1.02:saturation=0.82,setsar=1,format=yuv420p" -frames:v 33 -an $ENC an1.mp4 || E "an1"
           printf "file 'an0.mp4'\nfile 'a1.mp4'\nfile 'an1.mp4'\nfile 'a2.mp4'\n" > alist.txt
-          ffmpeg -y -v error -f concat -safe 0 -i alist.txt -i $V6 -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy -movflags +faststart ../v6a-replace.mp4
-          echo "v6a frames: $(XV ../v6a-replace.mp4) (want 589)"
-          # ---- v6 variant B: cut head 42f video+audio ----
-          ffmpeg -y -v error -i $V6 -vf "trim=start_frame=42,setpts=PTS-STARTPTS,fps=30,setsar=1,format=yuv420p" -af "atrim=start=1.4,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.15" -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k -ar 48000 -movflags +faststart ../v6b-cut.mp4
-          echo "v6b frames: $(XV ../v6b-cut.mp4) (want 547)"
-          # ---- verify sheets ----
+          ffmpeg -y -v error -f concat -safe 0 -i alist.txt -i $V6 -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy -movflags +faststart ../v6a-replace.mp4 || E "aconcat"
+          [ "$(XV ../v6a-replace.mp4)" = 589 ] || E "v6a frames: $(XV ../v6a-replace.mp4)"
+          ffmpeg -y -v error -i $V6 -vf "trim=start_frame=42,setpts=PTS-STARTPTS,fps=30,setsar=1,format=yuv420p" -af "atrim=start=1.4,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.15" -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k -ar 48000 -movflags +faststart ../v6b-cut.mp4 || E "v6b"
+          [ "$(XV ../v6b-cut.mp4)" = 547 ] || E "v6b frames: $(XV ../v6b-cut.mp4)"
           cd ..
-          ffmpeg -y -v error -i welcome-v2.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x6" welcome-v2-sheet.jpg
-          ffmpeg -y -v error -i v6a-replace.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6a-sheet.jpg
-          ffmpeg -y -v error -i v6b-cut.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6b-sheet.jpg
+          ffmpeg -y -v error -i welcome-v2.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x6" welcome-v2-sheet.jpg || E "sheet-w"
+          ffmpeg -y -v error -i v6a-replace.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6a-sheet.jpg || E "sheet-a"
+          ffmpeg -y -v error -i v6b-cut.mp4 -frames:v 1 -vf "fps=1,scale=320:-1,tile=5x4" v6b-sheet.jpg || E "sheet-b"
           ls -la
-        working-directory: surgery
       - name: commit
         if: always()
         run: |
           git config user.name "arena-bot"
           git config user.email "arena-bot@local"
-          git add surgery/
-          git diff --cached --quiet && echo "no changes" || { git commit -m "surgery: кандидаты монтажа"; git push origin HEAD:${{ github.ref_name }}; }
+          git status --short | head -20
+          git add surgery/ ':!surgery/stage' || echo "::error::git add failed"
+          if git diff --cached --quiet; then echo "no changes";
+          else
+            git commit -m "surgery: кандидаты монтажа" || echo "::error::git commit failed"
+            git push origin HEAD:${{ github.ref_name }} && echo PUSHED || echo "::error::git push failed"
+          fi
