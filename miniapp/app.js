@@ -1294,7 +1294,7 @@
     $("#welcomeMotionIcon").textContent = welcomePlayback.paused ? "▷" : "Ⅱ";
     const canPlay = welcomeCanPlay();
     const fallback = $("#welcomeFallback");
-    if (fallback) fallback.classList.toggle("hidden", canPlay);
+    if (fallback) fallback.classList.toggle("hidden", canPlay || (!welcomePlayback.failed && !reducedMotion()));
     if (!canPlay) {
       video.pause();
       if (saverMode() || reducedMotion()) video.classList.remove("is-playing");

@@ -1098,14 +1098,16 @@ class BotTests(unittest.TestCase):
         self.assertNotIn("cueTeaserStart", app)
 
     def test_welcome_video_has_no_poster_flash(self):
-        """Фоновое видео стартует с чёрного/титра: у video нет постера, подложка прячется при воспроизведении."""
+        """Фоновое видео стартует с чёрного/титра: у video нет постера, подложка-фото скрыта при загрузке и прячется при воспроизведении."""
         miniapp = Path(__file__).with_name("miniapp")
         lines = (miniapp / "index.html").read_text(encoding="utf-8").splitlines()
         at = next(i for i, line in enumerate(lines) if 'id="welcomeVideo"' in line)
         self.assertNotIn("poster=", "\n".join(lines[at:at + 3]))
         app = (miniapp / "app.js").read_text(encoding="utf-8")
         self.assertNotIn("video.poster = media.welcomePoster", app)
-        self.assertIn('fallback.classList.toggle("hidden", canPlay)', app)
+        self.assertIn('fallback.classList.toggle("hidden", canPlay || (!welcomePlayback.failed && !reducedMotion()))', app)
+        atf = next(i for i, line in enumerate(lines) if 'id="welcomeFallback"' in line)
+        self.assertIn("hidden", lines[atf])
 
     def test_media_urls_carry_a_version_so_new_cuts_are_not_cached(self):
         """Видео кешируется на сутки по неизменному имени — без версии в адресе
