@@ -153,7 +153,6 @@ img { display: block; max-width: 100%; }
   .welcome-lede { font-size: 15px; }
   .welcome-drop { font-size: 18px; }
   .welcome-facts { margin: 10px 0 9px; gap: 5px 14px; }
-  .welcome-count { margin-bottom: 14px; padding: 8px 12px; }
   .welcome-meta { margin-top: 14px; }
   .welcome-frame { padding-bottom: calc(22px + var(--safe-bottom)); }
 }
@@ -247,18 +246,6 @@ video.welcome-media.is-playing { opacity: 1; }
 }
 .welcome-meta b { color: var(--red); font-weight: 800; }
 
-/* Счётчик и второстепенная кнопка на заставке */
-.welcome-count {
-  display: flex; align-items: baseline; gap: 10px; margin: 0 0 18px;
-  padding: 10px 14px; border: 1px solid var(--line);
-  background: rgba(7, 7, 8, .55); backdrop-filter: blur(6px);
-  width: fit-content;
-}
-.welcome-count-label { font-size: 9px; letter-spacing: .18em; color: var(--muted); }
-.welcome-count strong {
-  font-family: var(--font-display); font-weight: 900; font-size: 17px;
-  letter-spacing: -.02em; color: var(--acid); font-variant-numeric: tabular-nums;
-}
 /* Кнопки заставки идут колонкой: в строку «посмотреть ролик» уезжал за край. */
 .welcome-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .welcome-actions .button-primary { width: 100%; max-width: 340px; justify-content: center; }
@@ -307,26 +294,6 @@ video.welcome-media.is-playing { opacity: 1; }
 }
 .welcome-actions .welcome-skip:active .ws-play { transform: scale(.95); }
 
-/* Разворот выпуска в шапке: что именно продаётся */
-.hero-drop { display: flex; gap: 8px; margin-top: 22px; }
-.hero-drop-card {
-  flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 10px;
-  padding: 8px; border: 1px solid var(--line); background: rgba(12, 12, 14, .72);
-  backdrop-filter: blur(6px); cursor: pointer; text-align: left;
-  -webkit-tap-highlight-color: transparent; transition: border-color .25s, background .25s;
-}
-.hero-drop-card:hover, .hero-drop-card:focus-visible { border-color: var(--red); background: rgba(20, 12, 12, .82); }
-.hero-drop-card img {
-  width: 46px; height: 46px; flex: none; object-fit: cover;
-  filter: contrast(1.06) saturate(.8);
-}
-.hero-drop-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.hero-drop-text b {
-  font-family: var(--font-display); font-weight: 800; font-size: 12px;
-  letter-spacing: -.01em; color: var(--ink);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.hero-drop-text span { font-size: 11px; color: var(--red); font-weight: 700; }
 @keyframes ken { from { transform: scale(1.04); } to { transform: scale(1.14); } }
 @keyframes rise {
   from { opacity: 0; transform: translateY(22px); }
@@ -542,28 +509,6 @@ h1, h2 {
 }
 .hero-lead { max-width: 420px; margin: 0; color: #cfc8be; font-size: 15px; line-height: 1.55; }
 .hero-actions { margin-top: 26px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-.hero-specs {
-  margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--line);
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
-}
-.hero-specs strong {
-  display: block; font-family: var(--font-display); font-size: 22px; letter-spacing: -.06em;
-}
-.hero-specs span { color: var(--muted); font-size: 8px; letter-spacing: .14em; }
-
-.ticker {
-  border-top: 1px solid #7a0400; border-bottom: 1px solid #7a0400;
-  overflow: hidden; background: var(--red); color: #090909;
-}
-.ticker-track {
-  display: flex; align-items: center; gap: 22px; width: max-content;
-  padding: 11px 0;
-  animation: ticker 22s linear infinite;
-  font-family: var(--font-display); font-size: 11px; font-weight: 800; letter-spacing: .18em;
-}
-.ticker i { font-style: normal; }
-@keyframes ticker { to { transform: translateX(-50%); } }
-
 /* ---------- catalog ---------- */
 .catalog-section { padding-top: 64px; padding-bottom: 72px; }
 .section-heading { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 20px; margin-bottom: 28px; }
@@ -628,8 +573,11 @@ h1, h2 {
   transform: scaleY(0); transform-origin: top;
   transition: transform .28s ease;
 }
-.product-card:hover { border-color: var(--line); transform: translateY(-4px); }
-.product-card:hover:before { transform: scaleY(1); }
+/* Подъём карточек и зум фото — только для мыши: на тачскринах состояние залипало после тапа. */
+@media (hover: hover) {
+  .product-card:hover { border-color: var(--line); transform: translateY(-4px); }
+  .product-card:hover:before { transform: scaleY(1); }
+}
 @keyframes card-in {
   from { opacity: 0; transform: translateY(16px) scale(.98); }
   to { opacity: 1; transform: none; }
@@ -645,7 +593,9 @@ h1, h2 {
   filter: saturate(.72) contrast(1.08);
   transition: transform .6s, filter .3s;
 }
-.product-card:hover .product-image img { transform: scale(1.06); filter: saturate(.92) contrast(1.1); }
+@media (hover: hover) {
+  .product-card:hover .product-image img { transform: scale(1.06); filter: saturate(.92) contrast(1.1); }
+}
 .product-badge {
   position: absolute; left: 8px; top: 8px; z-index: 2;
   padding: 5px 7px; color: #0b0b0d; background: var(--acid);
@@ -719,7 +669,9 @@ h1, h2 {
   filter: contrast(1.05) saturate(.85);
   transition: transform .7s;
 }
-.store-hero:hover img { transform: scale(1.04); }
+@media (hover: hover) {
+  .store-hero:hover img { transform: scale(1.04); }
+}
 .store-hero figcaption {
   position: absolute; left: 0; right: 0; bottom: 0;
   padding: 48px 16px 16px;
@@ -735,7 +687,9 @@ h1, h2 {
 }
 .store-shot { margin: 0; position: relative; overflow: hidden; cursor: zoom-in; background: #101012; }
 .store-shot img { width: 100%; aspect-ratio: 4/5; object-fit: cover; filter: saturate(.75) contrast(1.08); transition: transform .5s; }
-.store-shot:hover img { transform: scale(1.05); }
+@media (hover: hover) {
+  .store-shot:hover img { transform: scale(1.05); }
+}
 .store-shot figcaption {
   position: absolute; left: 10px; bottom: 10px;
   font-size: 9px; letter-spacing: .14em; color: var(--ink);
@@ -798,7 +752,10 @@ h1, h2 {
   display: block; width: 100%; aspect-ratio: 16/10; object-fit: cover; object-position: 50% 28%;
   filter: contrast(1.05) saturate(.72); transition: transform .5s ease;
 }
-.teaser-card:hover img, .teaser-card:focus-visible img { transform: scale(1.03); }
+.teaser-card:focus-visible img { transform: scale(1.03); }
+@media (hover: hover) {
+  .teaser-card:hover img { transform: scale(1.03); }
+}
 .teaser-shade {
   position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(180deg, rgba(7,7,8,.05) 30%, rgba(7,7,8,.85));
@@ -810,7 +767,9 @@ h1, h2 {
   background: rgba(225, 6, 0, .92); border-radius: 50%;
   box-shadow: 0 10px 34px rgba(0,0,0,.5);
 }
-.teaser-card:hover .teaser-play { background: var(--red-hot); }
+@media (hover: hover) {
+  .teaser-card:hover .teaser-play { background: var(--red-hot); }
+}
 .teaser-meta {
   position: absolute; left: 14px; right: 14px; bottom: 12px;
   display: flex; flex-direction: column; gap: 2px; text-align: left;
@@ -1378,9 +1337,7 @@ h1, h2 {
   .filter-panel-head { font-size: 12px; }
   .footer-meta { font-size: 12px; }
   .form-note { font-size: 12px; }
-  .hero-drop-text span { font-size: 12px; }
   .hero-live { font-size: 12px; }
-  .hero-specs span { font-size: 12px; }
   .lightbox-sheet p { font-size: 12px; }
   .lookbook-card figcaption span { font-size: 12px; }
   .manifesto-lines span { font-size: 12px; }
@@ -1422,11 +1379,9 @@ h1, h2 {
   .success-toast strong { font-size: 12px; }
   .teaser-meta small { font-size: 12px; }
   .text-button { font-size: 12px; }
-  .ticker-track { font-size: 12px; }
   .tool-count { font-size: 12px; }
   .view-banner { font-size: 12px; }
   .view3d-hint { font-size: 12px; }
-  .welcome-count-label { font-size: 12px; }
   .welcome-facts { font-size: 12px; }
   .welcome-kicker { font-size: 12px; }
   .welcome-meta { font-size: 12px; }
