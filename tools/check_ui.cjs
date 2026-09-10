@@ -17,9 +17,9 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
 (async()=>{
  browser=await chromium.launch({headless:true,channel:'chrome'});
  const {page,context}=await make();await enter(page);
- await check('11 products and mobile primary action',async()=>{
-  assert.equal(await page.locator('.product-card').count(),11);
-  assert.equal(await page.locator('#productCount').textContent(),'11 ВЕЩЕЙ');
+ await check('two real products and mobile primary action',async()=>{
+  assert.equal(await page.locator('.product-card').count(),2);
+  assert.equal(await page.locator('#productCount').textContent(),'02 ВЕЩИ');
   const box=await page.locator('#heroProductButton').boundingBox();assert.ok(box.y+box.height<780);
   assert.equal(await page.locator('#welcomeVideo').getAttribute('src'),null);await shot(page,'mobile-home');
  });
@@ -27,7 +27,7 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
   await page.locator('[data-scroll="catalog"]').first().click();await page.locator('#filterToggle').click();await page.locator('[data-stock="available"]').click();
   assert.equal(await page.locator('[data-product-id="tee-sila-i-chest"]').count(),1);
   await page.locator('[data-size-filter="XXL"]').click();assert.equal(await page.locator('.product-card').count(),1);
-  await page.locator('#resetFilters').click();assert.equal(await page.locator('.product-card').count(),11);await page.locator('#filterToggle').click();
+  await page.locator('#resetFilters').click();assert.equal(await page.locator('.product-card').count(),2);await page.locator('#filterToggle').click();
   await page.locator('#catalog').screenshot({path:path.join(out,'mobile-catalog.png')});
  });
  await check('360 controls, nested photo zoom and keyboard focus',async()=>{
@@ -50,18 +50,18 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
  });
  await check('saved, search and profile',async()=>{
   await page.locator('[data-save-id="tee-sila-i-chest"]').click();await page.locator('#savedButton').click();assert.equal(await page.locator('.product-card').count(),1);await page.locator('#clearView').click();
-  await page.locator('#searchToggle').click();await page.locator('#searchInput').fill('кепка');assert.equal(await page.locator('.product-card').count(),1);await page.keyboard.press('Escape');await page.locator('#profileButton').click();assert.equal(await page.locator('#profileAddress').inputValue(),'Тестовый адрес');await page.keyboard.press('Escape');
+  await page.locator('#searchToggle').click();await page.locator('#searchInput').fill('жетон');assert.equal(await page.locator('.product-card').count(),1);await page.keyboard.press('Escape');await page.locator('#profileButton').click();assert.equal(await page.locator('#profileAddress').inputValue(),'Тестовый адрес');await page.keyboard.press('Escape');
  });
  await context.close();
  for(const width of [320,360,768,1440]){
   const{page,context}=await make(width);await enter(page);await check('layout '+width+'px',async()=>{
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);await shot(page,'home-'+width);if(width===1440)await shot(page,'desktop-full',{fullPage:true});
-   await page.locator('#heroProductButton').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);if(width===1440)await shot(page,'desktop-product');
+   await page.locator('#heroProductButton').click();assert.equal(await page.locator('#productModal').isVisible(),false);assert.equal(await page.locator('.product-card').count(),2);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);if(width===1440)await shot(page,'desktop-catalog');
   });await context.close();
  }
  await check('catalog outage retry has no fabricated products',async()=>{
   const{page,context}=await make();let calls=0;await page.route('**/api/catalog',r=>++calls===1?r.fulfill({status:503,body:'{}'}):r.continue());await enter(page);
-  assert.equal(await page.locator('.product-card').count(),0);assert.equal(await page.locator('#catalogError').isVisible(),true);await page.locator('#retryCatalog').click();await page.waitForFunction(()=>VorozhbitovShop.state.catalogReady);assert.equal(await page.locator('.product-card').count(),11);await context.close();
+  assert.equal(await page.locator('.product-card').count(),0);assert.equal(await page.locator('#catalogError').isVisible(),true);await page.locator('#retryCatalog').click();await page.waitForFunction(()=>VorozhbitovShop.state.catalogReady);assert.equal(await page.locator('.product-card').count(),2);await context.close();
  });
  await check('slow catalog refreshes open cart and protects unavailable items',async()=>{
   const{page,context}=await make();let release;const ready=new Promise(r=>release=r);
