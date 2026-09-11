@@ -1,0 +1,83 @@
+name: Application tests
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-and-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install Pillow==12.3.0 numpy==2.4.6
+      - run: python -m py_compile bot.py payments.py payment_store.py commerce_store.py commerce_bot.py operations_store.py operations_bot.py finance_store.py finance_bot.py discovery_store.py discovery_bot.py growth_store.py growth_bot.py alerts_store.py alerts_bot.py preview_server.py tools/ui_test_server.py tools/bot_demo.py
+      - run: python -m unittest -v
+      - run: python smoke_test.py
+      - run: |
+          node --check miniapp/app.js
+          node --check miniapp/shop-core.js
+          node --check miniapp/checkout.js
+          node --check miniapp/cart-sync.js
+          node --check miniapp/service.js
+          node --check tools/bot-demo/demo.js
+          node --test test_shop_core.cjs test_checkout_client.cjs test_cart_sync.cjs test_service_view.cjs
+
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --package-lock=false playwright@1.63.0
+      - run: npx playwright install --with-deps chromium
+      - name: Browser checks against ephemeral offline fixture
+        run: |
+          python tools/ui_test_server.py > /tmp/ui-fixture.log 2>&1 &
+          server=$!
+          python tools/bot_demo.py > /tmp/bot-demo.log 2>&1 &
+          demo=$!
+          trap 'kill "$server" "$demo" 2>/dev/null || true' EXIT
+          python - <<'PY'
+          import time, urllib.request
+          for attempt in range(50):
+              try:
+                  for url in ('http://127.0.0.1:4173/health', 'http://127.0.0.1:4174/demo/api/state?actor=420'):
+                      with urllib.request.urlopen(url, timeout=1) as response:
+                          assert response.status == 200
+                  break
+              except OSError:
+                  time.sleep(0.1)
+          else:
+              raise RuntimeError('UI fixture did not start')
+          PY
+          node tools/check_ui.cjs
+          node tools/check_bot_demo.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-checks
+          path: ui-checks/
+          retention-days: 7

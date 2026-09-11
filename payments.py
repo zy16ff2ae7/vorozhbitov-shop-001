@@ -10,6 +10,7 @@ import hmac
 import json
 import logging
 import re
+from decimal import Decimal, InvalidOperation
 import urllib.error
 import urllib.request
 from typing import Any
@@ -52,7 +53,7 @@ def parse_price_strict(value: Any) -> int:
     rubles = int(re.sub(r"[\s\u00a0\u202f']", "", match.group("int")))
     frac = match.group("frac")
     if frac:
-        rubles += round(int(frac.ljust(2, "0")) / 100)
+        rubles += int(frac.ljust(2, "0")) > 50
     if rubles < 0 or rubles > 10_000_000:
         raise PriceError(f"Цена вне допустимых границ: {rubles}")
     return rubles
@@ -82,9 +83,29 @@ def stars_amount(rub: int, rub_per_star: float) -> int:
     return max(1, int(round(rub / rate)))
 
 
-def lava_signature(payload: dict[str, Any], secret: str) -> str:
-    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-    return hmac.new(secret.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).hexdigest()
+def json_bytes(payload: dict[str, Any]) -> bytes:
+    """One serialization for both signing and the actual HTTP request body."""
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True, allow_nan=False).encode("utf-8")
+
+
+def minor_units(value: Any, currency: str) -> int:
+    """Exact provider amount; never round an underpayment, NaN, or fractional XTR."""
+    if isinstance(value, bool) or value is None:
+        raise ValueError("Invalid payment amount")
+    try:
+        amount = Decimal(str(value))
+        scale = 1 if currency == "XTR" else 100
+        units = amount * scale
+        if not units.is_finite() or units <= 0 or units != units.to_integral_value() or units > 9_000_000_000_000_000:
+            raise ValueError("Invalid payment amount")
+        return int(units)
+    except (InvalidOperation, OverflowError) as exc:
+        raise ValueError("Invalid payment amount") from exc
+
+
+def lava_signature(payload: dict[str, Any] | bytes, secret: str) -> str:
+    body = payload if isinstance(payload, bytes) else json_bytes(payload)
+    return hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
 
 def verify_lava_webhook(raw_body: bytes, signature: str, extra_key: str) -> bool:
@@ -104,11 +125,11 @@ def verify_crypto_webhook(raw_body: bytes, signature: str, token: str) -> bool:
 
 def _http_json(
     url: str,
-    payload: dict[str, Any],
+    payload: dict[str, Any] | bytes,
     headers: dict[str, str] | None = None,
     timeout: int = 20,
 ) -> dict[str, Any]:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    body = payload if isinstance(payload, bytes) else json_bytes(payload)
     request = urllib.request.Request(
         url,
         data=body,
@@ -139,7 +160,7 @@ def create_lava_invoice(
 ) -> dict[str, str]:
     payload: dict[str, Any] = {
         "shopId": shop_id,
-        "sum": float(amount_rub),
+        "sum": amount_rub,
         "orderId": order_id,
         "comment": comment[:200],
     }
@@ -147,17 +168,18 @@ def create_lava_invoice(
         payload["hookUrl"] = hook_url
     if success_url:
         payload["successUrl"] = success_url
-    sign = lava_signature(payload, secret)
+    body = json_bytes(payload)
+    sign = lava_signature(body, secret)
     result = _http_json(
         "https://api.lava.ru/business/invoice/create",
-        payload,
+        body,
         {"Signature": sign},
     )
     data = result.get("data") if isinstance(result.get("data"), dict) else result
     url = str(data.get("url") or data.get("paymentUrl") or result.get("url") or "")
     invoice_id = str(data.get("id") or data.get("invoice_id") or data.get("invoiceId") or "")
-    if not url:
-        raise RuntimeError(f"Lava invoice has no URL: {result}")
+    if not url.startswith("https://") or not invoice_id:
+        raise RuntimeError("Lava invoice must contain an HTTPS URL and an ID")
     return {"url": url, "id": invoice_id}
 
 
@@ -197,6 +219,6 @@ def create_crypto_invoice(
         or ""
     )
     invoice_id = str(data.get("invoice_id") or "")
-    if not url:
-        raise RuntimeError(f"Crypto invoice has no URL: {result}")
+    if not url.startswith("https://") or not invoice_id:
+        raise RuntimeError("Crypto invoice must contain an HTTPS URL and an ID")
     return {"url": url, "id": invoice_id}

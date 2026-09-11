@@ -371,7 +371,9 @@
           </div>
         </div>
         <div class="purchase-bar"><span id="purchaseSummary">Выбери размер</span><button class="button button-primary full-button" id="addToCartButton" type="button">ДОБАВИТЬ В ЗАЯВКУ <span>+</span></button></div>
-        <button class="button button-ghost full-button" id="waitlistButton" type="button">ЖДАТЬ РАЗМЕР</button>
+        <button class="button button-ghost full-button" id="waitlistButton" type="button">ЗАПИСАТЬ ОЖИДАНИЕ РАЗМЕРА</button>
+        <p class="waitlist-consent-note">Запрос ожидания не включает сообщения. Одно уведомление о появлении размера или снижении цены нужно отдельно подтвердить через /alerts в чате.</p>
+        <button class="button button-ghost full-button" id="waitlistSetup" type="button">НАСТРОИТЬ УВЕДОМЛЕНИЕ В БОТЕ</button>
         <button class="button button-outline tryon-entry hidden" id="tryonButton" type="button">ПРИМЕРИТЬ ПО ФОТО</button>
         <div class="sheet-details" id="sheetDetails"></div>
         <div class="related" id="related"></div>
@@ -420,14 +422,40 @@
         <label class="field-label">РОСТ, СМ<input id="profileHeight" type="number" inputmode="numeric" placeholder="178" min="140" max="220"></label>
         <label class="field-label">КОММЕНТАРИЙ<input id="profileNote" type="text" placeholder="Время, нюанс по размеру"></label>
 
+        <label class="consent-check"><input id="profileSyncConsent" type="checkbox"><span>Разрешаю сохранить данные в боте для оформления и связи по покупке.</span></label>
+        <div class="cart-sync-actions profile-sync-actions">
+          <button id="profileFromBot" type="button">Загрузить профиль из бота</button>
+          <button id="profileToBot" type="button">Сохранить профиль в боте</button>
+        </div>
         <button class="button button-primary full-button punch" id="saveProfile" type="button">СОХРАНИТЬ <span>✓</span></button>
-        <p class="form-note">Сохраняется на этом устройстве и подставляется в заявку: имя, телефон, город, адрес.</p>
+        <p class="form-note">Сохраняется на этом устройстве отдельно для твоего Telegram-аккаунта. В браузерном просмотре — отдельный профиль.</p>
+
+        <button class="button button-outline full-button" id="clearLocalData" type="button">УДАЛИТЬ ДАННЫЕ С УСТРОЙСТВА</button>
 
         <div class="profile-stats">
           <button type="button" id="profileSavedBtn"><strong id="profileSavedN">0</strong><span>сохранённые</span></button>
           <button type="button" id="profileCartBtn"><strong id="profileCartN">0</strong><span>в заявке</span></button>
         </div>
         <div class="profile-orders" id="profileOrders"></div>
+        <button class="button button-outline full-button" id="openService" type="button">ПОДДЕРЖКА / МОИ ОБРАЩЕНИЯ ↗</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="serviceModal" role="dialog" aria-modal="true" aria-label="Доставка и поддержка">
+    <div class="profile-sheet service-sheet">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-header">
+        <div><span class="section-kicker">ПОСЛЕ ПОКУПКИ</span><h2>НА СВЯЗИ.</h2></div>
+        <button class="sheet-close" data-close="serviceModal" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div class="profile-body">
+        <div id="serviceContent" aria-live="polite"></div>
+        <div class="service-footer">
+          <button class="service-link" id="serviceRefresh" type="button">Обновить из бота</button>
+          <p>Здесь — просмотр. Принять условия, подтвердить получение и ответить можно прямо в чате: <strong>/purchases</strong> и <strong>/tickets</strong>.</p>
+          <button class="button button-primary full-button" id="serviceToChat" type="button">В ЧАТ БОТА ↗</button>
+        </div>
       </div>
     </div>
   </div>
@@ -440,9 +468,21 @@
         <button class="sheet-close" data-close="cartModal" type="button" aria-label="Закрыть">×</button>
       </div>
       <div class="cart-content" id="cartContent"></div>
+      <section id="cartSync" class="cart-sync hidden" aria-label="Общая корзина">
+        <p id="cartSyncText" role="status" aria-live="polite"></p>
+        <div class="cart-sync-actions">
+          <button id="cartFromBot" type="button">Загрузить из бота</button>
+          <button id="cartToBot" type="button">Оставить мой состав</button>
+        </div>
+      </section>
+      <section id="cartPromotion" class="cart-promotion hidden" aria-label="Промокод в боте">
+        <strong>ПРОМОКОД / ОФОРМЛЕНИЕ В ЧАТЕ</strong>
+        <p id="cartPromotionText" role="status" aria-live="polite"></p>
+        <button id="cartPromotionChat" type="button">ПРОДОЛЖИТЬ В БОТЕ</button>
+      </section>
       <div class="cart-checkout hidden" id="checkoutForm">
         <div class="form-rule"></div>
-        <div class="checkout-total"><span>ИТОГО</span><strong id="cartTotal">0 ₽</strong></div>
+        <div class="checkout-total"><span>ТОВАРЫ</span><strong id="cartTotal">0 ₽</strong></div>
         <label class="field-label">ИМЯ<input id="checkoutName" type="text" placeholder="Как к тебе обращаться?" autocomplete="name"></label>
         <label class="field-label">ТЕЛЕФОН<input id="checkoutPhone" type="tel" placeholder="+7 900 000-00-00" inputmode="tel" autocomplete="tel"></label>
         <label class="field-label">ГОРОД<input id="checkoutCity" type="text" placeholder="Могилёв, СПб, Москва…" autocomplete="address-level2"></label>
@@ -455,7 +495,7 @@
         <label class="field-label">КОММЕНТАРИЙ<input id="checkoutNote" type="text" placeholder="Подъезд, время, нюанс по размеру"></label>
         <label class="consent-check"><input id="checkoutConsent" type="checkbox"><span>Соглашаюсь на обработку данных для связи по заявке. <a id="privacyLink" class="privacy-link hidden" href="#" target="_blank" rel="noopener noreferrer">Политика</a></span></label>
         <button class="button button-primary full-button punch" id="submitOrder" type="button">ПЕРЕЙТИ К ОПЛАТЕ <span>↗</span></button>
-        <p class="form-note">Оплата — после подтверждения выбранным способом. Состав и сумма заявки указаны выше.</p>
+        <p class="form-note">После подтверждения наличия — резерв на 60 минут. В счёт входят только товары. Стоимость и срок доставки отдельно согласует менеджер до отправки.</p>
       </div>
     </div>
   </div>
@@ -564,7 +604,7 @@
           <p class="pay-amount" id="payAmount">—</p>
         </div>
         <ul class="pay-lines" id="payLines"></ul>
-        <p class="pay-lead">Выбери способ. Оплата — после подтверждения выбранным способом. Состав и сумма заявки указаны выше.</p>
+        <p class="pay-lead">Выбери способ. После подтверждения наличия — резерв на 60 минут. В счёт входят только товары. Стоимость и срок доставки отдельно согласует менеджер до отправки.</p>
         <div class="pay-methods" id="payMethods"></div>
         <p class="form-note" id="payNote">Статус обновится сам. Можно закрыть и доплатить из профиля.</p>
       </div>
@@ -581,6 +621,8 @@
   <script src="shop-core.js"></script>
   <script src="viewer3d.js"></script>
   <script src="checkout.js"></script>
+  <script src="cart-sync.js"></script>
+  <script src="service.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

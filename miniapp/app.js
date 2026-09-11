@@ -22,6 +22,9 @@
   };
 
 
+  const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  const storage = Core.createOwnedStorage(() => window.localStorage, Core.storageOwner(tg && tg.initDataUnsafe && tg.initDataUnsafe.user));
+
   const state = {
     data: FALLBACK_CATALOG,
     category: "all",
@@ -31,6 +34,7 @@
     sort: "featured",
     view: "all",
     cart: Core.cleanCart(loadJSON("vorozhbitov_cart", [])),
+    cartIntent: loadJSON("vorozhbitov_cart_intent", null),
     saved: Core.stringList(loadJSON("vorozhbitov_saved", [])),
     viewed: Core.stringList(loadJSON("vorozhbitov_viewed", [])),
     profile: Core.cleanProfile(loadJSON("vorozhbitov_profile", {})),
@@ -51,26 +55,105 @@
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
-  const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 
-  function loadJSON(key, fallback) {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(key) || "null");
-      return parsed === null ? fallback : parsed;
-    } catch (_) {
-      return fallback;
-    }
-  }
-
-  function saveJSON(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* private mode */ }
-  }
+  function loadJSON(key, fallback) { return storage.read(key, fallback); }
+  function saveJSON(key, value) { storage.write(key, value); }
 
   const checkoutClient = window.ShopCheckout.createClient({
     fetch: window.fetch.bind(window),
     read: key => loadJSON(key, null),
     write: saveJSON
   });
+
+  const accountOwner = () => { const user = telegramUser(); return user ? String(user.id) : ""; };
+  let syncTimer;
+  const manualAccountRestore = window.location.hash === "#local-only";
+  async function accountRequest(path, method = "GET", body) {
+    if (!tg?.initData) throw new Error("Открой витрину из бота. Локальные данные сохранены.");
+    const response = await fetch(path, { method,
+      headers: { Accept: "application/json", "Content-Type": "application/json", "X-Telegram-Init-Data": tg.initData },
+      ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw Object.assign(new Error(data.error || "Сеть не подтвердила сохранение."), data, { status: response.status });
+    const owner = data.user_id ?? data.cart?.user_id;
+    if (owner != null && String(owner) !== accountOwner()) throw new Error("Аккаунт изменился. Открой витрину заново из бота.");
+    return data;
+  }
+  const serviceView = window.ShopService.create({container: $("#serviceContent"), request: accountRequest, escapeHTML});
+  function openService(kind = "tickets", id = 0) {
+    openModal("serviceModal");
+    serviceView.load(kind, id);
+  }
+  const cartSync = tg?.initData && window.ShopCartSync ? window.ShopCartSync.createSync({
+    request: (method, body) => accountRequest("/api/cart", method, body),
+    getLocal: () => state.cart,
+    setLocal: items => {
+      state.cart = Core.cleanCart(items.map(x => ({ id: x.product_id, size: x.size, qty: x.quantity, person: x.person })));
+      saveJSON("vorozhbitov_cart", state.cart);
+      updateCounters();
+      renderCart();
+    },
+    readBase: () => loadJSON("vorozhbitov_cart_sync", null),
+    writeBase: data => saveJSON("vorozhbitov_cart_sync", data),
+    pending: () => checkoutClient.peek(accountOwner()),
+    notify: mode => { renderCartSync(mode); renderCart(); }
+  }) : null;
+
+  function renderCartSync(mode = cartSync?.mode()) {
+    const box = $("#cartSync");
+    if (!box || !cartSync) return;
+    box.classList.remove("hidden");
+    box.dataset.state = mode;
+    const labels = { manual: "Локальные данные очищены. Автовосстановление выключено в этом окне; общую корзину можно загрузить вручную.", loading: "Загружаем общую корзину…", saving: "Сохраняем изменения в боте…",
+      ready: "Общая корзина · бот ↔ Mini App. Изменения сохраняются автоматически.",
+      offline: "Связь не подтверждена. Локальная корзина сохранена; перед оплатой проверим сервер.",
+      frozen: "Есть запрос без подтверждения. Состав для повтора сохранён. Сначала повтори отправку или проверь «Мои покупки».",
+      conflict: "В боте или другом окне корзина изменилась. Ничего не перезаписали. Выбери, какой состав оставить." };
+    const remote = cartSync.remote();
+    const promotion = remote?.promotion;
+    $("#cartPromotion").classList.toggle("hidden", !promotion?.native_checkout);
+    $("#cartPromotionText").textContent = promotion?.native_checkout
+      ? `Код ${promotion.code} выбран в боте. Цены в этой форме — без скидки. Проверь итог и оформи через /cart в чате либо явно сними код там. Если прежний запрос остался без ответа, можно повторить его без изменения данных или проверить «Мои покупки».`
+      : "";
+    const summary = mode === "conflict" && remote ? ` В боте: ${remote.items.map(x => `${productById(x.product_id)?.name || x.product_id} / ${x.size} × ${x.quantity}`).join(", ") || "пусто"}.` : "";
+    $("#cartSyncText").textContent = (labels[mode] || labels.offline) + summary;
+    $("#cartFromBot").disabled = state.checkoutPending || ["loading", "saving"].includes(mode);
+    $("#cartToBot").disabled = state.checkoutPending || ["loading", "saving"].includes(mode);
+    $("#cartToBot").classList.toggle("hidden", !["conflict", "offline", "frozen"].includes(mode));
+  }
+
+  function persistCartChange() {
+    state.cartIntent = `edit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    saveJSON("vorozhbitov_cart_intent", state.cartIntent);
+    saveJSON("vorozhbitov_cart", state.cart);
+    clearTimeout(syncTimer);
+    if (cartSync) syncTimer = setTimeout(() => cartSync.changed().catch(() => {}), 300);
+  }
+
+  async function loadAccountProfile(force = false) {
+    if (!tg?.initData || (!force && manualAccountRestore) || checkoutClient.peek(accountOwner())) return;
+    const data = await accountRequest("/api/account");
+    if (data.profile.consent) $("#profileSyncConsent").checked = true;
+    const hasLocal = ["phone", "city", "address"].some(key => state.profile[key]);
+    if (data.profile.consent && (force || !hasLocal)) {
+      persistProfile(Core.cleanProfile(data.profile), false);
+      for (const key of ["name", "phone", "city", "address", "note"]) {
+        const input = document.getElementById("checkout" + key[0].toUpperCase() + key.slice(1));
+        if (input && (force || (key === "name" && input.value === telegramUser()?.first_name))) input.value = state.profile[key] || "";
+      }
+      if (force) showToast("Профиль из бота загружен. Уже оформленные покупки не изменились.");
+    }
+  }
+
+  async function saveAccountProfile() {
+    if (!$("#profileSyncConsent").checked) return showToast("Подтверди согласие перед сохранением в боте.");
+    try {
+      const profile = readProfileForm();
+      const data = await accountRequest("/api/account", "POST", { consent: true, profile });
+      persistProfile(Core.cleanProfile(data.profile), false);
+      showToast("Профиль сохранён в боте и Mini App.");
+    } catch (error) { showToast(error.message); }
+  }
 
   function escapeHTML(value) {
     return String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -101,11 +184,6 @@
 
   function productById(id) {
     return state.data.products.find(product => product.id === id);
-  }
-
-  function priceNumber(price) {
-    const parsed = Number(String(price || "0").replace(/[^0-9]/g, ""));
-    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   function rubles(value) {
@@ -198,7 +276,7 @@
         : `<p class="profile-empty">Заявок с этого устройства пока нет. В Telegram из бота подтянутся статусы: ждёт оплаты, оплачена, отменена.</p>`;
       return;
     }
-    const caption = source === "bot" ? "Заявки" : "На этом устройстве";
+    const caption = source === "bot" ? "Мои покупки" : "На этом устройстве";
     box.innerHTML = `<p class="profile-caption">${caption}</p>` + orders.map(row => {
       const status = row.status || "new";
       const when = formatOrderWhen(row.created_at || row.at);
@@ -212,12 +290,13 @@
         : "";
       return `<article class="profile-order" data-status="${escapeHTML(status)}">
         <div class="profile-order-main">
-          <strong>${escapeHTML(row.product_name || "Вещь")}${escapeHTML(size)}</strong>
+          <strong>${row.number ? `№${escapeHTML(row.number)} · ` : ""}${escapeHTML(row.product_name || "Вещь")}${escapeHTML(size)}</strong>
+          ${row.lines ? `<small>${row.lines.map(item => `${escapeHTML(item.size)} × ${Number(item.quantity)}`).join(" · ")}</small>` : ""}
           <small>${escapeHTML(when)}${qty > 1 ? ` · ${qty} шт.` : ""}${row.amount_label ? ` · ${escapeHTML(row.amount_label)}` : ""}</small>
         </div>
         <div class="profile-order-side">
           <span class="profile-order-status is-${escapeHTML(status)}">${escapeHTML(row.status_label || status)}</span>
-          ${pay}${cancel}
+          ${pay}${cancel}${source === "bot" && row.purchase_id ? `<button class="profile-order-service" type="button" data-service-purchase="${Number(row.purchase_id)}">Доставка / поддержка</button>` : ""}
         </div>
       </article>`;
     }).join("");
@@ -235,7 +314,7 @@
         });
         if (response.ok) {
           const payload = await response.json();
-          renderProfileOrders(payload.orders || [], "bot");
+          renderProfileOrders(payload.purchases || payload.orders || [], "bot");
           return;
         }
       } catch (_) { /* fall back to device history */ }
@@ -281,20 +360,24 @@
     if ($("#checkoutCity") && !$("#checkoutCity").value) $("#checkoutCity").value = profile.city || "";
     if ($("#checkoutAddress") && !$("#checkoutAddress").value) $("#checkoutAddress").value = profile.address || "";
     if ($("#checkoutNote") && !$("#checkoutNote").value) {
-      const bits = [profile.address, profile.entrance, profile.note].filter(Boolean);
-      $("#checkoutNote").value = bits.join(" · ");
+      $("#checkoutNote").value = profile.note || "";
     }
     if (profile.deliver) {
       state.deliver = profile.deliver;
+      if (!Array.from($("#deliverRow").children).some(node => node.dataset.deliver === profile.deliver)) {
+        const chip = document.createElement("button");
+        chip.type = "button"; chip.className = "filter-chip"; chip.dataset.deliver = profile.deliver; chip.textContent = profile.deliver;
+        $("#deliverRow").append(chip);
+      }
       $$("#deliverRow .filter-chip").forEach(node => node.classList.toggle("active", node.dataset.deliver === profile.deliver));
     }
   }
 
-  function persistProfile(profile, pushToBot) {
+  function persistProfile(profile, pushToBot, applyToCheckout = true) {
     state.profile = profile;
     saveJSON("vorozhbitov_profile", profile);
     if (profile.deliver) state.deliver = profile.deliver;
-    applyProfileToCheckout();
+    if (applyToCheckout) applyProfileToCheckout();
     fillProfileForm();
     if (pushToBot && tg && typeof tg.sendData === "function") {
       try {
@@ -390,6 +473,7 @@
     if (!state.modalStack.length) document.body.classList.remove("modal-open");
     if (id === "productModal") stop3D();
     if (id === "payModal") stopPayPoll();
+    if (id === "serviceModal") serviceView.clear();
     if (id === "teaserModal") closeTeaser();
     if (id === "storiesModal") stopStories();
     syncModalLayers();
@@ -479,8 +563,8 @@
       if (search && !`${product.name} ${product.description} ${product.badge} ${product.material} ${product.signature || ""} ${product.print || ""}`.toLowerCase().includes(search)) return false;
       return true;
     });
-    if (state.sort === "price-asc") list = [...list].sort((a, b) => priceNumber(a.price) - priceNumber(b.price));
-    else if (state.sort === "price-desc") list = [...list].sort((a, b) => priceNumber(b.price) - priceNumber(a.price));
+    if (state.sort === "price-asc") list = [...list].sort((a, b) => Core.priceRub(a) - Core.priceRub(b));
+    else if (state.sort === "price-desc") list = [...list].sort((a, b) => Core.priceRub(b) - Core.priceRub(a));
     else if (state.sort === "limited") list = [...list].sort((a, b) => Number(isLimited(b)) - Number(isLimited(a)));
     return list;
   }
@@ -496,7 +580,7 @@
         <span class="product-hover">РАССМОТРЕТЬ <b>↗</b></span>
       </div>
       <div class="product-info">
-        <div class="product-topline"><span>${escapeHTML(categoryName(product.category))}</span><span class="product-stock">${escapeHTML(product.stock_label || "В наличии")}</span></div>
+        <div class="product-topline"><span>${escapeHTML(categoryName(product.category))}</span><span class="product-stock">${escapeHTML(Core.stockLabel(product))}</span></div>
         <h3><button type="button" class="product-open" aria-label="Открыть ${escapeHTML(product.name)}">${escapeHTML(product.name)}</button></h3>
         <div class="product-sizes">${(product.sizes || []).map(escapeHTML).join(" · ") || "Ждём пополнение"}</div>
         <div class="product-bottom"><strong class="product-price">${escapeHTML(product.price)}</strong><span class="product-fit">${escapeHTML(product.fit || "Свободный крой")}</span></div>
@@ -586,8 +670,8 @@
 
   function updatePurchaseSummary() {
     const product = state.currentProduct;
-    $("#purchaseSummary").textContent = product ? `${product.price} · ${state.selectedSize ? `размер ${state.selectedSize}` : "Выбери размер"}` : "Выбери размер";
-    const blocked = !product || !Core.available(product);
+    $("#purchaseSummary").textContent = product ? `${product.price} · ${state.selectedSize ? `размер ${state.selectedSize} · ${Core.stockLabel(product, state.selectedSize)}` : "Выбери размер"}` : "Выбери размер";
+    const blocked = !product || !Core.orderable(product);
     $("#addToCartButton").disabled = blocked;
     $("#addToCartButton").innerHTML = blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : state.selectedSize ? 'ДОБАВИТЬ В ЗАЯВКУ <span>+</span>' : 'ВЫБРАТЬ РАЗМЕР <span>↑</span>';
   }
@@ -610,7 +694,7 @@
     }
     $("#sheetPrice").textContent = product.price;
     $("#sheetDescription").textContent = product.description;
-    $("#sheetFacts").innerHTML = `<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Плотный хлопок")}</span></div><div class="fact-row"><span>Посадка</span><span>${escapeHTML(product.fit || "Свободная")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(product.stock_label || "В наличии")}</span></div>`;
+    $("#sheetFacts").innerHTML = `<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Плотный хлопок")}</span></div><div class="fact-row"><span>Посадка</span><span>${escapeHTML(product.fit || "Свободная")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(Core.stockLabel(product))}</span></div>`;
     $("#sizeList").innerHTML = (product.sizes || []).map(size => `<button class="size-button ${state.selectedSize === size ? "selected" : ""}" data-size="${escapeHTML(size)}" aria-pressed="${state.selectedSize === size}" type="button">${escapeHTML(size)}</button>`).join("");
     $("#sizeHint").textContent = state.selectedSize ? `Размер ${state.selectedSize} выбран.` : "Выбери размер.";
     $("#sizeHint").classList.remove("error");
@@ -747,7 +831,7 @@
     if (!existing && state.cart.length >= 20) return showToast("В одной заявке — не больше 20 позиций.");
     if (existing) existing.qty += state.qty;
     else state.cart.push({ key, id: product.id, size: state.selectedSize, qty: state.qty, person: person || "" });
-    saveJSON("vorozhbitov_cart", state.cart);
+    persistCartChange();
     updateCounters();
     closeModal("productModal");
     haptic("success");
@@ -769,11 +853,11 @@
     button.disabled = true;
     try {
       await checkoutClient.waitlist({ product_id: product.id, size }, tg && tg.initData);
-      const list = loadJSON("vorozhbitov_waitlist", []);
+      const list = Core.stringList(loadJSON("vorozhbitov_waitlist", []));
       const key = `${product.id}::${size}`;
       if (!list.includes(key)) list.push(key);
       saveJSON("vorozhbitov_waitlist", list);
-      showToast("Размер записан. Напишем в Telegram, когда вернётся.");
+      showToast("Запрос записан, уведомления не включены. Подтверди подписку через /alerts в чате.");
       haptic("success");
     } catch (error) {
       showToast(error.message || "Не получилось записать размер. Попробуй ещё раз.");
@@ -788,10 +872,11 @@
   }
 
   function cartTotal() {
-    return cartItems().reduce((sum, pair) => sum + priceNumber(pair.product.price) * pair.item.qty, 0);
+    return cartItems().reduce((sum, pair) => sum + Core.priceRub(pair.product) * pair.item.qty, 0);
   }
 
   function renderCart() {
+    renderCartSync();
     const content = $("#cartContent");
     if (!state.catalogReady) {
       content.innerHTML = `<div class="cart-empty"><h3>Сверяем корзину с каталогом.</h3><p>Сохранённые вещи на месте. Загрузим цены и размеры перед оформлением.</p><button class="button button-outline" data-cart-retry type="button">ПОВТОРИТЬ ЗАГРУЗКУ</button></div>`;
@@ -806,14 +891,14 @@
     let unavailable = false;
     content.innerHTML = state.cart.map(item => {
       const product = productById(item.id);
-      const ready = product && Core.available(product) && product.sizes.includes(item.size);
+      const ready = product && Core.orderable(product) && product.sizes.includes(item.size);
       if (!ready) unavailable = true;
       const image = product ? `<img class="cart-line-image" src="${escapeHTML(imageFor(product))}" alt="">` : '<span class="cart-line-image unavailable-mark" aria-hidden="true">—</span>';
-      return `<div class="cart-line ${ready ? "" : "is-unavailable"}" data-cart-key="${escapeHTML(item.key)}">${image}<div class="cart-line-name"><strong>${escapeHTML(product ? product.name : "Вещь недоступна")}</strong><small>Размер: ${escapeHTML(item.size)}${item.person ? ` · Номер: ${escapeHTML(item.person)}` : ""}</small>${ready ? `<div class="qty-control"><button data-qty="minus" type="button" aria-label="Уменьшить">−</button><span>${item.qty}</span><button data-qty="plus" type="button" aria-label="Увеличить" ${item.qty >= Core.MAX_QUANTITY ? "disabled" : ""}>+</button></div>` : '<small class="unavailable-note">Удали эту позицию или выбери доступный размер.</small>'}</div><div class="cart-line-end"><strong>${ready ? rubles(priceNumber(product.price) * item.qty) : "Недоступно"}</strong><button class="remove-line" data-remove-key="${escapeHTML(item.key)}" type="button">УДАЛИТЬ</button></div></div>`;
+      return `<div class="cart-line ${ready ? "" : "is-unavailable"}" data-cart-key="${escapeHTML(item.key)}">${image}<div class="cart-line-name"><strong>${escapeHTML(product ? product.name : "Вещь недоступна")}</strong><small>Размер: ${escapeHTML(item.size)}${item.person ? ` · Номер: ${escapeHTML(item.person)}` : ""}</small>${ready ? `<div class="qty-control"><button data-qty="minus" type="button" aria-label="Уменьшить">−</button><span>${item.qty}</span><button data-qty="plus" type="button" aria-label="Увеличить" ${item.qty >= Core.MAX_QUANTITY ? "disabled" : ""}>+</button></div>` : '<small class="unavailable-note">Удали эту позицию или выбери доступный размер.</small>'}</div><div class="cart-line-end"><strong>${ready ? rubles(Core.priceRub(product) * item.qty) : "Недоступно"}</strong><button class="remove-line" data-remove-key="${escapeHTML(item.key)}" type="button">УДАЛИТЬ</button></div></div>`;
     }).join("");
     if (unavailable) content.insertAdjacentHTML("beforeend", '<p class="cart-warning" role="status">Состав изменился. Удали недоступные позиции, чтобы продолжить.</p>');
     $("#cartTotal").textContent = rubles(cartTotal());
-    $("#submitOrder").disabled = unavailable || state.checkoutPending;
+    $("#submitOrder").disabled = unavailable || state.checkoutPending || (cartSync?.remote()?.promotion?.native_checkout && !checkoutClient.peek(accountOwner()));
     $$("#cartContent button, #checkoutForm input, #checkoutForm .filter-chip").forEach(node => { node.disabled = state.checkoutPending; });
     $$("#cartContent [data-qty=plus]").forEach(node => { const item = state.cart.find(row => row.key === node.closest("[data-cart-key]").dataset.cartKey); node.disabled = state.checkoutPending || item.qty >= Core.MAX_QUANTITY; });
     $("#checkoutForm").classList.remove("hidden");
@@ -832,7 +917,7 @@
     if (line.qty + delta > Core.MAX_QUANTITY) return showToast("В одной позиции — не больше 20 штук.");
     line.qty += delta;
     if (line.qty <= 0) state.cart = state.cart.filter(item => item.key !== key);
-    saveJSON("vorozhbitov_cart", state.cart);
+    persistCartChange();
     renderCart();
     updateCounters();
   }
@@ -840,7 +925,7 @@
   function removeCartItem(key) {
     if (state.checkoutPending) return showToast("Подожди подтверждения заявки. Корзина сохранена.");
     state.cart = state.cart.filter(item => item.key !== key);
-    saveJSON("vorozhbitov_cart", state.cart);
+    persistCartChange();
     renderCart();
     updateCounters();
     showToast("Вещь убрана из заявки.");
@@ -895,6 +980,7 @@
   let payWatchId = "";
 
   function stopPayPoll() {
+    payWatchId = "";
     if (payPollTimer) {
       clearInterval(payPollTimer);
       payPollTimer = null;
@@ -911,22 +997,33 @@
     loadProfileOrders();
   }
 
+  async function refreshPaymentStatus(paymentId) {
+    const initData = tg && tg.initData;
+    if (!paymentId || !initData) return;
+    try {
+      const response = await fetch("/api/my-orders", {
+        headers: { Accept: "application/json", "X-Telegram-Init-Data": initData }
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (paymentId !== payWatchId) return; // stale response for a different sheet
+      const outcome = Core.paymentOutcome(payload.orders, paymentId);
+      if (outcome === "paid") markPaidUi();
+      else if (outcome === "review" || outcome === "cancelled") {
+        stopPayPoll();
+        closeModal("payModal");
+        loadProfileOrders();
+        showToast(outcome === "review" ? "Поступление на сверке. Не оплачивай повторно — напиши менеджеру." : "Заявка отменена. Проверь мои заявки.");
+      }
+    } catch (_) { /* the server, not the payment widget, confirms fulfillment */ }
+  }
+
   function startPayPoll(paymentId) {
     stopPayPoll();
     payWatchId = paymentId || "";
-    const initData = tg && tg.initData;
-    if (!payWatchId || !initData) return;
-    payPollTimer = setInterval(async () => {
-      try {
-        const response = await fetch("/api/my-orders", {
-          headers: { Accept: "application/json", "X-Telegram-Init-Data": initData }
-        });
-        if (!response.ok) return;
-        const payload = await response.json();
-        const paid = (payload.orders || []).some(row => row.payment_id === payWatchId && row.status === "paid");
-        if (paid) markPaidUi();
-      } catch (_) { /* keep waiting */ }
-    }, 4000);
+    if (!payWatchId || !(tg && tg.initData)) return;
+    refreshPaymentStatus(paymentId);
+    payPollTimer = setInterval(() => refreshPaymentStatus(paymentId), 4000);
   }
 
   function openPayLink(url) {
@@ -941,8 +1038,13 @@
   function startPayMethod(method, url, kind) {
     if (kind === "invoice" && url && tg && typeof tg.openInvoice === "function") {
       try {
+        const paymentId = payWatchId;
         tg.openInvoice(url, status => {
-          if (status === "paid") markPaidUi();
+          if (paymentId !== payWatchId) return;
+          if (status === "paid") {
+            showToast("Telegram принял платёж. Ждём подтверждения по заявке.");
+            refreshPaymentStatus(paymentId);
+          }
           else if (status === "cancelled") showToast("Оплата отменена.");
           else showToast("Не получилось оплатить. Попробуй другой способ.");
         });
@@ -1023,7 +1125,7 @@
     if (state.checkoutPending || ($("#submitOrder") && $("#submitOrder").disabled)) return;
     const pairs = cartItems();
     if (!state.catalogReady) return showToast("Подожди загрузку каталога.");
-    if (pairs.length !== state.cart.length || pairs.some(({item, product}) => !Core.available(product) || !product.sizes.includes(item.size))) { renderCart(); return showToast("Проверь недоступные позиции в корзине."); }
+    if (pairs.length !== state.cart.length || pairs.some(({item, product}) => !Core.orderable(product) || !product.sizes.includes(item.size))) { renderCart(); return showToast("Проверь недоступные позиции в корзине."); }
     const name = $("#checkoutName").value.trim();
     const phone = $("#checkoutPhone").value.trim();
     const city = $("#checkoutCity").value.trim();
@@ -1039,15 +1141,15 @@
     persistProfile({
       ...state.profile,
       name, phone, city,
-      address: address || state.profile.address,
-      note: note || state.profile.note,
+      address,
+      note,
       deliver: state.deliver
-    }, false);
+    }, false, false);
     const payload = {
       type: "order",
       customer: {
         name, phone, city,
-        address: address || state.profile.address || "",
+        address,
         entrance: state.profile.entrance || "",
         deliver: state.deliver,
         note
@@ -1059,6 +1161,8 @@
         return line;
       })
     };
+    const submittedCart = Core.cleanCart(state.cart);
+    const submittedIntent = state.cartIntent;
     const button = $("#submitOrder");
     const previous = button ? button.innerHTML : "";
     state.checkoutPending = true;
@@ -1069,14 +1173,27 @@
     }
     try {
       const user = telegramUser();
-      const data = await checkoutClient.submit(payload, tg && tg.initData, user ? String(user.id) : "");
+      // A new native promo must not block recovery of an older, immutable lost
+      // reply. Only that exact pending body can bypass this UI restriction;
+      // the server still checks its receipt/CAS before any current campaign.
+      if (cartSync?.remote()?.promotion?.native_checkout && checkoutClient.peek(accountOwner())?.fingerprint !== JSON.stringify(payload)) {
+        throw Object.assign(new Error("Проверь промокод и итог через /cart в боте. Новая покупка здесь не создана."), {code:"promotion_requires_chat"});
+      }
+      clearTimeout(syncTimer);
+      const cartRevision = cartSync ? await cartSync.beforeCheckout(payload) : undefined;
+      const data = await checkoutClient.submit(payload, tg && tg.initData, user ? String(user.id) : "", cartRevision);
       const storedHistory = loadJSON("vorozhbitov_orders", []);
       const history = Array.isArray(storedHistory) ? storedHistory : [];
       history.unshift({ at: Date.now(), total: data.amount_rub, items: payload.items });
       saveJSON("vorozhbitov_orders", history.slice(0, 12));
-      state.cart = [];
-      saveJSON("vorozhbitov_cart", state.cart);
+      const currentCart = Core.cleanCart(loadJSON("vorozhbitov_cart", []));
+      const currentIntent = loadJSON("vorozhbitov_cart_intent", null);
+      const keep = Core.keepNewerCart(submittedCart, currentCart, checkoutClient.peek(accountOwner()), submittedIntent, currentIntent);
+      state.cart = keep ? currentCart : [];
+      state.cartIntent = currentIntent;
+      if (!keep) saveJSON("vorozhbitov_cart", state.cart);
       updateCounters();
+      if (cartSync) cartSync.afterCheckout(keep).catch(() => {});
       if (data.status === "awaiting_payment") {
         haptic("success");
         showPaySheet(data);
@@ -1086,6 +1203,7 @@
         showToast(data.status === "paid" ? "Эта заявка уже оплачена." : "Заявка уже обработана. Проверь её статус.");
       }
     } catch (error) {
+      if (["cart_revision_conflict", "promotion_requires_chat", "promotion_changed"].includes(error.code) && cartSync) cartSync.load("preserve").catch(() => {});
       showToast(error.message || "Нет подтверждения от сервера. Корзина сохранена.");
       haptic("error");
     } finally {
@@ -1274,7 +1392,7 @@
     // Тираж на заставке берём из каталога, а не пишем руками.
     const stock = $("#welcomeStock");
     const lead = (state.data.products || []).find(p => (p.featured || p.real_photos) && p.stock_label);
-    if (stock && lead) stock.textContent = String(lead.stock_label).toUpperCase();
+    if (stock && lead) stock.textContent = Core.stockLabel(lead).toUpperCase();
   }
 
   const welcomePlayback = { source: "", ready: false, paused: false, blocked: false, saverOk: false, failed: false, bound: false, pending: false, watchdog: 0 };
@@ -1927,12 +2045,33 @@
     $("#sheetSave").addEventListener("click", () => { if (state.currentProduct) toggleSaved(state.currentProduct.id); });
     $("#addToCartButton").addEventListener("click", addToCart);
     $("#waitlistButton").addEventListener("click", sendWaitlist);
+    $("#waitlistSetup").addEventListener("click", () => {
+      if (typeof tg?.close === "function") tg.close();
+      else showToast("Открой личный чат с ботом → /alerts → выбери вещь и подтверди условие. Здесь подписка не включается.");
+    });
     $("#cartButton").addEventListener("click", openCart);
     $("#bottomCartButton").addEventListener("click", openCart);
     $("#savedButton").addEventListener("click", showSaved);
     if ($("#profileButton")) $("#profileButton").addEventListener("click", openProfile);
     if ($("#saveProfile")) $("#saveProfile").addEventListener("click", saveProfile);
+    if ($("#clearLocalData")) $("#clearLocalData").addEventListener("click", () => {
+      if (state.checkoutPending) return showToast("Дождись ответа по заявке.");
+      if (!window.confirm("Удалить профиль, корзину и локальную историю этого аккаунта с устройства? Профиль, общая корзина и покупки на сервере сохранятся. Автовосстановление в этом окне выключится; его можно выполнить вручную.")) return;
+      if (!storage.clear()) return showToast("Браузер не разрешил очистку. Удали данные сайта в настройках браузера.");
+      // A URL fragment is non-sensitive, is not sent to the server, and still
+      // works when the browser allows deletion but disallows storage writes.
+      window.location.hash = "local-only";
+      window.location.reload();
+    });
+    $("#openService").addEventListener("click", () => openService());
+    $("#serviceRefresh").addEventListener("click", () => serviceView.refresh());
+    $("#serviceToChat").addEventListener("click", () => {
+      if (tg?.initData && typeof tg.close === "function") tg.close();
+      else showToast("Открой чат с ботом и отправь /support или /tickets.");
+    });
     if ($("#profileOrders")) $("#profileOrders").addEventListener("click", event => {
+      const delivery = event.target.closest("[data-service-purchase]");
+      if (delivery) { openService("delivery", Number(delivery.dataset.servicePurchase)); return; }
       const payButton = event.target.closest("[data-pay-id]");
       if (payButton) {
         resumePayment(payButton.dataset.payId);
@@ -2103,10 +2242,24 @@
   iconize();
   configureTelegram();
   bindEvents();
+  $("#cartFromBot").addEventListener("click", () => cartSync?.load("remote").catch(error => showToast(error.message)));
+  $("#cartToBot").addEventListener("click", () => cartSync?.load("local").catch(error => showToast(error.message)));
+  $("#cartPromotionChat").addEventListener("click", () => {
+    if (typeof tg?.close === "function") tg.close();
+    else showToast("Вернись в личный чат с ботом и отправь /cart. Корзина сохранена.");
+  });
+  $("#profileFromBot").addEventListener("click", () => loadAccountProfile(true).catch(error => showToast(error.message)));
+  $("#profileToBot").addEventListener("click", saveAccountProfile);
   updateCounters();
   // Фильм начинаем грузить сразу, не дожидаясь 600мс бута и каталога.
   setupWelcomeVideo(mediaConfig());
   startExperience();
-  loadCatalog();
+  loadCatalog().then(() => {
+    if (cartSync) {
+      if (manualAccountRestore) cartSync.manual();
+      else cartSync.load().catch(() => {});
+    }
+    loadAccountProfile().catch(() => {});
+  });
   window.VorozhbitovShop = { state, openProduct, openCart };
 })();

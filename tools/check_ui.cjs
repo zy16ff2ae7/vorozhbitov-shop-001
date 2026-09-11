@@ -1,4 +1,4 @@
-/* Local browser regressions. Requires Playwright plus installed Chrome. */
+/* Browser regressions. Requires Playwright and Chromium. No real payments. */
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
@@ -12,10 +12,10 @@ async function make(width=390){
   await page.route('https://telegram.org/**',r=>r.fulfill({status:200,body:''}));
   return{page,context};
 }
-async function enter(page,wait=true){await page.goto('http://127.0.0.1:4173');await page.locator('#enterShop').click();await page.locator('#welcome').waitFor({state:'hidden'});if(wait)await page.locator('#productGrid[aria-busy="false"]').waitFor({state:'attached'})}
+async function enter(page,wait=true){await page.goto(process.env.SHOP_UI_URL||'http://127.0.0.1:4173');await page.locator('#enterShop').click();await page.locator('#welcome').waitFor({state:'hidden'});if(wait)await page.locator('#productGrid[aria-busy="false"]').waitFor({state:'attached'})}
 async function shot(page,name,options={}){await page.screenshot({path:path.join(out,name+'.png'),...options})}
 (async()=>{
- browser=await chromium.launch({headless:true,channel:'chrome'});
+ browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH}:{})});
  const {page,context}=await make();await enter(page);
  await check('2 products and mobile primary action',async()=>{
   assert.equal(await page.locator('.product-card').count(),2);
@@ -65,21 +65,26 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
  });
  await check('slow catalog refreshes open cart and protects unavailable items',async()=>{
   const{page,context}=await make();let release;const ready=new Promise(r=>release=r);
-  await page.addInitScript(()=>localStorage.setItem('vorozhbitov_cart',JSON.stringify([{id:'tee-sila-i-chest',size:'M',qty:1},{id:'missing',size:'M',qty:1}])));
+  await page.addInitScript(()=>localStorage.setItem('vorozhbitov_v2:preview:vorozhbitov_cart',JSON.stringify([{id:'tee-sila-i-chest',size:'M',qty:1},{id:'missing',size:'M',qty:1}])));
   await page.route('**/api/catalog',async r=>{await ready;await r.continue()});await enter(page,false);await page.locator('#cartButton').click();assert.match(await page.locator('#cartContent').textContent(),/Сверяем/);
   release();await page.waitForFunction(()=>VorozhbitovShop.state.catalogReady);assert.equal(await page.locator('.cart-line').count(),2);assert.equal(await page.locator('#submitOrder').isDisabled(),true);
   await page.locator('.is-unavailable [data-remove-key]').click();assert.equal(await page.locator('#submitOrder').isDisabled(),false);assert.equal((await page.locator('#cartTotal').textContent()).replace(/\s/g,' '),'4 900 ₽');await context.close();
  });
  await check('malformed stored data does not crash startup',async()=>{
-  const{page,context}=await make();await page.addInitScript(()=>{for(const key of ['cart','saved','viewed','profile','orders'])localStorage.setItem('vorozhbitov_'+key,'{"broken":true}')});await enter(page);await page.locator('#profileButton').click();assert.equal(await page.locator('#profileName').inputValue(),'');await context.close();
+  const{page,context}=await make();await page.addInitScript(()=>{for(const key of ['cart','saved','viewed','profile','orders'])localStorage.setItem('vorozhbitov_v2:preview:vorozhbitov_'+key,'{"broken":true}')});await enter(page);await page.locator('#profileButton').click();assert.equal(await page.locator('#profileName').inputValue(),'');await context.close();
  });
  await check('pending checkout prevents cart changes and second request',async()=>{
   const{page,context}=await make();let release,calls=0;const ready=new Promise(r=>release=r);
-  await page.addInitScript(()=>{window.Telegram={WebApp:{initData:'local-test',initDataUnsafe:{user:{id:123}},ready(){},expand(){}}};localStorage.setItem('vorozhbitov_cart',JSON.stringify([{id:'tee-sila-i-chest',size:'M',qty:1}]));localStorage.setItem('vorozhbitov_profile',JSON.stringify({name:'Тест',phone:'+79990000000',city:'Москва'}))});
+  await page.addInitScript(initData=>{window.Telegram={WebApp:{initData,initDataUnsafe:{user:{id:123}},ready(){},expand(){}}};localStorage.setItem('vorozhbitov_v2:user:123:vorozhbitov_cart',JSON.stringify([{id:'tee-sila-i-chest',size:'M',qty:1}]));localStorage.setItem('vorozhbitov_v2:user:123:vorozhbitov_profile',JSON.stringify({name:'Тест',phone:'+79990000000',city:'Москва'}))},require('./check_audit_ui.cjs').signedData(123));
   await page.route('**/api/checkout',async r=>{calls++;await ready;await r.fulfill({status:503,contentType:'application/json',body:'{"error":"Тестовый отказ"}'})});await enter(page);await page.locator('#cartButton').click();await page.locator('#checkoutConsent').check();await page.locator('#submitOrder').click();await page.waitForFunction(()=>VorozhbitovShop.state.checkoutPending);
   assert.equal(await page.locator('#cartContent [data-qty="plus"]').isDisabled(),true);assert.equal(await page.locator('#submitOrder').isDisabled(),true);await page.locator('[data-close="cartModal"]').click();await page.locator('#cartButton').click();assert.equal(await page.locator('#submitOrder').isDisabled(),true);
   release();await page.waitForFunction(()=>!VorozhbitovShop.state.checkoutPending);assert.equal(calls,1);assert.equal(await page.locator('#submitOrder').isDisabled(),false);assert.equal(await page.evaluate(()=>VorozhbitovShop.state.cart[0].qty),1);await context.close();
  });
+ await require('./check_audit_ui.cjs')({browser,check,errors,out,enter});
+ await require('./check_commerce_ui.cjs')({browser,check,errors,out,enter});
+ await require('./check_operations_ui.cjs')({browser,check,errors,out,enter});
+ await require('./check_growth_ui.cjs')({browser,check,errors,out,enter});
+ await require('./check_alerts_ui.cjs')({browser,check,errors,out,enter});
  assert.deepEqual(errors,[]);
 })().catch(e=>{errors.push(e.message);console.error(e);process.exitCode=1}).finally(async()=>{
  try { fs.writeFileSync(path.join(out,'report.json'),JSON.stringify({checks:results,errors},null,2)); }

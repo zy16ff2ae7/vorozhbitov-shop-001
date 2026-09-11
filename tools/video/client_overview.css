@@ -1,0 +1,61 @@
+/* Presentation-only layout, injected by client_overview.cjs. No bot text/data changes. */
+html,body{width:1920px!important;height:1080px!important;min-width:1920px!important;overflow:hidden!important;background:#0d1112!important}
+body{background:radial-gradient(ellipse at 20% 15%,#1c2924 0,transparent 46%),#0d1112!important}
+.demo-strip,.sidebar{display:none!important}
+.workspace{position:fixed!important;left:570px!important;top:106px!important;width:1294px!important;height:852px!important;min-height:0!important;max-width:none!important;padding:0!important;margin:0!important;grid-template-columns:minmax(0,1fr) 242px!important;gap:20px!important}
+.chat-shell{height:852px!important;min-height:0!important;max-height:none!important;box-shadow:0 22px 80px #0004!important;border-radius:16px!important}
+.chat-header{padding:17px 22px!important}.chat-header h2{font-size:17px!important}.chat-header p{font-size:12px!important}.session-role{font-size:11px!important;padding:6px 9px!important}.chat-topline{font-size:9px!important;padding:12px 22px!important}
+.thread{padding:8px 15px 23px!important;scroll-behavior:smooth;scrollbar-width:none!important;background-size:24px 24px!important}
+.bubble{width:100%!important;max-width:100%!important;padding:19px!important;margin-bottom:16px!important}.bubble.human{width:fit-content!important;max-width:90%!important}
+.message-text{font-size:19px!important;line-height:1.48!important}.message-text code{font-size:12px!important;letter-spacing:.8px!important}.message-meta{font-size:9px!important}.keyboard{margin-top:15px!important;gap:7px!important}.button-row{gap:7px!important}
+.inline-button{font-size:16px!important;min-height:46px!important;padding:10px 12px!important;line-height:1.3!important;border-radius:6px!important}
+.quick-actions{padding:10px 14px 0!important;gap:5px!important;scrollbar-width:none!important}.quick-actions button{font-size:11px!important;min-height:34px!important;padding:6px 11px!important}
+.composer{margin:10px 15px 0!important}.composer input{font-size:15px!important;padding:9px!important}.composer button{width:43px!important}.chat-foot{font-size:9px!important;margin:8px 0 10px!important}.invoice-button{font-size:16px!important;min-height:54px!important}.late-button{display:none!important}
+.inspector{display:flex!important;flex-direction:column!important;gap:13px!important;padding:10px 0!important;height:852px!important;overflow:hidden!important}
+.inspector-title{margin:0 0 5px!important}.inspector-title h2{font-size:26px!important;margin:9px 0 5px!important}.inspector-title p{font-size:13px!important}.inspector-title .eyebrow{font-size:9px!important}
+.inspector .metrics{margin:0!important;padding:15px 0!important;flex-shrink:0;gap:10px}.inspector .metrics span{font-size:34px!important}.inspector .metrics small{font-size:8px!important}.inspector .metrics div{gap:6px!important}
+.stock-card,.activity,.expire-button,.inspector-foot,.finance-lab{display:none!important}
+.selection-card{margin:0!important;padding:15px!important;flex-shrink:0}.selection-card h3{font-size:14px!important;line-height:1.5!important;margin:11px 0 8px!important}.selection-card p{font-size:12px!important;line-height:1.55!important}.selection-card .eyebrow{font-size:8px!important}
+#videoRail{position:fixed;left:66px;top:108px;width:450px;height:850px;z-index:10}
+#videoBrand{display:flex;align-items:center;gap:17px;font-weight:800;font-size:22px;letter-spacing:2px;color:#e4e8df}
+#videoBrand small{display:block;color:#93a398;font-size:10px;letter-spacing:4px;margin-top:8px;font-weight:400}
+.vmark{display:grid;place-items:center;flex-shrink:0;width:55px;height:62px;border:1px solid #718063;font-size:38px;font-weight:400;color:#d2dea0}
+#videoChapter{margin-top:78px;font-size:13px;letter-spacing:2.8px;color:#d2dea0;text-transform:uppercase;font-weight:600}
+#videoTitle{margin:23px 0 24px;font-size:54px;line-height:1.06;letter-spacing:-2px;font-weight:600;color:#eef0e7;white-space:pre-line;max-width:445px}
+#videoDeck{font-size:22px;line-height:1.55;letter-spacing:-.2px;color:#aab9af;white-space:pre-line;max-width:420px;margin:0}
+#videoPill{display:inline-block;max-width:430px;margin-top:27px;padding:11px 14px;border:1px solid #3e5448;border-radius:5px;color:#d2dea0;font-size:14px;line-height:1.4;background:#1d2b23}
+#videoRail .role-switch{position:absolute;bottom:0;left:0;width:450px;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:7px}
+#videoRail .role-switch h2{grid-column:1/-1;font-size:10px;letter-spacing:2px;margin:0 0 6px;color:#8b9d91}
+#videoRail .role{padding:9px 12px;margin:0;min-height:43px;border-color:#27382f;border-radius:5px;font-size:14px}
+#videoRail .role small,#videoRail .role-icon,#videoRail .role-arrow{display:none}
+#videoRail .role.active{border-color:#788756;background:#29372a;color:#e0ebbf}
+#videoTop{position:fixed;top:30px;left:67px;right:56px;display:flex;justify-content:space-between;align-items:center;z-index:80;color:#91a295;font-size:12px;letter-spacing:2.4px}
+#videoBadge{background:#202a21;border:1px solid #556147;color:#d9e4b7;font-size:12px;letter-spacing:1.4px;padding:10px 15px;border-radius:5px}
+#videoCaption{position:fixed;left:586px;top:981px;width:1262px;padding-left:21px;min-height:43px;border-left:3px solid #d2dea0;color:#e2e8db;font-size:23px;line-height:1.42;white-space:pre-line;z-index:20}
+#videoProgress{position:fixed;left:67px;right:56px;bottom:20px;height:2px;background:#2a3830;z-index:70}
+#videoProgress i{display:block;width:0;height:2px;background:#c4d494;transition:width 1s ease}
+#videoFoot{position:fixed;left:67px;bottom:39px;font-size:10px;letter-spacing:1.8px;color:#65796b;z-index:10}
+#videoCursor{position:fixed;left:-100px;top:-100px;width:22px;height:22px;border:2px solid #dfeab8;background:#d2dea019;border-radius:50%;z-index:120;pointer-events:none;transform:translate(-50%,-50%);box-shadow:0 0 0 6px #d2dea00d}
+.vRipple{position:fixed;width:14px;height:14px;border:2px solid #d2dea0;border-radius:50%;z-index:121;pointer-events:none;animation:v-ripple .75s ease-out forwards}
+@keyframes v-ripple{from{transform:translate(-50%,-50%) scale(1);opacity:.9}to{transform:translate(-50%,-50%) scale(5);opacity:0}}
+.videoHighlight{outline:2px solid #c4d494!important;outline-offset:3px!important;transition:box-shadow .2s!important;box-shadow:0 0 22px #a6c77922!important}
+#videoCurtain{position:fixed;inset:0;z-index:60;background:radial-gradient(ellipse at 83% 40%,#293c31 0,#17211c 35%,#0d1112 72%);opacity:1;transition:opacity .7s ease;pointer-events:none}
+#videoCurtain.off{opacity:0}
+#videoCurtain .vmark{position:absolute;left:86px;top:115px;width:70px;height:80px;font-size:47px}
+#videoCurtain .wordmark{position:absolute;left:181px;top:131px;letter-spacing:4px;font-size:32px;font-weight:800}
+#videoCurtain .wordmark small{display:block;font-size:12px;font-weight:400;letter-spacing:6px;margin-top:13px;color:#91a795}
+#curtainKicker{position:absolute;left:88px;top:253px;font-size:14px;letter-spacing:4px;color:#a8c18c}
+#curtainTitle{position:absolute;left:83px;top:297px;margin:0;white-space:pre-line;font-size:94px;line-height:1.03;font-weight:600;letter-spacing:-4px;color:#edf0e8}
+#curtainDeck{position:absolute;left:89px;top:645px;width:830px;font-size:29px;line-height:1.5;color:#adbdaf;white-space:pre-line}
+#curtainMeta{position:absolute;left:89px;bottom:128px;font-size:17px;line-height:1.7;color:#7f9988;max-width:870px;white-space:pre-line}
+#curtainVisual{position:absolute;left:1090px;top:204px;width:725px;height:673px}
+.vProduct{position:absolute;border:1px solid #53644b;background:#121915;border-radius:9px;overflow:hidden;box-shadow:0 30px 60px #0004}
+.vProduct img{width:100%;height:calc(100% - 60px);object-fit:cover;display:block}
+.vProduct span{display:flex;height:60px;align-items:center;justify-content:space-between;padding:0 18px;color:#d0dfbc;font-size:11px;letter-spacing:1.8px}
+.vProduct.tee{left:0;top:0;width:420px;height:613px;transform:rotate(-4deg)}
+.vProduct.tag{right:0;bottom:0;width:294px;height:431px;transform:rotate(5deg)}
+#videoCurtain.outro #curtainVisual{display:none}
+#videoCurtain.outro #curtainTitle{font-size:87px;line-height:1.1;top:315px}
+#videoCurtain.outro #curtainDeck{top:640px;width:1540px;font-size:27px;line-height:1.6}
+#videoCurtain.outro #curtainMeta{max-width:1520px;font-size:20px;bottom:122px;color:#cfddbc}
+.toast{font-size:16px!important;bottom:105px!important;max-width:850px!important}

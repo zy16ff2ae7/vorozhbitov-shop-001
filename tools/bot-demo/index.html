@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ВОРОЖБИТОВ / Бот — выбор, покупки и уведомления по согласию</title><link rel="stylesheet" href="demo.css"></head>
+<body>
+  <div class="demo-strip"><span class="live-dot"></span> ИНТЕРАКТИВНОЕ ДЕМО <span class="strip-note">Без списаний. Только вымышленные данные.</span><span class="edition">BOT SIGNALS / 06</span></div>
+  <main class="workspace">
+    <aside class="sidebar">
+      <a class="brand" href="/"><span class="monogram">V</span><span>ВОРОЖБИТОВ<small>СИЛА И ЧЕСТЬ</small></span></a>
+      <div class="intro"><span class="eyebrow">НЕ ПРОСТО ВИТРИНА</span><h1>Магазин.<br>В одном<br><em>диалоге.</em></h1><p>От первого выбора<br>до работы всей команды.</p></div>
+      <div class="role-switch"><h2>ПОСМОТРЕТЬ ГЛАЗАМИ</h2>
+        <button data-actor="420" class="role active" aria-pressed="true"><span class="role-icon">01</span><span>Покупатель<small>Выбор, покупки, повтор</small></span><span class="role-arrow">↗</span></button>
+        <button data-actor="421" class="role" aria-pressed="false"><span class="role-icon">02</span><span>Покупатель Б<small>Проверка последней вещи</small></span><span class="role-arrow">↗</span></button>
+        <button data-actor="9003" class="role" aria-pressed="false"><span class="role-icon">03</span><span>Менеджер<small>Очередь и работа с покупкой</small></span><span class="role-arrow">↗</span></button>
+        <button data-actor="9002" class="role" aria-pressed="false"><span class="role-icon">04</span><span>Склад<small>Пересчёт, резервы, сборка</small></span><span class="role-arrow">↗</span></button>
+        <button data-actor="9004" class="role" aria-pressed="false"><span class="role-icon">05</span><span>Поддержка<small>Обращения, ответы, заметки</small></span><span class="role-arrow">↗</span></button>
+        <button data-actor="9005" class="role" aria-pressed="false"><span class="role-icon">06</span><span>Финансы<small>Поступления, сверка, сроки</small></span><span class="role-arrow">↗</span></button>
+        <button data-actor="9001" class="role" aria-pressed="false"><span class="role-icon">07</span><span>Владелец<small>Доступы и журнал действий</small></span><span class="role-arrow">↗</span></button>
+      </div>
+      <p class="sidebar-foot">Реальные обработчики бота.<br>Только Telegram и платежи — заглушки.<br><strong>Не вводи настоящие личные данные.</strong></p>
+    </aside>
+    <section class="chat-shell" aria-label="Интерактивный чат с ботом">
+      <header class="chat-header"><span class="bot-avatar">V</span><div><h2>ВОРОЖБИТОВ</h2><p><span class="live-dot"></span> бот магазина · тестовый режим</p></div><span class="session-role" id="sessionRole">ПОКУПАТЕЛЬ</span></header>
+      <div class="chat-topline"><span>ЛИЧНЫЙ ДИАЛОГ</span><span>СОСТОЯНИЕ СОХРАНЯЕТСЯ</span></div>
+      <div class="thread" id="thread" aria-label="Сообщения бота" tabindex="0"><div class="loading">Подключаем торговое ядро…</div></div>
+      <div class="quick-actions"><button data-command="/menu">Главная</button><button data-command="/find">Найти вещь</button><button data-command="/saved">Избранное</button><button data-command="/cart">Корзина</button><button data-command="/purchases">Покупки</button><button data-command="/promo">Промокод</button><button data-command="/alerts">Уведомления</button><button data-command="/resume">Продолжить</button><button data-command="/support">Поддержка</button><button data-command="/finance" id="financeQuick" hidden>Финансы</button><button id="exampleInput" hidden>Тестовые данные ↗</button></div>
+      <form class="composer" id="composer"><label class="sr-only" for="messageInput">Сообщение боту</label><input id="messageInput" autocomplete="off" maxlength="2000" placeholder="Напиши сообщение или /menu"><button id="sendMessage" type="submit" aria-label="Отправить сообщение">↑</button></form>
+      <p class="chat-foot">Кнопки работают. Не вводи настоящие личные данные.</p>
+    </section>
+    <aside class="inspector" aria-label="Состояние торгового ядра">
+      <div class="inspector-title"><span class="eyebrow">ПОД КАПОТОМ</span><h2>Всё связано.</h2><p>Изменения видны сразу,<br>в любой роли.</p></div>
+      <div class="metrics"><div><span id="purchaseCount">0</span><small>ПОКУПОК</small></div><div><span id="reserveCount">0</span><small>В РЕЗЕРВЕ</small></div><div><span id="paidCount">0</span><small>ОПЛАЧЕНО*</small></div></div>
+      <div class="metrics operations-metrics"><div><span id="ticketCount">0</span><small>ОБРАЩЕНИЙ</small></div><div><span id="shipmentCount">0</span><small>В ПУТИ / ПВЗ</small></div><div><span id="deliveredCount">0</span><small>ВРУЧЕНО*</small></div></div>
+      <article class="stock-card"><span class="eyebrow">ПОСЛЕДНЯЯ ВЕЩЬ / ДЕМО</span><h3>СИЛА И ЧЕСТЬ <span>M</span></h3><div class="stock-numbers"><div><strong id="stockAvailable">1</strong><small>свободно</small></div><span>→</span><div><strong id="stockReserved">0</strong><small>резерв</small></div></div><p>У двух покупателей одна общая единица. Кто подтвердит покупку первым — того и резерв.</p></article>
+      <section class="selection-card" aria-label="Выбор текущего участника">
+        <span class="eyebrow">МОЙ ВЫБОР / ТЕКУЩИЙ УЧАСТНИК</span>
+        <h3><span id="savedCount">0</span> в избранном · <span id="compareCount">0</span> в сравнении</h3>
+        <p id="listStorage">Хранение списков выключено. Не подписка и не резерв.</p>
+      </section>
+      <section class="selection-card promotion-card" aria-label="Промокоды в тестовом магазине">
+        <span class="eyebrow">СКИДКИ / БЕЗ СЮРПРИЗОВ</span>
+        <h3><span id="promotionCount">0</span> кодов · <span id="promotionUses">0</span> применений</h3>
+        <p id="cartPromotionLabel">В текущей корзине промокод не выбран.</p>
+        <p>Коды создаёт владелец через /newpromo. Новые коды выключены; включение — отдельным решением.</p>
+      </section>
+      <section class="selection-card signal-card" aria-label="Уведомления текущего участника">
+        <span class="eyebrow">ТОЛЬКО ПО ТВОЕМУ РАЗРЕШЕНИЮ</span>
+        <h3><span id="alertsActive">0</span> условий · <span id="alertsSent">0</span> подтверждённых отправок</h3>
+        <p>Однократно за 30 дней. Размер и цена — отдельные условия. Не резерв и не рассылка по избранному.</p>
+        <p id="alertsUncertain"></p>
+      </section>
+      <section class="finance-lab signal-lab" id="signalLab" hidden aria-label="Только тестовые условия уведомлений">
+        <span class="eyebrow">ЛАБОРАТОРИЯ / ТОЛЬКО ДЕМО</span>
+        <h3>Проверить сигнал.<br>Без сообщения реальному клиенту.</h3>
+        <p>Остаток меняется через роль «Склад» → /stock. Цена ниже меняется только во временной копии демо. Отдельная политика демо не является боевым юридическим документом.</p>
+        <button type="button" data-signal="price_drop">ДЕМО: снизить цену футболки на 500 ₽</button>
+        <button type="button" data-signal="uncertain">ДЕМО: потерять ответ следующего сигнала</button>
+        <button type="button" data-signal="check">Проверить условия без принудительного повтора</button>
+      </section>
+      <section class="activity"><h3>ФИНАНСОВЫЙ ЖУРНАЛ</h3><div id="receipts"><p class="empty">Пока без поступлений.</p></div></section>
+      <section class="activity"><h3>ДЕЙСТВИЯ КОМАНДЫ</h3><div id="audit"></div></section>
+      <section class="finance-lab" id="financeLab" hidden aria-label="Только тестовые финансовые сценарии">
+        <span class="eyebrow">ФИНАНСЫ / ТЕСТОВАЯ ЛАБОРАТОРИЯ</span>
+        <h3>Задач: <span id="financeCaseCount">0</span> · срок наступил: <span id="financeDueCount">0</span></h3>
+        <p>Никаких реальных операций. Эти кнопки создают вымышленные события для проверки бота.</p>
+        <button data-finance="orphan">Неизвестное поступление · UNK ↗</button>
+        <button data-finance="conflict">Расхождение у тестовой оплаты ↗</button>
+        <button data-finance="attempt">Зависший счёт · создать демо-покупку ↗</button>
+        <button data-finance="issued">Смоделировать выдачу этого счёта ↗</button>
+      </section>
+      <button class="expire-button" id="expireReservations">Сымитировать истечение резервов ↗</button>
+      <p class="inspector-foot">* Только тестовые поступления.<br>Демо не подключается к Telegram и платёжным провайдерам. Данные временные.</p>
+    </aside>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="demo.js"></script>
+</body>
+</html>

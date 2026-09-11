@@ -1,4 +1,7 @@
 .env
+.env.*
+!.env.example
+!.env.*.example
 __pycache__/
 *.pyc
 data/
@@ -6,3 +9,11 @@ data/
 
 .coverage
 htmlcov/
+
+# Local application checks and browser dependencies
+node_modules/
+ui-checks/
+
+# Machine-specific rendering/verification reports are not application source.
+# The requested MP4 deliverable is already published and stays tracked.
+deliverables/*-report.json

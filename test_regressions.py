@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from bot import BrandBot, Catalog, Database, RateLimiter, Settings, start_health_server
+from commerce_test_support import seed_test_inventory
 
 
 class CheckoutRegressionTests(unittest.TestCase):
@@ -35,6 +36,7 @@ class CheckoutRegressionTests(unittest.TestCase):
         self.api.create_invoice_link.return_value = 'https://t.me/invoice/mock'
         self.catalog = Catalog(self.settings.catalog_path)
         self.bot = BrandBot(self.settings, self.api, self.db, self.catalog)
+        seed_test_inventory(self.db, self.catalog)
         self.user = {'id': 420, 'first_name': 'Test'}
         self.payload = {'request_id': 'checkout-test', 'consent': True,
                         'customer': {'phone': '+79990000000', 'city': 'Test'},
@@ -42,6 +44,10 @@ class CheckoutRegressionTests(unittest.TestCase):
 
     def checkout(self, payload=None, user=None, notify=None):
         return self.bot.checkout_web_payload(user or self.user, payload or self.payload, notify_user=notify)
+
+    def confirm_stars(self, receipt, charge, **kwargs):
+        return self.db.mark_payment_paid(receipt['payment_id'], 'stars', charge,
+            amount_minor=receipt['amount_stars'], currency='XTR', payer_id=420, **kwargs)
 
     def test_retry_returns_same_receipt_and_payment(self):
         first = self.checkout()
@@ -117,7 +123,7 @@ class CheckoutRegressionTests(unittest.TestCase):
 
     def test_paid_order_cannot_be_cancelled_by_customer(self):
         receipt = self.checkout()
-        self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'charge')
+        self.confirm_stars(receipt, 'charge')
         self.bot.cancel_own_order(420, 420, receipt['order_ids'][0])
         self.assertEqual(self.db.get_order(receipt['order_ids'][0])['status'], 'paid')
 
@@ -131,9 +137,9 @@ class CheckoutRegressionTests(unittest.TestCase):
         self.bot.handle_pre_checkout({'id': 'test', 'invoice_payload': receipt['payment_id'],
                                      'currency': 'XTR', 'total_amount': receipt['amount_stars'], 'from': self.user})
         self.assertFalse(self.api.answer_pre_checkout.call_args.args[1])
-        self.assertTrue(self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'late-charge'))
+        self.assertTrue(self.confirm_stars(receipt, 'late-charge'))
         self.assertEqual(self.db.get_payment(receipt['payment_id'])['status'], 'refund_required')
-        self.assertFalse(self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'late-charge'))
+        self.assertFalse(self.confirm_stars(receipt, 'late-charge'))
         self.bot.notify_paid(receipt['payment_id'])
         self.assertIn('возврат', self.api.send_message.call_args.args[1].lower())
 
@@ -168,7 +174,10 @@ class CheckoutRegressionTests(unittest.TestCase):
         self.bot.update_order_status(1, receipt['order_ids'][0], 'paid')
         self.assertEqual(self.db.get_payment(receipt['payment_id'])['status'], 'paid')
         self.assertTrue(all(row['status'] == 'paid' for row in self.db.orders_for_payment(receipt['payment_id'])))
-        self.assertFalse(self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'later-callback'))
+        self.assertTrue(self.confirm_stars(receipt, 'later-callback', queue_review=self.bot.notify_payment_review))
+        ledger = self.db.connection().execute('SELECT * FROM payment_receipts').fetchone()
+        self.assertEqual((ledger['status'], ledger['reason']), ('review_required', 'manual_settlement'))
+        self.assertEqual(self.db.get_payment(receipt['payment_id'])['method'], 'manual')
         self.assertEqual(self.db.get_payment(receipt['payment_id'])['status'], 'paid')
 
     def test_crash_after_checkout_commit_keeps_notification_jobs(self):
@@ -273,7 +282,7 @@ class CheckoutRegressionTests(unittest.TestCase):
     def test_admin_cancellation_of_paid_order_queues_refund_notice(self):
         self.bot.settings = replace(self.settings, manager_chat_id=1)
         receipt = self.checkout(notify=420)
-        self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'charge')
+        self.confirm_stars(receipt, 'charge')
         self.bot.update_order_status(1, receipt['order_ids'][0], 'cancelled')
         self.assertEqual(self.db.get_payment(receipt['payment_id'])['status'], 'refund_required')
         messages = [call.args[1] for call in self.api.send_message.call_args_list]
@@ -303,11 +312,13 @@ class CheckoutRegressionTests(unittest.TestCase):
         def fail(_):
             raise RuntimeError('outbox storage unavailable')
         with self.assertRaises(RuntimeError):
-            self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'charge', queue_notifications=fail)
+            self.confirm_stars(receipt, 'charge', queue_notifications=fail)
         self.assertEqual(self.db.get_payment(receipt['payment_id'])['status'], 'pending')
         self.assertEqual(self.db.get_order(receipt['order_ids'][0])['status'], 'awaiting_payment')
-        self.assertTrue(self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'charge'))
-        self.assertFalse(self.db.mark_payment_paid('missing', 'stars', 'missing-charge'))
+        self.assertTrue(self.confirm_stars(receipt, 'charge'))
+        self.assertTrue(self.db.mark_payment_paid('missing', 'stars', 'missing-charge', amount_minor=1, currency='XTR', payer_id=420))
+        self.assertIsNone(self.db.get_payment('missing'))
+        self.assertEqual(self.db.connection().execute("SELECT status FROM payment_receipts WHERE provider_id='missing-charge'").fetchone()[0], 'review_required')
 
     def test_cancel_racing_payment_has_consistent_outcome(self):
         from threading import Barrier
@@ -316,7 +327,7 @@ class CheckoutRegressionTests(unittest.TestCase):
         def pay():
             try:
                 barrier.wait()
-                self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'charge')
+                self.confirm_stars(receipt, 'charge')
             finally:
                 self.db.close_current()
         def cancel():
@@ -365,7 +376,7 @@ class CheckoutRegressionTests(unittest.TestCase):
 
     def test_http_cancel_rejects_paid_order(self):
         receipt = self.checkout()
-        self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'charge')
+        self.confirm_stars(receipt, 'charge')
         status, _ = self.http('/api/my-orders/cancel', {'order_id': receipt['order_ids'][0]})
         self.assertEqual(status, 409)
 

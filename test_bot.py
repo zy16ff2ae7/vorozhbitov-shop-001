@@ -1,3 +1,4 @@
+from commerce_test_support import seed_test_inventory
 import hashlib
 import hmac
 import json
@@ -182,6 +183,7 @@ class BotTests(unittest.TestCase):
             db = make_db(directory)
             db.upsert_user({"id": 1, "username": "anon"})
             db.upsert_user({"id": 2, "username": "withphone"})
+            db.set_consent(2)
             db.set_phone(2, "+79990000000")
             db.upsert_user({"id": 3, "username": "hoodie_fan"})
             db.set_interest(3, "hoodie")
@@ -280,7 +282,10 @@ class BotTests(unittest.TestCase):
             privacy_url="",
         )
         db = make_db(directory)
-        return BrandBot(settings, api, db, Catalog(catalog_path)), db
+        catalog = Catalog(catalog_path)
+        instance = BrandBot(settings, api, db, catalog)
+        seed_test_inventory(db, catalog)
+        return instance, db
 
     def test_teaser_is_uploaded_once_and_then_reused_by_file_id(self):
         """Ролик весит мегабайты: второй раз должен уходить одним file_id."""
@@ -430,6 +435,7 @@ class BotTests(unittest.TestCase):
             catalog = Catalog(catalog_path)
             api = FakeAPI()
             brand_bot = BrandBot(settings, api, db, catalog)
+            seed_test_inventory(db, catalog)
             user = {"id": 77, "first_name": "Buyer", "username": "buyer"}
             payload = {
                 "type": "order",
@@ -491,6 +497,7 @@ class BotTests(unittest.TestCase):
             catalog = Catalog(catalog_path)
             api = FakeAPI()
             brand_bot = BrandBot(settings, api, db, catalog)
+            seed_test_inventory(db, catalog)
             user = {"id": 88, "first_name": "Waiter", "username": "waiter"}
             payload = {"type": "waitlist", "product_id": "tee-sila-i-chest", "size": "L"}
             brand_bot.handle_update({
@@ -580,6 +587,7 @@ class BotTests(unittest.TestCase):
             catalog = Catalog(catalog_path)
             api = FakeAPI()
             brand_bot = BrandBot(settings, api, db, catalog)
+            seed_test_inventory(db, catalog)
             user = {"id": 91, "first_name": "NoConsent", "username": "nc"}
             brand_bot.handle_update({
                 "update_id": 10,
@@ -598,6 +606,7 @@ class BotTests(unittest.TestCase):
                     "message": {"chat": {"id": 91, "type": "private"}},
                 },
             })
+            brand_bot.commerce.checkout(91, 91)
             brand_bot.handle_update({
                 "update_id": 12,
                 "message": {
@@ -659,6 +668,7 @@ class BotTests(unittest.TestCase):
             catalog = Catalog(catalog_path)
             api = FakeAPI()
             brand_bot = BrandBot(settings, api, db, catalog)
+            seed_test_inventory(db, catalog)
             user = {"id": 44, "first_name": "Nikita", "username": "nv"}
             db.upsert_user(user)
             brand_bot.handle_update({
@@ -738,6 +748,7 @@ class BotTests(unittest.TestCase):
             catalog = Catalog(catalog_path)
             api = FakeAPI()
             brand_bot = BrandBot(settings, api, db, catalog)
+            seed_test_inventory(db, catalog)
             user = {"id": 501, "first_name": "Никита", "username": "nv"}
             brand_bot.handle_update({
                 "update_id": 40,
@@ -1336,8 +1347,9 @@ class BotTests(unittest.TestCase):
             )
             self.assertTrue(created)
             self.assertEqual(db.get_order(order_id)["status"], "awaiting_payment")
-            self.assertTrue(db.mark_payment_paid("aa11bb22cc33", "lava", "inv-1"))
-            self.assertFalse(db.mark_payment_paid("aa11bb22cc33", "lava", "inv-1"))
+            db.save_invoice("aa11bb22cc33", "lava", "inv-1", 490000, "RUB", "https://lava.example/pay")
+            self.assertTrue(db.mark_payment_paid("aa11bb22cc33", "lava", "inv-1", amount_minor=490000, currency="RUB"))
+            self.assertFalse(db.mark_payment_paid("aa11bb22cc33", "lava", "inv-1", amount_minor=490000, currency="RUB"))
             self.assertEqual(db.get_order(order_id)["status"], "paid")
             self.assertEqual(db.get_payment("aa11bb22cc33")["status"], "paid")
             with self.assertRaises(ValueError):
@@ -1431,6 +1443,7 @@ class BotTests(unittest.TestCase):
             db = Database(settings.database_path)
             catalog = Catalog(catalog_path)
             api = FakeAPI()
+            seed_test_inventory(db, catalog)
             server = start_health_server(0, catalog, settings, db, api)
             try:
                 port = server.server_address[1]
@@ -1459,7 +1472,8 @@ class BotTests(unittest.TestCase):
                 self.assertEqual(order["status"], "awaiting_payment")
                 self.assertEqual(order["payment_id"], payment_id)
 
-                body = json.dumps({"order_id": payment_id, "status": "success", "invoice_id": "lava-1"}).encode("utf-8")
+                invoice = db.get_invoice("lava", "inv")
+                body = json.dumps({"order_id": invoice["external_ref"], "status": "success", "invoice_id": "inv", "amount": payload["amount_rub"], "currency": "RUB"}).encode("utf-8")
                 signature = hmac.new(b"hook", body, hashlib.sha256).hexdigest()
                 status, paid = request_json(
                     f"http://127.0.0.1:{port}/api/payments/lava",
@@ -1522,6 +1536,7 @@ class BotTests(unittest.TestCase):
             catalog = Catalog(catalog_path)
             api = FakeAPI()
             brand_bot = BrandBot(settings, api, db, catalog)
+            seed_test_inventory(db, catalog)
             db.upsert_user({"id": 77, "first_name": "Buyer"})
             db.create_payment("aa11bb22cc33", 77, 4900, 2450)
             db.create_order(

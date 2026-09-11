@@ -52,3 +52,67 @@ test('timeout aborts request and keeps its key for retry', async () => {
   await assert.rejects(client.submit(payload, 'signed', '42'), /Корзина сохранена/);
   assert.ok(f.storage.get('vorozhbitov_pending_checkout:42'));
 });
+
+test('blocked storage still reuses the in-session request after network failure',async()=>{
+  const bodies=[];
+  const client=createClient({fetch:async(_,o)=>{bodies.push(JSON.parse(o.body));throw new TypeError('offline')},
+    read:()=>({fingerprint:'old',request_id:'web-old'}),write:()=>{throw new Error('denied')}});
+  await assert.rejects(client.submit(payload,'signed','42'));await assert.rejects(client.submit(payload,'signed','42'));
+  assert.deepEqual(bodies[0],bodies[1]);
+});
+test('an older success cannot clear a newer unresolved checkout',async()=>{
+  const releases=[];
+  const f=fixture(()=>new Promise(resolve=>releases.push(resolve)));
+  const old=f.client.submit(payload,'signed','42');
+  const newer=f.client.submit({...payload,items:[{product_id:'tag',size:'ONE SIZE'}]},'signed','42');
+  const pending=f.storage.get('vorozhbitov_pending_checkout:42');
+  releases[0](ok());await old;
+  assert.deepEqual(f.storage.get('vorozhbitov_pending_checkout:42'),pending);
+  releases[1](ok());await newer;assert.equal(f.storage.get('vorozhbitov_pending_checkout:42'),null);
+});
+
+test('checkout revision is frozen with the retry key even if remote cart changed', async()=>{
+  const bodies=[];const f=fixture(async(_,options)=>{bodies.push(JSON.parse(options.body));throw new TypeError('lost')});
+  await assert.rejects(f.client.submit(payload,'signed','42',3));
+  const restarted=createClient(f.options);
+  await assert.rejects(restarted.submit(payload,'signed','42',4));
+  assert.deepEqual(bodies[0],bodies[1]);assert.equal(bodies[1].cart_revision,3);
+});
+test('legacy pending checkout never acquires new sync metadata on retry', async()=>{
+  const bodies=[];const f=fixture(async(_,options)=>{bodies.push(JSON.parse(options.body));return ok()});
+  f.storage.set('vorozhbitov_pending_checkout:42',{fingerprint:JSON.stringify(payload),request_id:'legacy'});
+  await f.client.submit(payload,'signed','42',8);
+  assert.equal(bodies[0].request_id,'legacy');assert.equal(Object.hasOwn(bodies[0],'cart_revision'),false);
+});
+test('successfully missing pending storage does not resurrect stale memory',async()=>{
+  const f=fixture(async()=>{throw new TypeError('offline')});
+  await assert.rejects(f.client.submit(payload,'signed','42',1));
+  f.storage.delete('vorozhbitov_pending_checkout:42');
+  assert.equal(f.client.peek('42'),null);
+});
+
+test('an explicit stale cart revision rejection can be resolved with a new intent',async()=>{
+  const bodies=[];let stale=true;
+  const f=fixture(async(_,options)=>{bodies.push(JSON.parse(options.body));return stale?{status:400,ok:false,json:async()=>({error:'Cart changed',code:'cart_revision_conflict'})}:ok()});
+  await assert.rejects(f.client.submit(payload,'signed','42',1));
+  assert.equal(f.client.peek('42'),null);stale=false;
+  await f.client.submit(payload,'signed','42',3);
+  assert.notEqual(bodies[0].request_id,bodies[1].request_id);assert.equal(bodies[1].cart_revision,3);
+});
+
+test('explicit promotion rejection retires only an uncommitted matching retry',async()=>{
+  for(const code of ['promotion_requires_chat','promotion_changed']){
+    const f=fixture(async()=>({status:400,ok:false,json:async()=>({error:'Check code in bot',code})}));
+    await assert.rejects(f.client.submit(payload,'signed','42',3),/Check code/);
+    assert.equal(f.client.peek('42'),null);
+  }
+});
+test('a delayed promotion rejection cannot erase another newer unresolved checkout',async()=>{
+  const releases=[];const f=fixture(()=>new Promise(resolve=>releases.push(resolve)));
+  const old=f.client.submit(payload,'signed','42',3);
+  const newer=f.client.submit({...payload,items:[{product_id:'tag',size:'ONE SIZE'}]},'signed','42',4);
+  const pending=f.client.peek('42');
+  releases[0]({status:400,ok:false,json:async()=>({error:'Code changed',code:'promotion_changed'})});
+  await assert.rejects(old);assert.deepEqual(f.client.peek('42'),pending);
+  releases[1](ok());await newer;
+});

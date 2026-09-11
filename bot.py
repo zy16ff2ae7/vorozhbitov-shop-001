@@ -9,6 +9,7 @@ Python 3.11+, standard library only.
 
 from __future__ import annotations
 
+import copy
 import csv
 from collections import OrderedDict
 import hashlib
@@ -26,22 +27,39 @@ import secrets
 import signal
 import sqlite3
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from decimal import Decimal
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterable
+
+from payment_store import PaymentStore
+from commerce_store import CommerceStore, CartConflict, StockError
+from commerce_bot import CommerceBot
+from operations_store import OperationsStore
+from operations_bot import OperationsBot
+from finance_store import FinanceStore
+from finance_bot import FinanceBot
+from discovery_store import DiscoveryStore
+from discovery_bot import DiscoveryBot
+from growth_store import GrowthStore
+from growth_bot import GrowthBot
+from alerts_store import AlertsStore
+from alerts_bot import AlertsBot
 
 from payments import (
     PriceError,
     create_crypto_invoice,
     create_lava_invoice,
     format_rub,
+    minor_units,
     parse_price_strict,
     stars_amount,
     verify_crypto_webhook,
@@ -90,6 +108,7 @@ class RateLimiter:
 # заявок опрашивается витриной раз в 4 секунды, поэтому лимит выше.
 CHECKOUT_LIMITER = RateLimiter(limit=8, window_seconds=60)
 READ_LIMITER = RateLimiter(limit=60, window_seconds=60)
+CART_LIMITER = RateLimiter(limit=90, window_seconds=60)
 VIDEO_SUFFIXES = {".mp4", ".m4v", ".webm", ".mov"}
 PHONE_RE = re.compile(r"^\+?[0-9]{10,15}$")
 REF_RE = re.compile(r"^ref(\d{3,15})$")
@@ -208,6 +227,11 @@ class Settings:
     stars_enabled: bool = True
     stars_rub_per_star: float = 2.0
     trusted_proxy_ips: frozenset[str] = frozenset()
+    product_alerts_enabled: bool = False
+    product_alerts_policy_url: str = ""
+
+    def alerts_policy_url(self) -> str:
+        return self.product_alerts_policy_url or self.privacy_url
 
     def public_origin(self) -> str:
         parsed = urllib.parse.urlparse(self.webapp_url)
@@ -216,7 +240,7 @@ class Settings:
         return ""
 
     def lava_ready(self) -> bool:
-        return bool(self.lava_shop_id and self.lava_secret_key)
+        return bool(self.lava_shop_id and self.lava_secret_key and self.lava_hook_key)
 
     def crypto_ready(self) -> bool:
         return bool(self.crypto_pay_token)
@@ -255,6 +279,8 @@ class Settings:
             lava_secret_key=os.getenv("LAVA_SECRET_KEY", "").strip(),
             lava_hook_key=(os.getenv("LAVA_HOOK_KEY") or os.getenv("LAVA_ADDITIONAL_KEY") or "").strip(),
             crypto_pay_token=os.getenv("CRYPTO_PAY_TOKEN", "").strip(),
+            product_alerts_enabled=os.getenv("PRODUCT_ALERTS_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"},
+            product_alerts_policy_url=os.getenv("PRODUCT_ALERTS_POLICY_URL", "").strip(),
             stars_enabled=stars_flag not in {"0", "false", "no", "off"},
             stars_rub_per_star=stars_rate if stars_rate > 0 else 2.0,
             trusted_proxy_ips=frozenset(str(ipaddress.ip_address(item.strip()))
@@ -272,9 +298,10 @@ class Catalog:
         self.lock = threading.RLock()
         self.reload()
 
-    def reload(self) -> None:
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(raw.get("categories"), list) or not isinstance(raw.get("products"), list):
+    @staticmethod
+    def validate(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """Validate a candidate before publishing it in memory or on disk."""
+        if not isinstance(raw, dict) or not isinstance(raw.get("categories"), list) or not isinstance(raw.get("products"), list):
             raise ValueError("catalog.json must contain categories and products arrays")
         category_ids: set[str] = set()
         for category in raw["categories"]:
@@ -291,7 +318,9 @@ class Catalog:
             required = {"id", "category", "name", "price", "sizes", "description"}
             if not isinstance(product, dict) or not required.issubset(product):
                 raise ValueError(f"Product is missing fields: {product}")
-            product_id = str(product["id"])
+            product_id = product["id"]
+            if not isinstance(product_id, str):
+                raise ValueError("Product id must be a string")
             if not product_id or ":" in product_id or len(product_id.encode("utf-8")) > 40:
                 raise ValueError(f"Product id is not callback-safe: {product_id}")
             if product_id in products:
@@ -303,8 +332,8 @@ class Catalog:
             if not isinstance(product["sizes"], list) or not product["sizes"]:
                 raise ValueError(f"Product sizes must be a non-empty array: {product_id}")
             for size in product["sizes"]:
-                callback = f"size:{product_id}:{size}"
-                if ":" in str(size) or len(callback.encode("utf-8")) > 64:
+                callback = f"wsize:{product_id}:{size}"
+                if not isinstance(size, str) or not size or ":" in size or len(callback.encode("utf-8")) > 64:
                     raise ValueError(f"Size is not callback-safe for {product_id}: {size}")
             photo_url = str(product.get("photo_url", ""))
             if photo_url and not photo_url.startswith(("https://", "http://")):
@@ -321,74 +350,121 @@ class Catalog:
                 )
             products[product_id] = product
         raw.setdefault("lookbook", [])
-        # Обе структуры собраны целиком — подменяем их разом, чтобы читатель
-        # никогда не увидел новый data со старым индексом товаров.
+        return products
+
+    def reload(self) -> None:
         with self.lock:
-            self.data = raw
-            self.products_by_id = products
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            products = self.validate(raw)
+            self.data, self.products_by_id = raw, products
 
     @property
     def categories(self) -> list[dict[str, str]]:
-        return self.data["categories"]
+        with self.lock:
+            return self.data["categories"]
 
     @property
     def lookbook(self) -> list[dict[str, str]]:
-        return [item for item in self.data.get("lookbook", []) if str(item.get("photo_url", "")).startswith("http")]
+        with self.lock:
+            return [item for item in self.data.get("lookbook", []) if str(item.get("photo_url", "")).startswith("http")]
 
     def products_for_category(self, category: str) -> list[dict[str, Any]]:
-        return [p for p in self.data["products"] if p["category"] == category and p.get("active", True)]
+        with self.lock:
+            return [p for p in self.data["products"] if p["category"] == category and p.get("active", True)]
 
     def get(self, product_id: str) -> dict[str, Any] | None:
-        product = self.products_by_id.get(product_id)
-        return product if product and product.get("active", True) else None
+        with self.lock:
+            product = self.products_by_id.get(product_id)
+            return product if product and product.get("active", True) else None
 
     def get_any(self, product_id: str) -> dict[str, Any] | None:
-        return self.products_by_id.get(product_id)
-
-    def save(self) -> None:
         with self.lock:
-            payload = json.dumps(self.data, ensure_ascii=False, indent=2) + "\n"
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        tmp.write_text(payload, encoding="utf-8")
-        os.replace(tmp, self.path)
+            return self.products_by_id.get(product_id)
+
+    def public_products(self) -> list[dict[str, Any]]:
+        with self.lock:
+            products = copy.deepcopy([p for p in self.data["products"] if p.get("active", True)])
+        for product in products:
+            try:
+                amount = parse_price_strict(product["price"])
+            except PriceError:
+                amount = 0
+            # The same whole-ruble policy as line_amount(), not a JS parser.
+            product["price_rub"] = amount
+            product["price"] = format_rub(amount) if amount > 0 else "Цена уточняется"
+        return products
+
+    def save(self, candidate: dict[str, Any] | None = None) -> None:
+        with self.lock:
+            raw = copy.deepcopy(self.data if candidate is None else candidate)
+            products = self.validate(raw)
+            payload = json.dumps(raw, ensure_ascii=False, indent=2) + "\n"
+            # Unique temp file, on the same filesystem; a failure leaves the old
+            # working catalog and index intact. Do not mutate self.data first.
+            descriptor, name = tempfile.mkstemp(prefix=self.path.name + ".", suffix=".tmp", dir=self.path.parent)
+            try:
+                with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+                    target.write(payload)
+                    target.flush()
+                    os.fsync(target.fileno())
+                os.replace(name, self.path)
+            finally:
+                Path(name).unlink(missing_ok=True)
+            self.data, self.products_by_id = raw, products
 
     def unique_id(self, name: str) -> str:
         base = slugify(name)
         candidate = base
         index = 2
         while candidate in self.products_by_id:
-            candidate = f"{base}-{index}"
+            suffix = f"-{index}"
+            candidate = base[:40 - len(suffix)] + suffix
             index += 1
         return candidate
 
     def add_product(self, product: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
-            product = dict(product)
+            product = copy.deepcopy(product)
             product["id"] = self.unique_id(str(product["name"]))
             product.setdefault("active", True)
             product.setdefault("photo_url", "")
-            self.data["products"].append(product)
-            self.save()
-            self.reload()
+            candidate = copy.deepcopy(self.data)
+            candidate["products"].append(product)
+            self.save(candidate)
             return product
+
+    def add_category(self, name: str) -> dict[str, str]:
+        with self.lock:
+            base = slugify(name, "category")
+            category_id, index = base, 2
+            existing = {category["id"] for category in self.categories}
+            while category_id in existing:
+                category_id = f"{base}-{index}"
+                index += 1
+            category = {"id": category_id, "name": name}
+            candidate = copy.deepcopy(self.data)
+            candidate["categories"].append(category)
+            self.save(candidate)
+            return category
 
     def set_active(self, product_id: str, active: bool) -> bool:
         with self.lock:
-            for product in self.data["products"]:
-                if str(product.get("id")) == product_id:
+            candidate = copy.deepcopy(self.data)
+            for product in candidate["products"]:
+                if product["id"] == product_id:
                     product["active"] = active
-                    self.save()
-                    self.reload()
+                    self.save(candidate)
                     return True
             return False
 
 
-class Database:
+class Database(CommerceStore, OperationsStore, FinanceStore, DiscoveryStore, GrowthStore, AlertsStore, PaymentStore):
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         self.local = threading.local()
         self.invoice_locks = [threading.Lock() for _ in range(64)]
+        self.chat_locks = [threading.RLock() for _ in range(64)]
         self._initialize()
 
     def connection(self) -> sqlite3.Connection:
@@ -397,6 +473,7 @@ class Database:
             conn = sqlite3.connect(self.path, timeout=30, isolation_level=None)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=FULL")
             conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA busy_timeout=30000")
             self.local.conn = conn
@@ -523,6 +600,8 @@ class Database:
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_request_id ON orders(request_id)")
         if "quantity" not in order_columns:
             conn.execute("ALTER TABLE orders ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1")
+        if "person" not in order_columns:
+            conn.execute("ALTER TABLE orders ADD COLUMN person TEXT NOT NULL DEFAULT ''")
         if "note" not in order_columns:
             conn.execute("ALTER TABLE orders ADD COLUMN note TEXT NOT NULL DEFAULT ''")
         if "payment_id" not in order_columns:
@@ -553,6 +632,30 @@ class Database:
             conn.execute("ALTER TABLE users ADD COLUMN comment TEXT")
         if "profile_at" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN profile_at TEXT")
+        self.scrub_preconsent_states()
+        self.init_payment_store()
+        self.init_commerce_store()
+        self.init_operations_store()
+        self.init_finance_store()
+        self.init_discovery_store()
+        self.init_growth_store()
+        self.init_alerts_store()
+        if "service_only" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN service_only INTEGER NOT NULL DEFAULT 0")
+        if "customer_name" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN customer_name TEXT NOT NULL DEFAULT ''")
+
+    def scrub_preconsent_states(self) -> None:
+        conn = self.connection()
+        for row in list(conn.execute("SELECT user_id, data FROM states WHERE state='awaiting_consent'")):
+            try:
+                data = json.loads(row["data"])
+            except (TypeError, ValueError):
+                continue
+            if isinstance(data, dict) and isinstance(data.get("next_data"), dict) and "phone" in data["next_data"]:
+                data["next_data"].pop("phone", None)
+                conn.execute("UPDATE states SET data=? WHERE user_id=? AND state='awaiting_consent'",
+                             (compact_json(data), row["user_id"]))
 
     def upsert_user(self, telegram_user: dict[str, Any], source: str | None = None) -> tuple[bool, int | None]:
         conn = self.connection()
@@ -630,19 +733,35 @@ class Database:
             conn.execute("UPDATE users SET invited_count=invited_count+1 WHERE user_id=?", (referrer,))
         return is_new, referrer
 
+    def require_consent(self, user_id: int) -> None:
+        if not self.has_consent(user_id):
+            raise ValueError("Сначала нужно согласие на обработку данных.")
+
     def set_phone(self, user_id: int, phone: str) -> None:
-        self.connection().execute("UPDATE users SET phone=? WHERE user_id=?", (phone, user_id))
+        self.require_consent(user_id)
+        normalized = normalize_phone(phone)
+        if not normalized:
+            raise ValueError("Некорректный номер телефона.")
+        self.connection().execute("UPDATE users SET phone=? WHERE user_id=?", (normalized, user_id))
 
     def set_interest(self, user_id: int, interest: str) -> None:
         self.connection().execute("UPDATE users SET interest=? WHERE user_id=?", (interest, user_id))
 
-    def set_consent(self, user_id: int) -> None:
-        self.connection().execute("UPDATE users SET consent_at=? WHERE user_id=?", (utc_now(), user_id))
+    def set_consent(self, user_id: int, *, service_only: bool = False) -> None:
+        self.connection().execute("UPDATE users SET service_only=CASE WHEN consent_at IS NULL THEN CASE WHEN service_only=1 OR EXISTS(SELECT 1 FROM product_alert_accounts a WHERE a.user_id=users.user_id) THEN 1 ELSE ? END ELSE service_only END, consent_at=COALESCE(consent_at, ?) WHERE user_id=?", (int(service_only), utc_now(), user_id))
 
     def set_profile(self, user_id: int, profile: dict[str, Any]) -> None:
+        self.require_consent(user_id)
+        profile = dict(profile)
+        if profile.get("phone"):
+            phone = normalize_phone(str(profile["phone"]))
+            if not phone:
+                raise ValueError("Некорректный номер телефона.")
+            profile["phone"] = phone
         self.connection().execute(
             """
             UPDATE users SET
+                customer_name=COALESCE(NULLIF(?, ''), customer_name),
                 first_name=COALESCE(NULLIF(?, ''), first_name),
                 phone=COALESCE(NULLIF(?, ''), phone),
                 city=?,
@@ -656,6 +775,7 @@ class Database:
             WHERE user_id=?
             """,
             (
+                str(profile.get("name") or "")[:80],
                 str(profile.get("name") or "")[:80],
                 str(profile.get("phone") or "")[:32],
                 str(profile.get("city") or "")[:80],
@@ -793,6 +913,8 @@ class Database:
         self, user_id: int, request_id: str, fingerprint: str,
         lines: list[dict[str, Any]], amount_stars: int,
         queue_notifications: Callable[[dict[str, Any]], None] | None = None,
+        *, customer: dict[str, Any] | None = None, cart_revision: int | None = None,
+        promotion: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Commit one immutable receipt, payment and all order lines together."""
         conn = self.connection()
@@ -804,27 +926,39 @@ class Database:
                 return previous, False
             if not lines or any(int(line["amount_rub"]) <= 0 for line in lines):
                 raise ValueError("Цена вещи недоступна. Обнови витрину или напиши менеджеру.")
+            self.validate_promotion_commit(user_id, promotion, lines, cart_revision)
             payment_id = secrets.token_hex(12)
             total = sum(int(line["amount_rub"]) for line in lines)
             now = utc_now()
+            cart_after = self.clear_checked_out_cart(user_id, lines, cart_revision)
             self.create_payment(payment_id, user_id, total, amount_stars)
+            if customer:
+                self.require_consent(user_id)
+            purchase_id = conn.execute("INSERT INTO purchases(payment_id,user_id,customer,created_at,operations_managed) VALUES (?,?,?,?,1)",
+                (payment_id, user_id, compact_json(customer or {}), now)).lastrowid
+            self.init_purchase_operations(purchase_id)
+            reserved_until = self.hold_stock(payment_id, lines)
             order_ids = []
             for index, line in enumerate(lines):
                 cursor = conn.execute(
                     """INSERT INTO orders(request_id, user_id, product_id, product_name, size,
-                       phone, quantity, note, status, payment_id, amount_rub, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_payment', ?, ?, ?)""",
+                       phone, quantity, note, status, payment_id, amount_rub, created_at, person)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_payment', ?, ?, ?, ?)""",
                     (f"checkout:{payment_id}:{index}", user_id, line["product_id"], line["name"],
                      line["size"], line["phone"], line["quantity"], line["note"][:400],
-                     payment_id, line["amount_rub"], now),
+                     payment_id, line["amount_rub"], now, line.get("person", "")),
                 )
                 order_ids.append(int(cursor.lastrowid))
                 self.event(user_id, "order_created", {"order_id": order_ids[-1], "product_id": line["product_id"]})
             receipt = {
-                "payment_id": payment_id, "amount_rub": total, "amount_label": format_rub(total),
+                "payment_id": payment_id, "purchase_id": purchase_id, "reserved_until": reserved_until,
+                "cart_revision": cart_after, "amount_rub": total, "amount_label": format_rub(total),
                 "amount_stars": amount_stars, "order_ids": order_ids,
                 "lines": [{key: line[key] for key in ("name", "size", "quantity", "person", "person_label")} for line in lines],
             }
+            self.record_promotion(user_id, payment_id, promotion, lines, order_ids)
+            if promotion is not None:
+                receipt["promotion"] = self.purchase_promotion(payment_id)
             conn.execute("INSERT INTO checkouts VALUES (?, ?, ?, ?, ?)",
                          (user_id, request_id, fingerprint, compact_json(receipt), now))
             self.clear_state(user_id)
@@ -841,12 +975,13 @@ class Database:
         row = self.connection().execute(
             """SELECT p.status, p.amount_rub, COUNT(o.id) AS items,
                COALESCE(SUM(o.amount_rub), 0) AS total,
-               SUM(CASE WHEN o.status='awaiting_payment' AND o.amount_rub>0 THEN 0 ELSE 1 END) AS invalid
+               SUM(CASE WHEN o.status='awaiting_payment' AND o.amount_rub>0 AND o.user_id=p.user_id THEN 0 ELSE 1 END) AS invalid
                FROM payments p LEFT JOIN orders o ON o.payment_id=p.payment_id
                WHERE p.payment_id=? GROUP BY p.payment_id""", (payment_id,),
         ).fetchone()
         return bool(row and row["status"] == "pending" and row["items"]
-                    and not row["invalid"] and row["amount_rub"] == row["total"])
+                    and not row["invalid"] and row["amount_rub"] == row["total"]
+                    and self.payment_stock_ok(payment_id))
 
     def enqueue_message(self, key: str, chat_id: int, text: str, markup: dict[str, Any] | None = None) -> None:
         self.connection().execute(
@@ -884,8 +1019,8 @@ class Database:
             )
         )
 
-    def mark_payment_paid(self, payment_id: str, method: str = "", provider_id: str = "", *, queue_notifications: Callable[[str], None] | None = None) -> bool:
-        """Idempotent: pending → paid, matching orders awaiting_payment → paid."""
+    def _apply_payment_status(self, payment_id: str, method: str = "", provider_id: str = "", *, queue_notifications: Callable[[str], None] | None = None) -> bool:
+        """Internal transition. Incoming money must first pass the receipt ledger."""
         conn = self.connection()
         now = utc_now()
         owns_transaction = not conn.in_transaction
@@ -907,8 +1042,14 @@ class Database:
                     SET status=?, method=?, provider_id=?, paid_at=?
                     WHERE payment_id=?
                     """,
-                    (target_status, str(method or row["method"] or "")[:32], str(provider_id or "")[:80], now, payment_id),
+                    (target_status, str(method or row["method"] or "")[:32], str(provider_id or ""), now, payment_id),
                 )
+            if not already:
+                self.finish_stock_reservation(payment_id, consumed=not needs_refund)
+                conn.execute("UPDATE purchases SET version=version+1 WHERE payment_id=?", (payment_id,))
+                if needs_refund:
+                    conn.execute("UPDATE purchases SET fulfillment='cancelled' WHERE payment_id=?", (payment_id,))
+                    conn.execute("UPDATE orders SET status='cancelled' WHERE payment_id=? AND status='awaiting_payment'", (payment_id,))
             for order in conn.execute(
                 "SELECT id, user_id, status FROM orders WHERE payment_id=?", (payment_id,)
             ):
@@ -940,15 +1081,15 @@ class Database:
             raise
 
     def add_to_waitlist(self, user_id: int, product: dict[str, Any], size: str) -> bool:
-        conn = self.connection()
-        cursor = conn.execute(
-            """
-            INSERT OR IGNORE INTO waitlist(user_id, product_id, product_name, size, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (user_id, str(product["id"]), product["name"], size, utc_now()),
-        )
-        return cursor.rowcount > 0
+        # A legacy interest request is not opt-in to product signals or marketing.
+        with self.commerce_transaction() as conn:
+            cursor = conn.execute(
+                """INSERT OR IGNORE INTO waitlist(user_id, product_id, product_name, size, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (user_id, str(product["id"]), product["name"], size, utc_now()),
+            )
+            conn.execute("UPDATE users SET service_only=1 WHERE user_id=? AND consent_at IS NULL", (user_id,))
+            return cursor.rowcount > 0
 
     def waitlist_rows(self, limit: int = 20) -> list[sqlite3.Row]:
         return list(
@@ -1065,6 +1206,15 @@ class Database:
             if status not in transitions.get(current, set()):
                 conn.execute("COMMIT")
                 raise ValueError(f"Invalid order transition: {current} -> {status}")
+            purchase = conn.execute("SELECT * FROM purchases WHERE payment_id=?", (row["payment_id"],)).fetchone() if row["payment_id"] else None
+            if status == "completed" and purchase:
+                self.require_operations_completion(purchase)
+            if status in {"confirmed", "completed"} and purchase and purchase["stock_managed"]:
+                payment = self.get_payment(row["payment_id"])
+                if payment["status"] != "paid" or self.payment_attention(row["payment_id"]):
+                    raise ValueError("Сначала нужна подтверждённая оплата без финансовой сверки.")
+                conn.execute("UPDATE orders SET status=? WHERE payment_id=?", (status, row["payment_id"]))
+                conn.execute("UPDATE purchases SET fulfillment=?,version=version+1 WHERE payment_id=?", ("packing" if status == "confirmed" else "completed", row["payment_id"]))
             if status == "paid" and row["payment_id"]:
                 if not self.payment_is_payable(row["payment_id"]):
                     raise ValueError("Эта оплата требует сверки с менеджером.")
@@ -1085,12 +1235,17 @@ class Database:
                                 conn.execute("UPDATE orders SET status='cancelled' WHERE id=?", (item["id"],))
                                 self.event(row["user_id"], "order_status_changed", {"order_id": item["id"], "status": "cancelled"})
                         conn.execute("UPDATE payments SET status='cancelled' WHERE payment_id=?", (row["payment_id"],))
+                        self.finish_stock_reservation(row["payment_id"], consumed=False)
                     elif payment["status"] == "paid":
                         conn.execute("UPDATE payments SET status='refund_required' WHERE payment_id=?", (row["payment_id"],))
+                        conn.execute("UPDATE payment_receipts SET status='refund_required', reason='order_cancelled' WHERE payment_id=? AND status='applied'", (row["payment_id"],))
                         self.event(row["user_id"], "payment_refund_required", {"payment_id": row["payment_id"]})
                         if queue_paid:
                             queue_paid(row["payment_id"])
+                    conn.execute("UPDATE purchases SET fulfillment='cancelled',version=version+1 WHERE payment_id=?", (row["payment_id"],))
                     conn.execute("DELETE FROM payment_methods WHERE payment_id=?", (row["payment_id"],))
+            if row["payment_id"]:
+                self.sync_finance_payment(row["payment_id"])
             conn.execute("UPDATE orders SET status=? WHERE id=?", (status, order_id))
             conn.execute(
                 "INSERT INTO events(user_id, event, payload, created_at) VALUES (?, ?, ?, ?)",
@@ -1134,7 +1289,12 @@ class Database:
             rows = conn.execute("SELECT user_id FROM users WHERE is_blocked=0 AND interest=?", (interest,))
         else:
             rows = conn.execute("SELECT user_id FROM users WHERE is_blocked=0")
-        return [row[0] for row in rows]
+        service_only = {r[0] for r in conn.execute("SELECT user_id FROM users WHERE service_only=1")}
+        return [row[0] for row in rows if row[0] not in service_only]
+
+    def broadcast_recipient_current(self, user_id: int) -> bool:
+        row = self.get_user(user_id)
+        return bool(row and not row["is_blocked"] and not row["service_only"])
 
     def active_user_ids(self) -> list[int]:
         return [row[0] for row in self.connection().execute("SELECT user_id FROM users WHERE is_blocked=0")]
@@ -1234,6 +1394,34 @@ class TelegramAPI:
         if reply_markup:
             payload["reply_markup"] = reply_markup
         return self.call("sendMessage", payload)
+
+    def send_message_once(self, chat_id: int, text: str, reply_markup: dict[str, Any] | None = None) -> Any:
+        """One HTTP attempt for optional product alerts. Never retry ambiguity."""
+        plain = html.unescape(re.sub(r"<[^>]*>", "", text))
+        if len(plain.encode("utf-16-le")) // 2 > 3900:
+            raise ValueError("Alert exceeds Telegram text limit")
+        payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
+        if reply_markup: payload["reply_markup"] = reply_markup
+        request = urllib.request.Request(self.base_url + "sendMessage", data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            exc.close()
+            error = RuntimeError("Telegram did not confirm the product alert")
+            error.telegram_status = exc.code
+            raise error from exc
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            error = RuntimeError("Telegram did not confirm the product alert")
+            error.telegram_status = result.get("error_code") if isinstance(result, dict) else None
+            raise error
+        return result.get("result")
+
+    def edit_message_text(self, chat_id: int, message_id: int, text: str, reply_markup: dict[str, Any] | None = None) -> Any:
+        return self.call("editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": text,
+            "parse_mode": "HTML", "disable_web_page_preview": True,
+            "reply_markup": reply_markup or {"inline_keyboard": []}})
 
     def send_photo(self, chat_id: int, photo: str, caption: str, reply_markup: dict[str, Any] | None = None) -> Any:
         if len(caption) > 1024:
@@ -1485,7 +1673,7 @@ ORDER_STATUS_LABELS = {
 }
 
 ORDER_STATUS_MESSAGES = {
-    "paid": "Оплата прошла. Менеджер подтвердит наличие и доставку.",
+    "paid": "Оплата подтверждена. Менеджер согласует доставку и сборку.",
     "confirmed": "Наличие подтверждено. Собираем к отправке.",
     "completed": "Заявка закрыта. Спасибо, что выбрал этот выпуск.",
     "cancelled": "Заявка отменена. Если это ошибка — собери новую из карточки вещи.",
@@ -1600,6 +1788,13 @@ class BrandBot:
         self.db = db
         self.catalog = catalog
         self.bot_username: str = ""
+        self.db.sync_inventory(catalog)
+        self.commerce = CommerceBot(self)
+        self.operations = OperationsBot(self)
+        self.finance = FinanceBot(self)
+        self.discovery = DiscoveryBot(self)
+        self.growth = GrowthBot(self)
+        self.alerts = AlertsBot(self)
 
     # ------------------------------------------------------------------ utils
 
@@ -1611,6 +1806,10 @@ class BrandBot:
                 break
             row = rows[0]
             try:
+                if not self.db.finance_notification_current(row["notification_id"], row["chat_id"], self.settings.admin_ids, self.settings.manager_chat_id, stamp=stamp):
+                    # Retired reminders are acknowledged without a network send.
+                    self.db.connection().execute("UPDATE notifications SET delivered_at=? WHERE notification_id=?", (utc_now(), row["notification_id"]))
+                    continue
                 if row["notification_id"].startswith("offer:"):
                     payment_id = row["notification_id"].split(":")[1]
                     if not self.db.payment_is_payable(payment_id):
@@ -1626,6 +1825,9 @@ class BrandBot:
             else:
                 self.db.connection().execute("UPDATE notifications SET delivered_at=? WHERE notification_id=?",
                                              (utc_now(), row["notification_id"]))
+                # A notification is now the newest chat turn. Navigation must
+                # open below it rather than silently editing a panel above it.
+                self.db.connection().execute("DELETE FROM chat_panels WHERE chat_id=?", (row["chat_id"],))
 
     def deliver_message(self, key: str, chat_id: int, text: str, markup: dict[str, Any] | None = None, *, queue_only: bool = False) -> None:
         self.db.enqueue_message(key, chat_id, text, markup)
@@ -1765,12 +1967,10 @@ class BrandBot:
 
     def main_menu(self) -> dict[str, Any]:
         rows: list[list[tuple[str, str]]] = [
-            [("Смотреть выпуск", "catalog"), ("Образы", "lookbook")],
-            [("Ролик выпуска", "teaser")],
-            [("Подобрать размер", "size_guide"), ("О бренде", "about")],
-            [("Канал", self.settings.channel_url)],
-            [("Узнать первым", "profile"), ("Привести друга", "referral")],
-            [("Мои заявки", "my_orders")],
+            [("Смотреть выпуск", "c:catalog"), ("Корзина", "c:cart")],
+            [("Мои покупки", "c:orders"), ("Мой профиль", "c:profile")],
+            [("Продолжить", "c:resume"), ("Помощь", "c:help")],
+            [("Бренд / образы", "c:more"), ("Главная", "c:home")],
         ]
         if self.settings.webapp_url.startswith("https://"):
             rows.insert(0, [("Открыть витрину", f"webapp:{self.settings.webapp_url}")])
@@ -1788,6 +1988,7 @@ class BrandBot:
         is_new, referrer = self.db.upsert_user(user, source)
         user_id = int(user["id"])
         self.db.event(user_id, "start", {"source": source, "is_new": is_new})
+        self.commerce.pause(user_id)
         if referrer:
             self.db.event(referrer, "referral_joined", {"user_id": user_id})
             try:
@@ -1807,9 +2008,9 @@ class BrandBot:
                 f"{name}, ты на закрытой территории.\n"
                 "Здесь первыми разбирают выпуск. Тираж маленький, очереди нет — "
                 "берёт тот, кто успел.\n\n"
-                "<b>Что тебе ближе?</b> Отметишь — будем писать по делу, не всем подряд."
+                "<b>Начни с выпуска или корзины.</b> Данные и оплата — только после проверки покупки."
             )
-            self.send_welcome(chat_id, text, self.interest_menu())
+            self.send_welcome(chat_id, text, self.main_menu())
         else:
             text = (
                 f"<b>{esc(self.settings.brand_name)}</b>\n\n"
@@ -1909,46 +2110,19 @@ class BrandBot:
         if not product or size not in [str(item) for item in product["sizes"]]:
             self.api.send_message(chat_id, "Этот вариант уже разобрали.", self.main_menu())
             return
-        user = self.db.get_user(user_id)
-        if user and user["phone"]:
-            self.finish_order(chat_id, user_id, product, size, user["phone"], request_id)
-            return
-        self.ask_phone(
-            chat_id,
-            user_id,
-            "awaiting_order_phone",
-            {"product_id": product_id, "size": size, "request_id": request_id},
-        )
+        self.commerce.add_variant(chat_id, user_id, product_id, size, request_id)
 
     def ask_waitlist_size(self, chat_id: int, product_id: str) -> None:
-        product = self.catalog.get(product_id)
-        if not product:
-            self.api.send_message(chat_id, "Вещь больше недоступна.", self.main_menu())
-            return
-        sizes = [str(size) for size in product["sizes"]]
-        rows = [[(size, f"wsize:{product_id}:{size}") for size in sizes[index:index + 4]] for index in range(0, len(sizes), 4)]
-        rows.append([("Назад", f"product:{product_id}")])
-        self.api.send_message(
-            chat_id,
-            "Какой размер ждёшь?\nВернётся — напишем первыми, раньше канала.",
-            inline_keyboard(rows),
-        )
+        self.alerts.sizes(chat_id, chat_id, product_id)
 
     def confirm_waitlist(self, chat_id: int, user_id: int, product_id: str, size: str) -> None:
         product = self.catalog.get(product_id)
-        if not product:
-            self.api.send_message(chat_id, "Вещь больше недоступна.", self.main_menu())
-            return
-        added = self.db.add_to_waitlist(user_id, product, size)
-        self.db.event(user_id, "waitlist_add", {"product_id": product_id, "size": size})
-        if added:
-            text = (
-                f"Записал: <b>{esc(product['name'])}</b>, размер {esc(size)}.\n"
-                "Как только вернётся — напишем раньше всех."
-            )
-        else:
-            text = f"Этот размер уже в листе: <b>{esc(product['name'])}</b> · {esc(size)}."
-        self.api.send_message(chat_id, text + self.cta("channel"), self.main_menu())
+        if not product or size not in product["sizes"]:
+            raise ValueError("Вещь или размер больше недоступны.")
+        # Old Telegram buttons may still record the historical request, never
+        # a delivery permission. New buttons use the separate consent flow.
+        self.db.add_to_waitlist(user_id, product, size)
+        self.alerts.stock_consent(chat_id, user_id, product_id, size)
 
     def line_amount(self, product: dict[str, Any], quantity: int) -> int:
         amount = parse_price_strict(product.get("price"))
@@ -1971,7 +2145,9 @@ class BrandBot:
                 "SELECT methods FROM payment_methods WHERE payment_id=? AND valid_until>?", (payment_id, time.time()),
             ).fetchone()
             if cached:
-                return json.loads(cached["methods"])
+                methods = json.loads(cached["methods"])
+                if all(item["id"] == "stars" or self.db.invoice_is_usable(payment_id, item["id"], item.get("url", ""), time.time()) for item in methods):
+                    return methods
             methods = self._create_pay_methods(payment_id, amount_rub, description)
             if not self.db.payment_is_payable(payment_id):
                 return []
@@ -1995,45 +2171,46 @@ class BrandBot:
         hook_lava = f"{origin}/api/payments/lava" if origin.startswith("https://") else ""
         success = origin or (f"https://t.me/{self.bot_username}" if self.bot_username else "")
         title = self.pay_title()
-        if self.settings.lava_ready():
-            try:
-                invoice = create_lava_invoice(
-                    self.settings.lava_shop_id,
-                    self.settings.lava_secret_key,
-                    payment_id,
-                    amount_rub,
-                    description,
-                    hook_url=hook_lava,
-                    success_url=success,
-                )
-                methods.append({
-                    "id": "lava",
-                    "title": "Карта / СБП",
-                    "hint": "Мир, Visa, СБП",
-                    "url": invoice["url"],
-                    "kind": "link",
-                })
-            except Exception:
-                LOG.warning("Lava invoice failed", exc_info=True)
-        if self.settings.crypto_ready():
-            try:
-                paid_url = success if str(success).startswith("https://") else ""
-                invoice = create_crypto_invoice(
-                    self.settings.crypto_pay_token,
-                    amount_rub,
-                    description,
-                    payment_id,
-                    paid_btn_url=paid_url,
-                )
-                methods.append({
-                    "id": "crypto",
-                    "title": "Крипта",
-                    "hint": "USDT и другие монеты",
-                    "url": invoice["url"],
-                    "kind": "link",
-                })
-            except Exception:
-                LOG.warning("Crypto invoice failed", exc_info=True)
+        for method, enabled, label, hint in (
+            ("lava", self.settings.lava_ready(), "Карта / СБП", "Мир, Visa, СБП"),
+            ("crypto", self.settings.crypto_ready(), "Крипта", "USDT и другие монеты"),
+        ):
+            if not enabled:
+                continue
+            reservation = self.db.reserve_invoice(payment_id, method, amount_rub * 100)
+            if not reservation:
+                continue
+            if "cached" in reservation:
+                invoice = reservation["cached"]
+            else:
+                attempt_id = reservation["attempt_id"]
+                try:
+                    if method == "lava":
+                        invoice = create_lava_invoice(
+                            self.settings.lava_shop_id, self.settings.lava_secret_key,
+                            reservation["external_ref"], amount_rub, description,
+                            hook_url=hook_lava, success_url=success)
+                    else:
+                        invoice = create_crypto_invoice(
+                            self.settings.crypto_pay_token, amount_rub, description, reservation["external_ref"],
+                            paid_btn_url=success if str(success).startswith("https://") else "")
+                    # Persist identity and expectation BEFORE exposing the URL.
+                    self.db.save_invoice(
+                        payment_id, method, invoice["id"], amount_rub * 100, "RUB", invoice["url"],
+                        external_ref=reservation["external_ref"],
+                        expires_at=reservation["created_at"] + 3600 if method == "crypto" else None,
+                        attempt_id=attempt_id)
+                except Exception:
+                    with self.db.commerce_transaction() as conn:
+                        conn.execute("UPDATE payment_invoice_attempts SET status='uncertain' WHERE attempt_id=? AND status<>'issued'", (attempt_id,))
+                        case_id = self.db.sync_finance_source("attempt", attempt_id)
+                    LOG.warning("%s invoice outcome unknown; reconcile attempt %s before retrying", method, attempt_id, exc_info=True)
+                    if self.settings.manager_chat_id:
+                        self.db.enqueue_message(f"invoice:{attempt_id}:review", self.settings.manager_chat_id,
+                            f"Выдача счёта требует сверки" + (f" · задача F{case_id:04d}" if case_id else "") + ". "
+                            "Подробности — /finance в личном чате. Не перевыставляй счёт без проверки у провайдера.")
+                    continue
+            methods.append({"id": method, "title": label, "hint": hint, "url": invoice["url"], "kind": "link"})
         if self.settings.stars_enabled:
             payment = self.db.get_payment(payment_id)
             stars = int(payment["amount_stars"] or 0) if payment else 0
@@ -2094,7 +2271,7 @@ class BrandBot:
             + "\n".join(order_lines)
             + f"\n\nК оплате: <b>{esc(format_rub(amount_rub))}</b>\n"
             "Оплати сейчас — карта, СБП, крипта или звёзды Telegram. "
-            "Деньги списываются сразу. Если размера нет — возврат через менеджера."
+            "Списание — только после подтверждения выбранным способом. Резерв новых покупок — 60 минут. Стоимость доставки согласуется отдельно."
         )
         self.deliver_message(f"offer:{payment_id}:{chat_id}", chat_id, text, keyboard, queue_only=queue_only)
 
@@ -2118,12 +2295,15 @@ class BrandBot:
             text = "<b>Оплата требует возврата</b>\n\nЗаявка отменена или её состав изменился. Менеджер проверит поступление и свяжется по возврату."
         self.deliver_message(f"paid:{payment_id}:{payment['status']}:{target}", target, text, self.main_menu(), queue_only=True)
         if self.settings.manager_chat_id:
-            label = "ТРЕБУЕТСЯ ВОЗВРАТ" if payment["status"] == "refund_required" else "ПОЛУЧЕНА"
+            purchase = self.db.connection().execute("SELECT purchase_id FROM purchases WHERE payment_id=?", (payment_id,)).fetchone()
+            reference = f"Покупка №{purchase[0]:04d}" if purchase else "Учёт оплаты"
+            label = "ТРЕБУЕТСЯ РАЗБОР ВОЗВРАТА" if payment["status"] == "refund_required" else "состояние обновлено"
             self.deliver_message(
                 f"paid:{payment_id}:{payment['status']}:manager", self.settings.manager_chat_id,
-                f"<b>Оплата {esc(payment_id)} · {label}</b>\nКлиент: {user_id}\n"
-                + ("\n".join(lines) + "\n" if lines else "")
-                + f"Сумма: {esc(format_rub(int(payment['amount_rub'])))}\nСпособ: {esc(payment['method'] or '—')}",
+                f"<b>{reference} · {label}</b>\n"
+                "Проверь актуальную карточку в личном чате перед сборкой. Реквизиты поступлений и финансовый разбор — /finance. "
+                "Сообщение в группе само по себе не разрешает отправку и не подтверждает исполнение возврата.",
+                {"inline_keyboard": [[{"text": "Открыть приватную карточку", "callback_data": f"c:work:{purchase[0]}" if purchase else "f:home"}]]},
                 queue_only=True,
             )
         if not queue_only:
@@ -2134,7 +2314,7 @@ class BrandBot:
         payload = str(query.get("invoice_payload", ""))
         currency = str(query.get("currency", ""))
         try:
-            total = int(query.get("total_amount") or 0)
+            total = minor_units(query.get("total_amount"), "XTR")
         except (TypeError, ValueError):
             total = 0
         payment = self.db.get_payment(payload)
@@ -2160,16 +2340,65 @@ class BrandBot:
         except Exception:
             LOG.exception("answerPreCheckoutQuery failed")
 
-    def handle_successful_payment(self, chat_id: int, user_id: int, info: dict[str, Any]) -> None:
+    def notify_payment_review(self, receipt: dict[str, Any]) -> None:
+        """Queue once per receipt/conflict; never perform network I/O here."""
+        key = receipt.get("alert_key") or f"receipt:{receipt['receipt_id']}"
+        payment = self.db.get_payment(receipt["payment_id"])
+        label = "ВОЗВРАТ / ЛИШНЕЕ ПОСТУПЛЕНИЕ" if receipt["status"] == "refund_required" else "ТРЕБУЕТСЯ СВЕРКА"
+        customers = {payment["user_id"]} if payment else set()
+        if receipt["method"] == "stars" and type(receipt.get("payer_id")) is int and receipt["payer_id"] > 0:
+            customers.add(receipt["payer_id"])
+        for customer in customers if receipt.get("reason") != "conflicting_duplicate" else ():
+            self.db.enqueue_message(
+                f"{key}:customer:{customer}", customer,
+                "<b>Поступление требует проверки</b>\n\nНе оплачивай повторно. Менеджер сверит сумму и при необходимости согласует возврат. "
+                "Это уведомление не создаёт новый заказ.", self.main_menu())
+        targets = {self.settings.manager_chat_id} if self.settings.manager_chat_id else set(self.settings.admin_ids)
+        for target in targets:
+            self.db.enqueue_message(
+                f"{key}:manager:{target}", target,
+                f"<b>{label}</b>\nПоступление R{receipt['receipt_id']:04d} требует финансового разбора. "
+                "Реквизиты и суммы доступны только финансовой роли и владельцу через /finance в личном чате. "
+                "Это не подтверждение выполненного возврата.",
+                {"inline_keyboard": [[{"text": "Открыть поступление · приватно", "callback_data": f"f:receipt:{receipt['receipt_id']}"}]]})
+
+    def handle_successful_payment(self, chat_id: int, user_id: int, info: dict[str, Any], *, queue_only: bool = False) -> None:
         payload = str(info.get("invoice_payload", ""))
-        charge = str(info.get("telegram_payment_charge_id") or info.get("provider_payment_charge_id") or "")
-        if not payload:
-            self.api.send_message(chat_id, "Оплата пришла, но заявка не найдена. Напиши менеджеру.", self.main_menu())
-            return
-        if self.db.mark_payment_paid(payload, "stars", charge,
-                                     queue_notifications=lambda payment_id: self.notify_paid(payment_id, queue_only=True)):
+        # Telegram's charge ID is the identity for XTR; no fallback to another
+        # provider's namespace. Amount and owner are checked again after charging.
+        charge = str(info.get("telegram_payment_charge_id") or "")
+        currency = str(info.get("currency") or "")
+        self.db.mark_payment_paid(
+            payload, "stars", charge, amount_minor=minor_units(info.get("total_amount"), "XTR"),
+            currency=currency, payer_id=user_id,
+            queue_notifications=lambda payment_id: self.notify_paid(payment_id, queue_only=True),
+            queue_review=self.notify_payment_review,
+        )
+        if not queue_only:
             self.flush_notifications()
-            self.db.event(user_id, "stars_paid", {"payment_id": payload})
+
+    def flush_payment_updates(self, now: float | None = None) -> None:
+        stamp = time.time() if now is None else now
+        for _ in range(10):
+            rows = self.db.claim_payment_updates(stamp)
+            if not rows:
+                return
+            row = rows[0]
+            conn = self.db.connection()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self.handle_successful_payment(row["chat_id"], row["user_id"], json.loads(row["payload"]), queue_only=True)
+                conn.execute("UPDATE payment_inbox SET processed_at=?, last_error='' WHERE update_id=?", (utc_now(), row["update_id"]))
+                self.db.sync_finance_source("inbox", row["update_id"])
+                conn.execute("COMMIT")
+            except Exception as exc:
+                if conn.in_transaction:
+                    conn.execute("ROLLBACK")
+                LOG.exception("Payment update %s deferred", row["update_id"])
+                delay = min(3600, 5 * 2 ** min(row["attempts"], 10))
+                with self.db.commerce_transaction():
+                    conn.execute("UPDATE payment_inbox SET next_attempt_at=?, last_error=? WHERE update_id=?", (stamp + delay, type(exc).__name__, row["update_id"]))
+                    self.db.sync_finance_source("inbox", row["update_id"])
 
     def start_method_pay(self, chat_id: int, user_id: int, payment_id: str, method: str) -> None:
         payment = self.db.get_payment(payment_id)
@@ -2224,6 +2453,10 @@ class BrandBot:
         phone: str,
         request_id: str,
     ) -> None:
+        if not self.db.has_consent(user_id):
+            self.ask_phone(chat_id, user_id, "awaiting_order_phone",
+                           {"product_id": product["id"], "size": size, "request_id": request_id})
+            return
         legacy = self.db.connection().execute(
             "SELECT id FROM orders WHERE user_id=? AND request_id=?", (user_id, request_id),
         ).fetchone()
@@ -2236,13 +2469,17 @@ class BrandBot:
             self.api.send_message(chat_id, "Цена вещи недоступна. Напиши менеджеру.", self.main_menu())
             return
         fingerprint = hashlib.sha256(compact_json([product["id"], size, phone]).encode()).hexdigest()
-        receipt, created = self.db.create_checkout(
-            user_id, f"bot:{request_id}", fingerprint,
-            [{"product_id": product["id"], "name": product["name"], "size": size, "phone": phone,
-              "quantity": 1, "note": "", "amount_rub": amount, "person": "", "person_label": ""}],
-            stars_amount(amount, self.settings.stars_rub_per_star) if self.settings.stars_enabled else 0,
-            queue_notifications=lambda receipt: self.queue_checkout_notifications(receipt, user_id, phone, "", chat_id, "бота"),
-        )
+        try:
+            receipt, created = self.db.create_checkout(
+                user_id, f"bot:{request_id}", fingerprint,
+                [{"product_id": product["id"], "name": product["name"], "size": size, "phone": phone,
+                  "quantity": 1, "note": "", "amount_rub": amount, "person": "", "person_label": ""}],
+                stars_amount(amount, self.settings.stars_rub_per_star) if self.settings.stars_enabled else 0,
+                queue_notifications=lambda receipt: self.queue_checkout_notifications(receipt, user_id, phone, "", chat_id, "бота"),
+            )
+        except ValueError as exc:
+            self.api.send_message(chat_id, esc(str(exc)), self.main_menu())
+            return
         self.flush_notifications()
         order_id = receipt["order_ids"][0]
         payment_id = receipt["payment_id"]
@@ -2299,11 +2536,8 @@ class BrandBot:
         next_data = dict(state[1].get("next_data") or {})
         self.db.set_consent(user_id)
         self.db.event(user_id, "consent_given")
-        pending_phone = str(next_data.pop("phone", "") or "")
-        if pending_phone:
-            self.db.set_state(user_id, next_state, next_data)
-            self.save_phone_and_continue(chat_id, user_id, pending_phone)
-            return
+        # Never reuse legacy phone data captured before consent.
+        next_data.pop("phone", None)
         self.db.set_state(user_id, next_state, next_data)
         hint = (
             "Принято. Теперь нужен номер."
@@ -2343,7 +2577,7 @@ class BrandBot:
             elif state:
                 next_state = state[0]
                 next_data = dict(state[1] or {})
-            next_data["phone"] = phone
+            next_data.pop("phone", None)
             self.db.set_state(user_id, "awaiting_consent", {"next_state": next_state, "next_data": next_data})
             self.api.send_message(
                 chat_id,
@@ -2418,24 +2652,12 @@ class BrandBot:
         self.api.send_message(chat_id, "Понравилось? Тогда не жди — размеры разбирают." + self.cta("drop"), self.main_menu())
 
     def notify_waitlist(self, product_id: str, size: str) -> int:
-        """Admin-triggered ping for a restocked size. Returns number of notified users."""
-        delivered = 0
-        product = self.catalog.get(product_id)
-        if not product:
-            return 0
-        for recipient in self.db.waitlist_user_ids(product_id, size):
-            try:
-                self.api.send_message(
-                    recipient,
-                    f"<b>Размер вернулся</b>\n\n{esc(product['name'])} — размер {esc(size)} снова в наличии.\n"
-                    "Бери сейчас: размер могут разобрать быстро.",
-                    inline_keyboard([[("Забрать", f"want:{product_id}")]]),
-                )
-                delivered += 1
-                time.sleep(0.04)
-            except Exception as exc:
-                LOG.warning("Waitlist notify failed for %s: %s", recipient, exc)
-        return delivered
+        """Retired: legacy rows are interest requests, not delivery permission.
+
+        Product alerts have their own live stock checks, consent and single-
+        attempt queue. /restock cannot bypass them or fabricate availability.
+        """
+        return 0
 
     def show_my_orders(self, chat_id: int, user_id: int) -> None:
         rows = self.db.orders_for_user(user_id)
@@ -2450,12 +2672,15 @@ class BrandBot:
         for row in rows:
             status = str(row["status"])
             label = ORDER_STATUS_LABELS.get(status, status)
+            attention = self.db.payment_attention(row["payment_id"]) if row["payment_id"] else ""
+            if attention:
+                label += " · " + attention
             body = (
                 f"<b>№{row['id']} · {esc(label)}</b>\n"
                 f"{esc(row['product_name'])} · размер {esc(row['size'])} · {int(row['quantity'] or 1)} шт."
             )
             keyboard = None
-            if status in {"new", "awaiting_payment"}:
+            if status in {"new", "awaiting_payment"} and (not row["payment_id"] or self.db.payment_is_payable(row["payment_id"])):
                 rows = []
                 if status == "awaiting_payment" and str(row["payment_id"] or ""):
                     pay_id = str(row["payment_id"])
@@ -2508,7 +2733,7 @@ class BrandBot:
             "2. Выбери размер и оплати заявку.\n"
             "3. Карта / СБП, крипта или звёзды Telegram.\n\n"
             "Нет размера — «Ждать размер»: напишем, когда вернётся.\n"
-            "Деньги списываются сразу. Если размера нет — возврат через менеджера."
+            "Списание — только после подтверждения выбранным способом. Резерв новых покупок — 60 минут. Стоимость доставки согласуется отдельно."
             f"{extra}"
         )
 
@@ -2616,12 +2841,7 @@ class BrandBot:
                     self.segment_keyboard(),
                 )
         elif command == "/restock":
-            parts = argument.split()
-            if len(parts) != 2:
-                self.api.send_message(chat_id, "Использование: <code>/restock id_товара размер</code>")
-            else:
-                delivered = self.notify_waitlist(parts[0], parts[1])
-                self.api.send_message(chat_id, f"Уведомлено по листу ожидания: {delivered}.")
+            self.api.send_message(chat_id, "Старая команда больше не рассылает сообщения по листу ожидания. Подтверди реальный остаток через /stock. Отдельно разрешённые подписки проверяет worker; его состояние — /alertdesk. Команда не создаёт остаток и не заменяет согласие.")
         elif command == "/waitlist":
             rows = self.db.waitlist_rows()
             if not rows:
@@ -2732,17 +2952,7 @@ class BrandBot:
             name = text.strip()
             if not name:
                 return True
-            base = slugify(name, "category")
-            category_id = base
-            index = 2
-            with self.catalog.lock:
-                existing = {category["id"] for category in self.catalog.categories}
-                while category_id in existing:
-                    category_id = f"{base}-{index}"
-                    index += 1
-                self.catalog.data["categories"].append({"id": category_id, "name": name})
-                self.catalog.save()
-                self.catalog.reload()
+            category_id = self.catalog.add_category(name)["id"]
             data = {"step": "name", "category": category_id}
             self.db.set_state(user_id, "admin_add", data)
             self.api.send_message(chat_id, f"Категория «{esc(name)}» создана.\n\n{ADD_STEPS[0][1]}")
@@ -2781,7 +2991,8 @@ class BrandBot:
             if not sizes:
                 self.api.send_message(chat_id, "Ни одного размера не распознал. Формат: S, M, L, XL")
                 return True
-            if any(":" in size or len(f"size:x:{size}".encode("utf-8")) > 64 for size in sizes):
+            product_id = self.catalog.unique_id(str(data.get("name", "")))
+            if any(":" in size or len(f"wsize:{product_id}:{size}".encode("utf-8")) > 64 for size in sizes):
                 self.api.send_message(chat_id, "Слишком длинный размер или двоеточие. Напиши короче.")
                 return True
             data["sizes"] = sizes
@@ -2822,7 +3033,11 @@ class BrandBot:
         if not state or state[0] != "admin_add" or not state[1].get("preview"):
             self.api.send_message(chat_id, "Черновик не найден. Начни заново: /add")
             return
-        product = self.catalog.add_product(dict(state[1]["preview"]))
+        try:
+            product = self.catalog.add_product(dict(state[1]["preview"]))
+        except ValueError as exc:
+            self.api.send_message(chat_id, f"Товар не опубликован: {esc(exc)}. Каталог не изменён. Начни заново: /add")
+            return
         self.db.clear_state(user_id)
         self.db.event(user_id, "product_added", {"product_id": product["id"]})
         self.api.send_message(
@@ -2897,6 +3112,8 @@ class BrandBot:
                 if STOP_EVENT.is_set():
                     LOG.warning("Рассылка прервана остановкой бота: доставлено %s", delivered)
                     break
+                if not self.db.broadcast_recipient_current(recipient):
+                    continue  # A service-only decision made after audience capture wins.
                 try:
                     self.api.send_message(recipient, esc(text), self.main_menu())
                     delivered += 1
@@ -2937,12 +3154,15 @@ class BrandBot:
         profile = payload.get("profile") if isinstance(payload.get("profile"), dict) else payload
         if not isinstance(profile, dict):
             profile = {}
+        if payload.get("consent") is not True:
+            self.api.send_message(chat_id, "Без согласия профиль не сохраняем. Подтверди согласие при оформлении заявки.", self.main_menu())
+            return
         phone = normalize_phone(str(profile.get("phone", ""))) if profile.get("phone") else None
-        if phone:
-            profile = {**profile, "phone": phone}
-            self.db.set_phone(user_id, phone)
-        if payload.get("consent") is True:
-            self.db.set_consent(user_id)
+        if profile.get("phone") and not phone:
+            self.api.send_message(chat_id, "Проверь номер телефона. Профиль не сохранён.", self.main_menu())
+            return
+        profile = {**profile, "phone": phone or ""}
+        self.db.set_consent(user_id, service_only=True)
         self.db.set_profile(user_id, profile)
         self.db.event(user_id, "webapp_profile", {"city": str(profile.get("city", ""))[:80]})
         summary = self.customer_note({**profile, "name": profile.get("name") or user.get("first_name") or ""})
@@ -2968,7 +3188,7 @@ class BrandBot:
             self.api.send_message(
                 chat_id,
                 f"Записал из витрины: <b>{esc(product['name'])}</b>, размер {esc(size)}.\n"
-                "Вернётся — напишем первыми.",
+                "Это запрос ожидания, не подписка. Для одного уведомления отдельно подтверди условие через /alerts в личном чате.",
                 self.main_menu(),
             )
         else:
@@ -2987,13 +3207,18 @@ class BrandBot:
                        + (f" · {esc(line['person_label'])} {esc(line['person'])}" if line['person'] else "")
                        for line in receipt["lines"]]
         if notify_user:
+            if receipt.get("promotion"):
+                discount = receipt["promotion"]
+                order_lines += ["", f"До скидки: {esc(format_rub(discount['subtotal_rub']))}",
+                                f"Промокод {esc(discount['code'])}: −{esc(format_rub(discount['discount_rub']))}"]
             self.offer_payment(notify_user, payment_id, receipt["amount_rub"], order_lines, source, queue_only=True)
         if self.settings.manager_chat_id:
             self.db.enqueue_message(
                 f"checkout:{payment_id}:manager", self.settings.manager_chat_id,
-                f"<b>Новая заявка из {esc(source)}</b>\nКлиент: {user_id}\nТелефон: {esc(phone)}\n"
-                f"{esc(note or 'Адрес не указан')}\nК оплате: {esc(receipt['amount_label'])}\n"
-                + "\n".join(order_lines),
+                f"<b>Новая покупка №{receipt.get('purchase_id', receipt['order_ids'][0]):04d}</b>\n"
+                f"Товары: {esc(receipt['amount_label'])} · позиций {len(order_lines)}.\n"
+                "Открой /team в личном чате с ботом: там состав, данные и действия по роли.",
+                inline_keyboard([[("Открыть рабочую карточку", f"c:work:{receipt.get('purchase_id', receipt['order_ids'][0])}")]]),
             )
 
     def accept_checkout(
@@ -3006,8 +3231,8 @@ class BrandBot:
         notify_user: int | None = None,
     ) -> dict[str, Any]:
         user_id = int(user["id"])
+        self.db.set_consent(user_id, service_only=True)
         self.db.set_phone(user_id, phone)
-        self.db.set_consent(user_id)
         self.db.set_profile(user_id, {**customer, "phone": phone})
         self.db.event(
             user_id,
@@ -3020,19 +3245,31 @@ class BrandBot:
         )
         request_base, fingerprint = self.checkout_identity(payload)
         note = self.customer_note(customer)
-        lines = []
-        for product, size, quantity, person in valid_items:
-            line_note = f"{note} · {person_label(product)}: {person}" if person else note
-            lines.append({"product_id": product["id"], "name": product["name"], "size": size,
-                          "phone": phone, "quantity": quantity, "note": line_note,
-                          "amount_rub": self.line_amount(product, quantity), "person": person,
-                          "person_label": person_label(product) if person else ""})
-        total = sum(line["amount_rub"] for line in lines)
-        stars = stars_amount(total, self.settings.stars_rub_per_star) if self.settings.stars_enabled else 0
-        receipt, created = self.db.create_checkout(
-            user_id, request_base, fingerprint, lines, stars,
-            queue_notifications=lambda receipt: self.queue_checkout_notifications(receipt, user_id, phone, note, notify_user),
-        )
+        with self.catalog.lock:
+            lines = []
+            for product, size, quantity, person in valid_items:
+                product = self.catalog.get(product["id"])
+                if not product or size not in product["sizes"]:
+                    raise ValueError("Товар или размер изменился. Проверь корзину перед оформлением.")
+                person = sanitize_personalization(product, person)
+                line_note = f"{note} · {person_label(product)}: {person}" if person else note
+                lines.append({"product_id": product["id"], "name": product["name"], "size": size,
+                              "phone": phone, "quantity": quantity, "note": line_note,
+                              "amount_rub": self.line_amount(product, quantity), "person": person,
+                              "person_label": person_label(product) if person else ""})
+            promotion = self.db.prepare_promotion(user_id, payload, lines, self.catalog)
+            if promotion is not None:
+                amounts = {(x["product_id"], x["size"], x["person"]): x["amount_rub"] for x in promotion["lines"]}
+                lines = [{**x, "amount_rub": amounts[(x["product_id"], x["size"], x["person"]) ]} for x in lines]
+            total = sum(line["amount_rub"] for line in lines)
+            if "expected_total" in payload and (type(payload["expected_total"]) is not int or payload["expected_total"] != total):
+                raise ValueError("Цена изменилась. Проверь новую сумму перед подтверждением.")
+            stars = stars_amount(total, self.settings.stars_rub_per_star) if self.settings.stars_enabled else 0
+            receipt, created = self.db.create_checkout(
+                user_id, request_base, fingerprint, lines, stars,
+                queue_notifications=lambda receipt: self.queue_checkout_notifications(receipt, user_id, phone, note, notify_user),
+                customer={**customer, "phone": phone}, cart_revision=payload.get("cart_revision"), promotion=promotion,
+            )
         payment_id = receipt["payment_id"]
         total = receipt["amount_rub"]
         description = f"{self.settings.brand_name}: оплата {payment_id}"
@@ -3096,7 +3333,9 @@ class BrandBot:
                 return {"ok": False, "error": "Эта заявка уже принята ранее. Открой «Мои заявки» для оплаты или связи с менеджером."}
             return self._checkout_web_payload(user, payload, notify_user)
         except (ValueError, PriceError) as exc:
-            return {"ok": False, "error": str(exc)}
+            # A stale monotonic cart revision is a terminal rejection of this
+            # immutable body. Lost replies and provider failures are not.
+            return {"ok": False, "error": str(exc), **({"code": "cart_revision_conflict"} if getattr(exc, "checkout_revision_stale", False) else {"code": exc.checkout_code} if getattr(exc, "checkout_code", None) else {})}
 
     def _checkout_web_payload(
         self,
@@ -3104,6 +3343,8 @@ class BrandBot:
         payload: dict[str, Any],
         notify_user: int | None = None,
     ) -> dict[str, Any]:
+        if any(key in payload for key in ("promotion", "promo", "promo_code", "coupon", "coupon_code", "discount", "discount_rub")):
+            return {"ok": False, "code": "promotion_requires_chat", "error": "Промокод проверяется через /promo и /cart в боте. Присланные скидки и правила не принимаются; покупка не создана."}
         if payload.get("consent") is not True:
             return {"ok": False, "error": "Без согласия на обработку данных заявку принять нельзя."}
         customer = payload.get("customer") if isinstance(payload.get("customer"), dict) else {}
@@ -3175,6 +3416,25 @@ class BrandBot:
             return
         self.db.upsert_user(user)
         self.api.answer_callback(callback_id)
+        with self.db.chat_locks[user_id % len(self.db.chat_locks)]:
+            incoming_id = callback.get("message", {}).get("message_id")
+            panel = self.db.connection().execute("SELECT message_id FROM chat_panels WHERE user_id=?", (user_id,)).fetchone()
+            if type(incoming_id) is int and panel and incoming_id != panel[0]:
+                # Do not edit an old panel above a new invoice/notification, and
+                # never replace a financial confirmation with navigation text.
+                self.db.connection().execute("DELETE FROM chat_panels WHERE user_id=?", (user_id,))
+            if self.alerts.handle_callback(chat_id, user, data):
+                return
+            if self.growth.handle_callback(chat_id, user, data):
+                return
+            if self.discovery.handle_callback(chat_id, user, data):
+                return
+            if self.finance.handle_callback(chat_id, user, data):
+                return
+            if self.operations.handle_callback(chat_id, user, data):
+                return
+            if self.commerce.handle_callback(chat_id, user, data):
+                return
 
         if data.startswith("pay:"):
             parts = data.split(":")
@@ -3310,6 +3570,19 @@ class BrandBot:
             self.start(chat_id, user, text.partition(" ")[2].strip())
             return
         self.db.upsert_user(user)
+        with self.db.chat_locks[user_id % len(self.db.chat_locks)]:
+            if self.alerts.handle_message(chat_id, user, message):
+                return
+            if self.growth.handle_message(chat_id, user, message):
+                return
+            if self.discovery.handle_message(chat_id, user, message):
+                return
+            if self.finance.handle_message(chat_id, user, message):
+                return
+            if self.operations.handle_message(chat_id, user, message):
+                return
+            if self.commerce.handle_message(chat_id, user, message):
+                return
         if self.db.get_state(user_id) and self.handle_add_product_text(chat_id, user_id, text):
             return
         if text.startswith("/") and self.admin_command(chat_id, user_id, text):
@@ -3358,7 +3631,7 @@ class BrandBot:
 
 
 class StorefrontHandler(BaseHTTPRequestHandler):
-    """Serve the Telegram Mini App and a read-only catalog endpoint.
+    """Serve the Mini App, public catalog and authenticated commerce APIs.
 
     Keeping the storefront on the same origin as the bot's health server means
     the browser never needs to call localhost or a second private service. The
@@ -3396,17 +3669,23 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         return self.CSP_BASE
 
     def _write(self, body: bytes, content_type: str, status: int = 200, cache_control: str = "no-cache") -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", cache_control)
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", self._csp())
-        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
-        self.send_header("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()")
-        self.end_headers()
-        if not getattr(self, "_head_only", False):
-            self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", cache_control)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", self._csp())
+            self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+            self.send_header("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()")
+            self.end_headers()
+            if not getattr(self, "_head_only", False):
+                self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # A response can be lost after an atomic checkout/cart commit.
+            # Do not manufacture an error response or undo a completed operation.
+            LOG.debug("Client disconnected before receiving the response")
+
 
     def _json(self, payload: dict[str, Any], status: int = 200) -> None:
         self._write(
@@ -3466,6 +3745,129 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return None
         return payload if isinstance(payload, dict) else None
 
+    def _service_api(self, write: bool = False) -> None:
+        """Signed customer-only surface. Staff mutations are private-chat only."""
+        if not self.db or not self.settings or not self.settings.token:
+            self._json({"error": "Открой раздел из Telegram-бота."}, 401)
+            return
+        user = self._webapp_user()
+        if not user:
+            self._json({"error": "Нужна подпись Telegram. Открой витрину из бота."}, 401)
+            return
+        if not self._rate_ok(CART_LIMITER if write else READ_LIMITER, "service", user):
+            return
+        uid = int(user["id"])
+        try:
+            self.db.upsert_user(user)
+            self.db.expire_reservations()
+            if not write:
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                if "purchase_id" in query:
+                    result = {"delivery": self.db.delivery_view(uid, int(query["purchase_id"][0]))}
+                elif "ticket_id" in query:
+                    result = {"ticket": self.db.ticket_view(uid, int(query["ticket_id"][0]), page=int(query.get("page", ["0"])[0]))}
+                else:
+                    result = {"tickets": self.db.tickets_list(uid, bucket="all", offset=int(query.get("offset", ["0"])[0]))}
+                self._json({"ok": True, "user_id": uid, "consent": self.db.has_consent(uid), **result})
+                return
+            body = self._read_json_body()
+            if body is None:
+                raise ValueError("Некорректный запрос.")
+            action = body.get("action")
+            fields = {
+                "consent": {"consent"}, "ticket_new": {"topic", "text", "purchase_id"},
+                "ticket_reply": {"ticket_id", "text", "version", "resolve"},
+                "delivery_answer": {"purchase_id", "quote_id", "version", "accept"},
+                "received": {"purchase_id", "version"},
+            }
+            if not isinstance(action, str) or action not in fields or set(body) - fields[action] - {"action", "operation_id"}:
+                raise ValueError("Неизвестное действие или поля запроса. Рабочие действия команды доступны только в личном чате.")
+            operation = body.get("operation_id", "")
+            if action == "consent":
+                if body.get("consent") is not True:
+                    raise ValueError("Нужно явное согласие на сохранение переписки для обслуживания.")
+                with self.db.commerce_transaction():
+                    previous, fp = self.db._service_request(uid, operation, "service_consent", [True])
+                    if previous is None:
+                        self.db.set_consent(uid, service_only=True)
+                        self.db._service_done(uid, operation, "service_consent", fp, 0)
+                result = {}
+            elif action == "ticket_new":
+                tid = self.db.create_ticket(uid, body.get("topic"), body.get("text"), operation, body.get("purchase_id"))
+                result = {"ticket": self.db.ticket_view(uid, tid)}
+            elif action == "ticket_reply":
+                tid = self.db.reply_ticket(uid, body.get("ticket_id"), body.get("text"), body.get("version"), operation, resolve=body.get("resolve", False))
+                result = {"ticket": self.db.ticket_view(uid, tid)}
+            elif action == "delivery_answer":
+                pid = self.db.answer_delivery(uid, body.get("purchase_id"), body.get("quote_id"), body.get("version"), body.get("accept"), operation)
+                result = {"delivery": self.db.delivery_view(uid, pid)}
+            else:
+                pid = self.db.mark_received(uid, body.get("purchase_id"), body.get("version"), operation)
+                result = {"delivery": self.db.delivery_view(uid, pid)}
+            self._json({"ok": True, "user_id": uid, "consent": self.db.has_consent(uid), **result})
+        except CartConflict as exc:
+            self._json({"error": str(exc), "code": "service_conflict"}, 409)
+        except PermissionError as exc:
+            self._json({"error": str(exc)}, 403)
+        except (ValueError, TypeError, OverflowError) as exc:
+            self._json({"error": str(exc)}, 400)
+        except Exception:
+            LOG.exception("Service operation failed")
+            self._json({"error": "Ответ не подтверждён. Повтори тот же запрос с тем же ключом; не создавай новое действие."}, 503)
+
+    def _account_api(self, resource: str, write: bool = False) -> None:
+        if not self.db or not self.settings or not self.settings.token or not self.catalog:
+            self._json({"error": "Общая корзина доступна из Telegram-бота."}, 401)
+            return
+        user = self._webapp_user()
+        if not user:
+            self._json({"error": "Открой витрину из бота."}, 401)
+            return
+        if not self._rate_ok(CART_LIMITER if write else READ_LIMITER, resource, user):
+            return
+        uid = int(user["id"])
+        try:
+            self.db.upsert_user(user)
+            if resource == "cart":
+                if write:
+                    body = self._read_json_body()
+                    if body is None:
+                        raise ValueError("Неверный запрос корзины.")
+                    cart = self.db.replace_cart(uid, body.get("items"), body.get("revision"),
+                        str(body.get("operation_id") or ""), self.catalog)
+                else:
+                    cart = self.db.cart(uid)
+                self._json({"ok": True, "cart": cart})
+            elif resource == "account":
+                if write:
+                    body = self._read_json_body() or {}
+                    if body.get("consent") is not True or not isinstance(body.get("profile"), dict):
+                        raise ValueError("Нужно согласие на обработку данных.")
+                    profile = body["profile"]
+                    limits = {"name": 80, "phone": 32, "city": 80, "address": 200, "entrance": 80,
+                              "deliver": 40, "size": 16, "height": 8, "note": 200}
+                    for key, limit in limits.items():
+                        value = profile.get(key, "")
+                        if not isinstance(value, str) or len(value) > limit:
+                            raise ValueError(f"Проверь поле {key}.")
+                    if profile.get("phone") and not normalize_phone(profile["phone"]):
+                        raise ValueError("Проверь номер телефона.")
+                    with self.db.commerce_transaction():
+                        self.db.set_consent(uid, service_only=True)
+                        self.db.set_profile(uid, {key: profile.get(key, "") for key in limits})
+                        self.db.event(uid, "account_profile_saved")
+                self._json({"ok": True, "user_id": uid, "profile": self.db.account_profile(uid)})
+            elif resource == "purchases":
+                self.db.expire_reservations()
+                self._json({"ok": True, "purchases": self.db.purchases_for_user(uid)})
+        except CartConflict as exc:
+            self._json({"error": str(exc), "code": "cart_conflict", "cart": self.db.cart(uid)}, 409)
+        except (ValueError, TypeError) as exc:
+            self._json({"error": str(exc)}, 400)
+        except Exception:
+            LOG.exception("Account operation failed: %s", resource)
+            self._json({"error": "Сервис временно недоступен. Локальная корзина не потеряна."}, 503)
+
     def _my_orders(self) -> None:
         if not self.db or not self.settings or not self.settings.token:
             self._json({"orders": [], "source": "preview"})
@@ -3476,6 +3878,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return
         if not self._rate_ok(READ_LIMITER, "my-orders", user):
             return
+        self.db.expire_reservations()
         rows = self.db.orders_for_user(int(user["id"]), 20)
         orders = []
         for row in rows:
@@ -3484,11 +3887,14 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                 payment = self.db.get_payment(row["payment_id"])
                 order["payment_status"] = payment["status"] if payment else "missing"
                 order["can_pay"] = self.db.payment_is_payable(row["payment_id"])
-                if payment and payment["status"] == "refund_required":
-                    order["status_label"] += " · требуется возврат"
+                if payment and payment["status"] != "pending":
                     order["can_cancel"] = False
+                attention = self.db.payment_attention(row["payment_id"])
+                if attention:
+                    order["payment_attention"] = attention
+                    order["status_label"] += " · " + attention
             orders.append(order)
-        self._json({"orders": orders, "source": "bot"})
+        self._json({"orders": orders, "purchases": self.db.purchases_for_user(int(user["id"])), "source": "bot"})
 
     def _cancel_my_order(self) -> None:
         if not self.db or not self.settings or not self.settings.token:
@@ -3542,15 +3948,37 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return None
         return self.rfile.read(length) if length else b""
 
-    def _mark_paid(self, payment_id: str, method: str, provider_id: str = "") -> bool:
-        if not self.db or not payment_id:
-            return False
-        if not self.db.get_payment(payment_id):
+    def _mark_paid(self, payment_id: str, method: str, provider_id: str, amount_minor: int, currency: str) -> bool:
+        if not self.db:
             return False
         bot = self._bot()
-        self.db.mark_payment_paid(payment_id, method, provider_id,
-                                  queue_notifications=(lambda pid: bot.notify_paid(pid, queue_only=True)) if bot else None)
+        self.db.mark_payment_paid(
+            payment_id, method, provider_id, amount_minor=amount_minor, currency=currency,
+            queue_notifications=(lambda pid: bot.notify_paid(pid, queue_only=True)) if bot else None,
+            queue_review=bot.notify_payment_review if bot else None)
         return True
+
+    def _receive_payment(self, payment_id: str, method: str, invoice_id: str, amount: Any, currency: str | None) -> None:
+        try:
+            if currency is None and method == "lava":
+                # Business invoices are issued in RUB. A webhook without a
+                # currency may inherit it ONLY from our persisted invoice, never
+                # from the incoming order reference or an unverified old URL.
+                invoice = self.db.get_invoice(method, invoice_id) if self.db else None
+                currency = invoice["currency"] if invoice else "UNK"
+            currency = str(currency or "UNK")
+            if not self._mark_paid(payment_id, method, invoice_id, minor_units(amount, currency), currency):
+                self._json({"error": "payment storage unavailable"}, 503)
+                return
+        except (ValueError, TypeError):
+            self._json({"error": "invalid payment fields"}, 400)
+            return
+        except Exception:
+            LOG.exception("Payment webhook not committed")
+            self._json({"error": "payment not committed; retry"}, 503)
+            return
+        # A signed mismatch is durably quarantined, not endlessly retried.
+        self._json({"ok": True})
 
     def _resume_pay(self) -> None:
         if not self.db or not self.settings or not self.settings.token:
@@ -3592,7 +4020,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return
         self.db.upsert_user(user)
         added = self.db.add_to_waitlist(int(user["id"]), product, size)
-        self._json({"ok": True, "added": added})
+        self._json({"ok": True, "added": added, "alert_consent_required": True,
+                    "notice": "Запрос ожидания сохранён. Автоуведомление нужно отдельно подтвердить через /alerts в боте."})
 
     def _checkout(self) -> None:
         if not self.db or not self.settings or not self.settings.token:
@@ -3614,7 +4043,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return
         result = bot.checkout_web_payload(user, payload, notify_user=int(user["id"]))
         if not result.get("ok"):
-            self._json({"error": result.get("error") or "Не получилось принять заявку."}, 400)
+            self._json({"error": result.get("error") or "Не получилось принять заявку.",
+                        **({"code": result["code"]} if result.get("code") else {})}, 400)
             return
         self._json(result)
 
@@ -3635,12 +4065,12 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         )
         if signature.lower().startswith("bearer "):
             signature = signature[7:].strip()
-        key = settings.lava_hook_key or settings.lava_secret_key
+        key = settings.lava_hook_key
         if not verify_lava_webhook(raw, signature, key):
             self._json({"error": "bad sign"}, 403)
             return
         try:
-            payload = json.loads(raw.decode("utf-8"))
+            payload = json.loads(raw.decode("utf-8"), parse_float=Decimal)
         except (UnicodeDecodeError, json.JSONDecodeError):
             self._json({"error": "bad json"}, 400)
             return
@@ -3652,11 +4082,9 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "ignored": True})
             return
         payment_id = str(payload.get("order_id") or payload.get("orderId") or payload.get("custom_id") or "")
-        invoice_id = str(payload.get("invoice_id") or payload.get("id") or "")
-        if not self._mark_paid(payment_id, "lava", invoice_id):
-            self._json({"error": "unknown payment"}, 404)
-            return
-        self._json({"ok": True})
+        invoice_id = str(payload.get("invoice_id") or payload.get("invoiceId") or payload.get("id") or "")
+        self._receive_payment(payment_id, "lava", invoice_id,
+                              payload.get("amount", payload.get("sum")), payload.get("currency"))
 
     def _crypto_webhook(self) -> None:
         settings = self.settings
@@ -3672,7 +4100,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             self._json({"error": "bad sign"}, 403)
             return
         try:
-            payload = json.loads(raw.decode("utf-8"))
+            payload = json.loads(raw.decode("utf-8"), parse_float=Decimal)
         except (UnicodeDecodeError, json.JSONDecodeError):
             self._json({"error": "bad json"}, 400)
             return
@@ -3680,21 +4108,25 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             self._json({"error": "bad json"}, 400)
             return
         update_type = str(payload.get("update_type") or "")
-        inner = payload.get("payload") if isinstance(payload.get("payload"), dict) else payload
-        if update_type and update_type != "invoice_paid":
+        inner = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+        if update_type != "invoice_paid" or inner.get("status") != "paid":
             self._json({"ok": True, "ignored": True})
             return
         payment_id = str(inner.get("payload") or inner.get("order_id") or "")
         invoice_id = str(inner.get("invoice_id") or "")
-        if not self._mark_paid(payment_id, "crypto", invoice_id):
-            self._json({"error": "unknown payment"}, 404)
-            return
-        self._json({"ok": True})
+        currency = str(inner.get("fiat") or "UNK") if inner.get("currency_type") == "fiat" else str(inner.get("asset") or "UNK")
+        self._receive_payment(payment_id, "crypto", invoice_id, inner.get("amount"), currency)
 
     def do_GET(self) -> None:
         path = urllib.parse.urlparse(self.path).path
         if path == "/health":
             self._write(b'{"status":"ok","service":"vorozhbitov-shop"}', "application/json; charset=utf-8")
+            return
+        if path == "/api/service":
+            self._service_api()
+            return
+        if path in {"/api/cart", "/api/account", "/api/purchases"}:
+            self._account_api(path.rsplit("/", 1)[1])
             return
         if path == "/api/my-orders":
             self._my_orders()
@@ -3712,13 +4144,19 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                     "brand": catalog.data.get("brand", {"name": settings.brand_name if settings else "ВОРОЖБИТОВ"}),
                     "channel_url": settings.channel_url if settings else "",
                     "privacy_url": settings.privacy_url if settings else "",
-                    "products": [
-                        product for product in catalog.data.get("products", []) if product.get("active", True)
-                    ],
+                    "products": catalog.public_products(),
                     "categories": catalog.categories,
                     "lookbook": catalog.data.get("lookbook", []),
                     "media": self._stamp_media(catalog.data.get("media", {})),
                 }
+            if self.db:
+                self.db.sync_inventory(catalog)
+                inventory = self.db.inventory_view()
+                for product in payload["products"]:
+                    product["inventory"] = inventory.get(product["id"], {})
+            else:
+                for product in payload["products"]:
+                    product["inventory"] = {size: {"available": None, "status": "unknown"} for size in product["sizes"]}
             self._write(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
 
@@ -3793,7 +4231,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
     def _stamp_assets(self, body: bytes) -> bytes:
         """Версионировать клиентский код и CSS вместе с его шрифтами."""
         text = body.decode("utf-8", "replace")
-        for name in ("app.js", "checkout.js", "shop-core.js", "viewer3d.js", "styles.css", "refinement.css"):
+        for name in ("app.js", "checkout.js", "shop-core.js", "cart-sync.js", "service.js", "viewer3d.js", "styles.css", "refinement.css"):
             asset = self.static_root / name
             try:
                 version = self._asset_version(asset)
@@ -3903,6 +4341,12 @@ class StorefrontHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urllib.parse.urlparse(self.path).path
+        if path == "/api/service":
+            self._service_api(write=True)
+            return
+        if path in {"/api/cart", "/api/account"}:
+            self._account_api(path.rsplit("/", 1)[1], write=True)
+            return
         if path == "/api/my-orders/cancel":
             self._cancel_my_order()
             return
@@ -3977,6 +4421,45 @@ def notification_loop(bot: BrandBot) -> None:
         bot.db.close_current()
 
 
+def product_alert_loop(bot: BrandBot) -> None:
+    try:
+        while not STOP_EVENT.is_set():
+            try:
+                bot.alerts.tick(stop_requested=STOP_EVENT.is_set)
+            except Exception:
+                LOG.exception("Product alert check failed; claimed sends are not automatically repeated")
+            STOP_EVENT.wait(30)
+    finally:
+        bot.db.close_current()
+
+
+def payment_inbox_loop(bot: BrandBot) -> None:
+    next_prune = 0.0
+    next_finance = 0.0
+    try:
+        while not STOP_EVENT.is_set():
+            try:
+                bot.flush_payment_updates()
+                bot.db.expire_reservations()
+                bot.db.queue_ticket_alerts(bot.settings.admin_ids, bot.settings.manager_chat_id)
+                if time.monotonic() >= next_finance:
+                    bot.db.sync_finance()
+                    bot.db.queue_finance_alerts(bot.settings.admin_ids, bot.settings.manager_chat_id)
+                    next_finance = time.monotonic() + 5
+                if time.monotonic() >= next_prune:
+                    bot.db.prune_commerce()
+                    bot.db.prune_operations()
+                    bot.db.prune_discovery()
+                    bot.db.prune_growth()
+                    bot.db.prune_alerts()
+                    next_prune = time.monotonic() + 300
+            except Exception:
+                LOG.exception("Payment inbox retry failed")
+            STOP_EVENT.wait(1)
+    finally:
+        bot.db.close_current()
+
+
 def polling_loop(api: TelegramAPI, bot: BrandBot) -> None:
     offset = 0
     retry_delay = 1
@@ -3993,8 +4476,10 @@ def polling_loop(api: TelegramAPI, bot: BrandBot) -> None:
             )
             retry_delay = 1
             for update in updates:
-                if not bot.handle_update(update):
-                    LOG.warning("Skipping failed update %s", update.get("update_id"))
+                if isinstance(update.get("message"), dict) and update["message"].get("successful_payment"):
+                    bot.db.enqueue_payment_update(update)
+                elif not bot.handle_update(update):
+                    LOG.warning("Skipping failed non-financial update %s", update.get("update_id"))
                 offset = max(offset, int(update["update_id"]) + 1)
         except Exception as exc:
             LOG.warning("Polling error: %s", exc)
@@ -4025,6 +4510,8 @@ def main() -> int:
         LOG.warning("ADMIN_IDS пуст — админ-панель и /add никому не доступны. Задай ID в .env")
     if settings.manager_chat_id is None:
         LOG.warning("MANAGER_CHAT_ID не задан — уведомления о заявках никуда не уйдут")
+    if settings.lava_shop_id and settings.lava_secret_key and not settings.lava_hook_key:
+        LOG.warning("LAVA_HOOK_KEY не задан — Lava отключена до настройки отдельного ключа уведомлений")
     try:
         ensure_catalog_exists(settings.catalog_path, BASE_DIR / "catalog.json")
         catalog = Catalog(settings.catalog_path)
@@ -4042,6 +4529,19 @@ def main() -> int:
         user_commands = [
             {"command": "start", "description": "Открыть витрину"},
             {"command": "menu", "description": "Главное меню"},
+            {"command": "cart", "description": "Моя корзина"},
+            {"command": "promo", "description": "Промокод текущей корзины"},
+            {"command": "alerts", "description": "Мои уведомления о вещах"},
+            {"command": "alertsoff", "description": "Отключить уведомления о вещах"},
+            {"command": "find", "description": "Поиск словами по каталогу"},
+            {"command": "browse", "description": "Подбор и фильтры каталога"},
+            {"command": "saved", "description": "Избранное в боте"},
+            {"command": "compare", "description": "Сравнение вещей"},
+            {"command": "purchases", "description": "Мои покупки"},
+            {"command": "profile", "description": "Мои данные"},
+            {"command": "support", "description": "Поддержка в боте"},
+            {"command": "tickets", "description": "Мои обращения"},
+            {"command": "resume", "description": "Продолжить оформление"},
             {"command": "help", "description": "Как это работает"},
         ]
         api.call("setMyCommands", {"commands": user_commands})
@@ -4053,7 +4553,15 @@ def main() -> int:
         admin_commands = user_commands + [
             {"command": "admin", "description": "Управление"},
             {"command": "stats", "description": "Статистика"},
-            {"command": "orders", "description": "Заявки"},
+            {"command": "orders", "description": "Заявки (архив)"},
+            {"command": "team", "description": "Рабочее место команды"},
+            {"command": "stock", "description": "Остатки и резервы"},
+            {"command": "shipping", "description": "Очередь доставки"},
+            {"command": "desk", "description": "Рабочая очередь поддержки"},
+            {"command": "finance", "description": "Поступления и финансовый разбор"},
+            {"command": "promos", "description": "Промокоды и лимиты"},
+            {"command": "newpromo", "description": "Новый выключенный промокод"},
+            {"command": "alertdesk", "description": "Состояние пользовательских сигналов"},
             {"command": "add", "description": "Добавить вещь"},
         ]
         for admin_id in settings.admin_ids:
@@ -4082,6 +4590,8 @@ def main() -> int:
         LOG.warning("Could not set Telegram commands or menu button: %s", exc)
     health_server = start_health_server(settings.health_port, catalog, settings, db, api)
     threading.Thread(target=notification_loop, args=(bot,), name="notification-worker", daemon=True).start()
+    threading.Thread(target=payment_inbox_loop, args=(bot,), name="payment-inbox-worker", daemon=True).start()
+    threading.Thread(target=product_alert_loop, args=(bot,), name="product-alert-worker", daemon=True).start()
 
     def stop(*_: Any) -> None:
         STOP_EVENT.set()

@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 
 from bot import BrandBot, Catalog, Database, Settings, TelegramAPI
+from commerce_test_support import seed_test_inventory
 
 SENT: list[tuple[str, dict]] = []
 
@@ -108,6 +109,22 @@ def run_scenarios(workdir: Path) -> int:
     catalog = Catalog(settings.catalog_path)
     brand_bot = BrandBot(settings, api, db, catalog)
     brand_bot.bot_username = "vorozhbitov_shop_bot"
+    seed_test_inventory(db, catalog)
+
+    def native_action(user_id, kind):
+        token = db.connection().execute("SELECT token FROM chat_actions WHERE user_id=? AND kind=? ORDER BY rowid DESC LIMIT 1", (user_id, kind)).fetchone()[0]
+        return callback(user_id, ("o:a:" if kind.startswith("ops.") else "c:a:") + token)
+
+    def prepare_test_delivery():
+        purchase = db.purchases_for_user(500)[0]
+        pid = purchase['purchase_id']
+        db.advance_purchase(1, pid, 'ready', purchase['version'], owner_ids=settings.admin_ids)
+        terms = {'carrier': 'pickup', 'destination': 'Вымышленная точка самовывоза', 'amount_minor': 0,
+                 'billing': 'shop', 'eta': 'После подготовки', 'basis': 'Явная тестовая выдача без доплаты'}
+        quote = db.propose_delivery(1, pid, terms, 0, 'smoke-quote', owner_ids=settings.admin_ids)
+        db.answer_delivery(500, pid, quote, 1, True, 'smoke-accept')
+        db.dispatch_delivery(1, pid, 2, '', 'smoke-dispatch', owner_ids=settings.admin_ids)
+        return callback(500, 'o:delivery:' + str(pid))
 
     steps = [
         ("Старт нового пользователя", message(500, "/start")),
@@ -116,12 +133,19 @@ def run_scenarios(workdir: Path) -> int:
         ("Категория выпуска", callback(500, "cat:drop")),
         ("Карточка товара", callback(500, "product:tee-sila-i-chest")),
         ("Выбор размера", callback(500, "size:tee-sila-i-chest:L")),
-        ("Запрос согласия перед контактом", callback(500, "consent:yes")),
+        ("Оформление корзины", callback(500, "c:checkout")),
+        ("Согласие перед данными", lambda: native_action(500, "consent")),
+        ("Имя получателя", message(500, "Никита")),
         ("Клиент прислал номер", message(500, "+79991234567")),
+        ("Город", message(500, "Москва")),
+        ("Пункт выдачи", message(500, "Тестовый ПВЗ")),
+        ("Выбор доставки", lambda: native_action(500, "delivery")),
+        ("Проверка покупки", lambda: callback(500, "c:confirm:" + db.get_state(500)[1]["token"])),
         ("Второй клиент зашёл", message(700, "/start")),
         ("Интерес пропустил", callback(700, "intr:skip")),
         ("Второй клиент выбрал размер", callback(700, "size:tee-sila-i-chest:M")),
-        ("Второй клиент отказал в согласии", callback(700, "consent:no")),
+        ("Второй клиент открыл оформление", callback(700, "c:checkout")),
+        ("Второй клиент отложил согласие", callback(700, "c:home")),
         ("Реферальная механика", callback(500, "referral")),
         ("Лист ожидания", callback(500, "wsize:tee-sila-i-chest:XXL")),
         ("Lookbook", callback(500, "lookbook")),
@@ -129,7 +153,10 @@ def run_scenarios(workdir: Path) -> int:
         ("Статистика", message(1, "/stats")),
         ("Заявки", message(1, "/orders")),
         ("Подтверждение заявки", callback(1, "order:1:confirmed")),
-        ("Завершение заявки", callback(1, "order:1:completed")),
+        ("Запрет завершения до вручения", callback(1, "order:1:completed")),
+        ("Согласованный тестовый самовывоз", prepare_test_delivery),
+        ("Проверка получения", lambda: native_action(500, "ops.receive_check")),
+        ("Фактическое получение", lambda: native_action(500, "ops.receive")),
         ("Второй пользователь по реф-ссылке", message(600, "/start ref500")),
         ("Топ рефералов", message(1, "/top")),
         ("Черновик рассылки", message(1, "/broadcast ВЫПУСК СЕГОДНЯ В 19:00 — размеры разберут за час")),
@@ -152,14 +179,16 @@ def run_scenarios(workdir: Path) -> int:
         if title == "Подтверждение заявки":
             order = db.get_order(1)
             assert order and order["status"] == "awaiting_payment", "checkout did not create an unpaid order"
-            assert db.mark_payment_paid(order["payment_id"], "stars", "smoke-charge"), "payment failed"
-        assert brand_bot.handle_update(update), f"Handler failed: {title}"
+            assert db.mark_payment_paid(order["payment_id"], "stars", "smoke-charge", amount_minor=db.get_payment(order["payment_id"])["amount_stars"], currency="XTR", payer_id=order["user_id"]), "payment failed"
+        assert brand_bot.handle_update(update() if callable(update) else update), f"Handler failed: {title}"
         if title == "Старт нового пользователя":
             assert any(method == "sendPhoto" for method, _ in SENT), "welcome photo missing"
             assert any(method == "sendVideo" for method, _ in SENT), "teaser missing"
         if title == "Подтверждение заявки":
             assert db.get_order(1)["status"] == "confirmed", "confirmation failed"
-        if title == "Завершение заявки":
+        if title == "Запрет завершения до вручения":
+            assert db.get_order(1)["status"] == "confirmed", "delivery completion guard bypassed"
+        if title == "Фактическое получение":
             assert db.get_order(1)["status"] == "completed", "completion failed"
         show()
 
