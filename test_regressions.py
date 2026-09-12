@@ -829,9 +829,6 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.assertIn('ПРЕДПРОСМОТР', text)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
     def test_support_faq_buttons_and_owner_edit(self):
         self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
         self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
@@ -858,6 +855,11 @@ if __name__ == '__main__':
         self.assertNotIn('Доставка', [i['label'] for i in self.bot.faq_items()])
 
     def test_announce_button_drafts_broadcast_from_product(self):
+        import shutil
+        from bot import Catalog
+        catalog_copy = Path(self.temp.name) / 'catalog.json'
+        shutil.copy(Path(__file__).with_name('catalog.json'), catalog_copy)
+        self.bot.catalog = Catalog(catalog_copy)
         self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
         product = self.bot.catalog.add_product({
             'category': 'tee', 'name': 'Футболка анонс', 'price': '4 900',
@@ -872,5 +874,46 @@ if __name__ == '__main__':
         self.assertIn('КОМУ ПИШЕМ', text)
 
 
-class FaqAnnounceRegressionTests(unittest.TestCase):
-    pass
+
+
+    def test_unpaid_screen_nudges_buyer_once_per_cooldown(self):
+        from bot import utc_now
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        conn = self.db.connection()
+        conn.execute(
+            "INSERT INTO payments(payment_id, user_id, amount_rub, status, method, created_at) "
+            "VALUES ('pay-drop', 5, 4900, 'pending', '', ?)", (utc_now(),))
+        conn.execute(
+            "INSERT INTO orders(user_id, product_id, product_name, size, quantity, "
+            "phone, amount_rub, status, payment_id, created_at) "
+            "VALUES (5, 'tee', 'Футболка', 'L', 1, '', 4900, 'awaiting_payment', 'pay-drop', ?)",
+            (utc_now(),))
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/unpaid'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('ЖДУТ ОПЛАТЫ', text)
+        self.assertIn('4 900', text)
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, 'nudge:pay-drop'))
+        buyer_calls = [c for c in self.api.send_message.call_args_list if c.args[0] == 5]
+        self.assertEqual(len(buyer_calls), 1)
+        self.assertIn('ЖДЁТ ОПЛАТЫ', str(buyer_calls[0].args[1]))
+        markup = buyer_calls[0].args[2]['inline_keyboard']
+        self.assertIn('draft:pay-drop',
+                      [b['callback_data'] for row in markup for b in row])
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'nudge:pay-drop'))
+        buyer_calls = [c for c in self.api.send_message.call_args_list if c.args[0] == 5]
+        self.assertEqual(buyer_calls, [])
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('через 12 часов', text)
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb3', 1, 1, 'adm:digest'))
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        self.assertIn('unpaid', [b['callback_data'] for row in markup for b in row])
+
+
+
+
+if __name__ == '__main__':
+    unittest.main()

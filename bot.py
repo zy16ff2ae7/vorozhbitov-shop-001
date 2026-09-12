@@ -1191,6 +1191,20 @@ class Database:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def payments_pending(self, limit: int = 8) -> list[dict[str, Any]]:
+        """Оплаты в статусе pending: покупка, сумма, кто и когда начал."""
+        with self.connection() as conn:
+            rows = conn.execute(
+                "SELECT p.payment_id, p.amount_rub, p.created_at, MIN(o.id) AS order_id, "
+                "COUNT(o.id) AS lines, GROUP_CONCAT(o.product_name, ', ') AS names, "
+                "o.user_id FROM payments p "
+                "JOIN orders o ON o.payment_id = p.payment_id "
+                "WHERE p.status='pending' AND o.status='awaiting_payment' "
+                "GROUP BY p.payment_id ORDER BY p.created_at LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def mark_payment_refunded(self, payment_id: str) -> None:
         self.connection().execute(
             "UPDATE payments SET status='refunded' WHERE payment_id=?", (payment_id,))
@@ -2093,6 +2107,7 @@ def staff_commands() -> list[dict[str, str]]:
         {"command": "refunds", "description": "Возвраты: причины и статус"},
         {"command": "again", "description": "Повторить прошлую рассылку"},
         {"command": "faqs", "description": "Ответы поддержки: набор"},
+        {"command": "unpaid", "description": "Ждут оплаты: напомнить"},
         {"command": "grant", "description": "Назначить админа: /grant id"},
         {"command": "help", "description": "Как это работает"},
     ]
@@ -4149,7 +4164,9 @@ class BrandBot:
             lines.append("Возвратов нет.")
         self.api.send_message(
             chat_id, "\n".join(lines),
-            inline_keyboard([[(icon("stats", "Сводка"), "adm:summary")]] + staff_nav_rows()))
+            inline_keyboard([[(icon("stats", "Сводка"), "adm:summary")],
+                             [(icon("pay", "Ждут оплаты →"), "unpaid")]]
+                            + staff_nav_rows()))
 
     def admin_orders(self, chat_id: int) -> None:
         """Покупки у команды одним списком: карточка с действием — по номеру.
@@ -4226,6 +4243,79 @@ class BrandBot:
                     [{"text": icon("account", "Клиент →"),
                       "callback_data": f"aclient:{int(user_id)}"}])
         return {"inline_keyboard": rows}
+
+    def admin_unpaid(self, chat_id: int) -> None:
+        """Брошенные оплаты: кого позвать доплатить, не листая покупки."""
+        rows = self.db.payments_pending()
+        lines = ["<b>ЖДУТ ОПЛАТЫ</b>"]
+        buttons: list[list[tuple[str, str]]] = []
+        if not rows:
+            lines.append("\nВсе начатые оплаты закрыты — звать некого.")
+        for row in rows:
+            pid = str(row["payment_id"])
+            stamp = self.db.kv_get(f"nudge_at:{pid}")
+            lines.append(
+                f"\n{ICON['pay']} Покупка №{int(row['order_id'])} · "
+                f"{esc(str(row['names'])[:28])} · {format_rub(int(row['amount_rub']))}\n"
+                f"Начата {self._ago(row['created_at'])} назад."
+                + (f" Напомнили {self._ago(stamp)} назад." if stamp else "")
+            )
+            if len(buttons) < 4:
+                buttons.append([(icon("channel", "Напомнить →"), f"nudge:{pid}")])
+        self.api.send_message(chat_id, "\n".join(lines),
+                              inline_keyboard(buttons + staff_nav_rows()))
+
+    @staticmethod
+    def _ago(stamp: str) -> str:
+        try:
+            delta = datetime.now(timezone.utc) - datetime.fromisoformat(str(stamp))
+        except ValueError:
+            return "неизвестно"
+        hours = max(0, int(delta.total_seconds() // 3600))
+        if hours < 1:
+            minutes = max(1, int(delta.total_seconds() // 60))
+            return f"{minutes} {plural(minutes, 'минуту', 'минуты', 'минут')}"
+        if hours < 24:
+            return f"{hours} {plural(hours, 'час', 'часа', 'часов')}"
+        days = hours // 24
+        return f"{days} {plural(days, 'день', 'дня', 'дней')}"
+
+    def nudge_payment(self, chat_id: int, user_id: int, payment_id: str) -> None:
+        stamp = self.db.kv_get(f"nudge_at:{payment_id}")
+        if stamp:
+            delta = datetime.now(timezone.utc) - datetime.fromisoformat(stamp)
+            if delta.total_seconds() < 12 * 3600:
+                self.api.send_message(
+                    chat_id,
+                    f"Уже напомнили {self._ago(stamp)} назад.\n"
+                    "Повторно — через 12 часов, чтобы не давить на человека.",
+                    inline_keyboard([[(icon("pay", "← Ждут оплаты"), "unpaid")]]),
+                )
+                return
+        rows = self.db.orders_for_payment(payment_id)
+        if not rows:
+            self.admin_unpaid(chat_id)
+            return
+        target = int(rows[0]["user_id"])
+        lines = [f"• {esc(row['product_name'])} · {esc(row['size'])} · "
+                 f"{int(row['quantity'] or 1)} шт." for row in rows]
+        self.db.kv_set(f"nudge_at:{payment_id}", utc_now())
+        self.db.event(target, "payment_nudge", {"payment_id": payment_id, "by": user_id})
+        self.api.send_message(
+            target,
+            f"<b>ПОКУПКА №{int(rows[0]['id'])} ЖДЁТ ОПЛАТЫ</b>\n\n"
+            + "\n".join(lines)
+            + f"\n\n{esc(format_rub(int(rows[0]['amount_rub'])))}. Место в очереди и "
+            "размеры держим за вами — оплата займёт минуту.",
+            inline_keyboard(
+                [[(icon("pay", "Оплатить →"), f"draft:{payment_id}")]]
+                + [[(icon("orders", "Мои покупки"), "my_orders")]]
+            ),
+        )
+        self.api.send_message(
+            chat_id, "Напомнил покупателю: ушла карточка с кнопкой оплаты.",
+            inline_keyboard([[(icon("pay", "← Ждут оплаты"), "unpaid")]]),
+        )
 
     def admin_faqs(self, chat_id: int) -> None:
         """Набор быстрых ответов: правка и удаление по кнопке, добавление сверху."""
@@ -4460,6 +4550,8 @@ class BrandBot:
             self.admin_shelf(chat_id)
         elif command == "/refunds":
             self.admin_refunds(chat_id)
+        elif command == "/unpaid":
+            self.admin_unpaid(chat_id)
         elif command == "/faqs":
             self.admin_faqs(chat_id)
         elif command == "/again":
@@ -5494,6 +5586,12 @@ class BrandBot:
             items = [i for i in self.faq_items() if str(i.get("key")) != key]
             self.save_faq_items(items)
             self.admin_faqs(chat_id)
+            return True
+        elif data == "unpaid" and self.is_admin(user_id):
+            self.admin_unpaid(chat_id)
+            return True
+        elif data.startswith("nudge:") and self.is_admin(user_id):
+            self.nudge_payment(chat_id, user_id, data.split(":", 1)[1])
             return True
         elif data.startswith("announce:") and self.is_admin(user_id):
             self.announce_product(chat_id, user_id, data.split(":", 1)[1])
