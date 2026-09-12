@@ -374,16 +374,17 @@ def dwell(event: dict[str, Any]) -> float:
     """Сколько экран держится в кадре: хватает прочитать, но не заскучать."""
     kind = event["kind"]
     if kind == "out":
-        return min(1.6, max(0.8, 0.6 + visible_length(event["text"]) / 50))
+        return min(2.0, max(0.9, 0.7 + visible_length(event["text"]) / 45))
     if kind in ("photo", "video"):
-        return 2.2
-    if kind == "album":
         return 2.6
+    if kind == "album":
+        return 3.2
     if kind == "invoice":
-        return 2.2
+        return 2.6
     if kind == "document":
-        return 1.8
-    return min(3.4, max(1.2, 0.85 + visible_length(event["text"]) / 48))
+        return 2.2
+    # Текст держим столько, сколько нужно, чтобы дочитать до конца строки.
+    return min(4.8, max(1.7, 1.05 + visible_length(event["text"]) / 40))
 
 
 def layer_for(event: dict[str, Any], clock: str) -> ui.Layer:
@@ -427,14 +428,19 @@ def build_scene(title: str, status: str, avatar: str, events: list[dict[str, Any
     clock_minute = 41
     last_kind = ""
 
+    def clock_label(step: int) -> str:
+        """Настоящие часы: минуты переносятся через час, а не идут до 20:61."""
+        total = 20 * 60 + 41 + step
+        return f"{total // 60 % 24:02d}:{total % 60:02d}"
+
     for event in events:
         if event.get("chat") != focus:
             continue
         kind = event["kind"]
-        clock = f"20:{clock_minute:02d}"
+        clock = clock_label(clock_minute)
         if kind == "tap":
-            taps.append((moment, moment + 0.42, event["id"], event["index"]))
-            moment += 0.42
+            taps.append((moment, moment + 0.5, event["id"], event["index"]))
+            moment += 0.5
             last_kind = kind
             continue
         if kind == "out":
@@ -504,7 +510,7 @@ def encode(units: list[Any], out: Path) -> None:
     binary = ffmpeg_binary()
     command = [binary, "-y", "-loglevel", "error", "-f", "rawvideo", "-vcodec", "rawvideo",
                "-s", f"{ui.W}x{ui.H}", "-pix_fmt", "rgb24", "-r", str(FPS), "-i", "-",
-               "-an", "-vcodec", "libx264", "-preset", "medium", "-crf", "20",
+               "-an", "-vcodec", "libx264", "-preset", "medium", "-crf", "17",
                "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out)]
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                stderr=subprocess.PIPE)

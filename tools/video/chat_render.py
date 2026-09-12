@@ -50,14 +50,14 @@ ACCENT = (146, 197, 240)
 HEADER_H = 158
 MARGIN_X = 22
 BUBBLE_MAX_W = 900
-PAD = 28
-GAP = 14
+PAD = 30
+GAP = 16
 RADIUS = 26
-BUTTON_H = 92
-BODY_SIZE = 42
-LINE_H = 58
-BUTTON_SIZE = 39
-CODE_SIZE = 38
+BUTTON_H = 100
+BODY_SIZE = 46
+LINE_H = 64
+BUTTON_SIZE = 42
+CODE_SIZE = 42
 
 
 # --------------------------------------------------------------------- шрифты
@@ -685,7 +685,7 @@ def render_text_bubble(text: str, markup: dict[str, Any] | None, outgoing: bool,
     inner_w = max_w - 2 * PAD if rows else max_w - 2 * PAD
     lines = wrap_text(text, inner_w)
     body_h = text_height(lines)
-    height = PAD + max(body_h, 8) + (34 if clock else 8) + PAD // 2
+    height = PAD + max(body_h, 8) + (40 if clock else 8) + PAD // 2
     if rows:
         height += len(rows) * BUTTON_H + 12
     width = max_w
@@ -697,11 +697,11 @@ def render_text_bubble(text: str, markup: dict[str, Any] | None, outgoing: bool,
                            fill=BUBBLE_OUT if outgoing else BUBBLE_IN)
     draw_lines(draw, lines, PAD, PAD - 6)
     if clock:
-        draw.text((width - PAD - FONTS.body(26).getlength(clock), PAD + body_h - 8), clock,
-                  font=FONTS.body(26), fill=TEXT_TIME if not outgoing else (196, 216, 236))
+        draw.text((width - PAD - FONTS.body(30).getlength(clock), PAD + body_h - 6), clock,
+                  font=FONTS.body(30), fill=TEXT_TIME if not outgoing else (196, 216, 236))
     buttons: list[tuple[int, int, int, int]] = []
     if rows:
-        top = PAD + max(body_h, 8) + (34 if clock else 8) + 6
+        top = PAD + max(body_h, 8) + (40 if clock else 8) + 6
         grid_w = width - 2 * 10
         draw.rounded_rectangle([10, top, width - 11, height - 1], radius=RADIUS - 6, fill=BUTTON_BG)
         for row_index, cells in enumerate(rows):
@@ -808,7 +808,7 @@ def render_media_bubble(kind: str, media: Sequence[str], caption: str,
     rows = layout_buttons(button_rows(markup), width - 20) if button_rows(markup) else []
     height = 10 + sum(block.height + 8 for block in blocks)
     height += text_height(caption_lines) + (18 if caption_lines else 0)
-    height += (34 if clock else 0) + 14
+    height += (40 if clock else 0) + 14
     if rows:
         height += len(rows) * BUTTON_H + 12
 
@@ -823,8 +823,8 @@ def render_media_bubble(kind: str, media: Sequence[str], caption: str,
         draw_lines(draw, caption_lines, PAD, cursor + 4)
         cursor += text_height(caption_lines) + 10
     if clock:
-        draw.text((width - PAD - FONTS.body(26).getlength(clock), cursor - 4), clock,
-                  font=FONTS.body(26), fill=TEXT_TIME)
+        draw.text((width - PAD - FONTS.body(30).getlength(clock), cursor - 2), clock,
+                  font=FONTS.body(30), fill=TEXT_TIME)
         cursor += 30
     buttons: list[tuple[int, int, int, int]] = []
     if rows:
@@ -869,8 +869,8 @@ def render_contact(name: str, phone: str, clock: str = "") -> Layer:
     draw.text((PAD + 132, 40), name, font=FONTS.body(40, bold=True), fill=TEXT)
     draw.text((PAD + 132, 94), phone, font=FONTS.body(38), fill=(198, 220, 240))
     if clock:
-        draw.text((width - PAD - FONTS.body(26).getlength(clock), height - 46), clock,
-                  font=FONTS.body(26), fill=(196, 216, 236))
+        draw.text((width - PAD - FONTS.body(30).getlength(clock), height - 50), clock,
+                  font=FONTS.body(30), fill=(196, 216, 236))
     return Layer(layer, height, (), width)
 
 
@@ -936,6 +936,7 @@ class Scene:
         self.keyboards = list(keyboards)
         self.duration = duration or (max([m.appear for m in self.messages] or [0.0]) + 3.0)
         self._scroll = 0.0
+        self._shadows: dict[int, Image.Image] = {}
         self._heights: dict[int, float] = {}
         self._bg = self._background()
         self._header = self._header()
@@ -984,8 +985,22 @@ class Scene:
         layer.paste(tile, (x0, y0), mask)
         draw.ellipse([x0, y0, x0 + size - 1, y0 + size - 1], outline=(255, 255, 255, 40), width=2)
         draw.text((x0 + size + 26, y0 + 6), self.title, font=FONTS.brand(48), fill=TEXT)
-        draw.text((x0 + size + 26, y0 + 60), self.status, font=FONTS.body(30), fill=TEXT_DIM)
+        draw.text((x0 + size + 26, y0 + 62), self.status, font=FONTS.body(32), fill=TEXT_DIM)
         return layer
+
+    def _shadow(self, layer: "Layer") -> Image.Image:
+        """Мягкая тень карточки: считаем один раз на слой, а не на кадр."""
+        shadow = self._shadows.get(id(layer))
+        if shadow is None:
+            drop = 12
+            shadow = Image.new("RGBA", (layer.width, layer.height + drop * 2), (0, 0, 0, 0))
+            alpha = layer.image.getchannel("A").point(lambda v: int(v * 0.5))
+            black = Image.new("RGBA", (layer.width, layer.height), (0, 0, 0, 255))
+            black.putalpha(alpha)
+            shadow.alpha_composite(black, (0, drop))
+            shadow = shadow.filter(ImageFilter.GaussianBlur(14))
+            self._shadows[id(layer)] = shadow
+        return shadow
 
     # ------------------------------------------------------------------ раскладка
 
@@ -1016,7 +1031,7 @@ class Scene:
         rows = self._keyboard(t)
         keyboard_h = 0
         if rows:
-            keyboard_h = 34 + len(rows) * 104 + 22
+            keyboard_h = 34 + len(rows) * 112 + 22
         view_top = HEADER_H + 12
         view_bottom = H - (keyboard_h + 10 if keyboard_h else 26)
         viewport = view_bottom - view_top
@@ -1062,16 +1077,19 @@ class Scene:
                     old.putalpha(old.getchannel("A").point(lambda v: int(v * (1 - fade))))
                     new = current.image.copy()
                     new.putalpha(new.getchannel("A").point(lambda v: int(v * fade)))
-                    if message.outgoing:
-                        ghost.alpha_composite(old, (0, max(0, previous.height - current.height)))
-                    else:
-                        ghost.alpha_composite(old, (0, max(0, previous.height - current.height)))
+                    # Пузырь растёт вниз от верхнего края: сдвиг старого слоя резал верх.
+                    ghost.alpha_composite(old, (0, 0))
                     ghost.alpha_composite(new, (0, int(lerp(10, 0, fade))))
                     area.alpha_composite(ghost, (x, box_y))
                 else:
                     piece = current.image.copy()
                     if alpha < 1.0:
                         piece.putalpha(piece.getchannel("A").point(lambda v: int(v * alpha)))
+                    shade = self._shadow(current)
+                    if alpha < 1.0:
+                        shade = shade.copy()
+                        shade.putalpha(shade.getchannel("A").point(lambda v: int(v * alpha)))
+                    area.alpha_composite(shade, (x, box_y - 12))
                     area.alpha_composite(piece, (x, box_y))
                 # Отклик на нажатие: подсветка той кнопки, которую нажали.
                 for start, end, key, index in self.taps:
@@ -1114,26 +1132,26 @@ class Scene:
                 if not row:
                     continue
                 total_w = W - 2 * 16
-                weights = [max(FONTS.body(34).getlength(strip_icons(str(key.get("text", "")))) + 40, 120)
+                weights = [max(FONTS.body(36).getlength(strip_icons(str(key.get("text", "")))) + 40, 120)
                            for key in row]
                 scale = total_w / sum(weights)
                 key_x = 16
                 for key, weight in zip(row, weights):
                     key_w = int(weight * scale) - 10
-                    pen3.rounded_rectangle([key_x, key_y, key_x + key_w, key_y + 92], radius=18,
+                    pen3.rounded_rectangle([key_x, key_y, key_x + key_w, key_y + 100], radius=18,
                                            fill=KEY_BG)
                     label = strip_icons(str(key.get("text", "")))
-                    font = FONTS.body(34)
+                    font = FONTS.body(36)
                     icons = [ch for ch in str(key.get("text", "")) if is_icon_char(ch)]
                     text_w = font.getlength(label)
                     icon_w = len(icons) * 40
                     start_x = key_x + max(14, (key_w - text_w - icon_w) // 2)
                     if icons:
-                        draw_icon(pen3, icons[0], (start_x, key_y + 26, start_x + 40, key_y + 66), TEXT)
+                        draw_icon(pen3, icons[0], (start_x, key_y + 30, start_x + 40, key_y + 70), TEXT)
                         start_x += 48
-                    pen3.text((start_x, key_y + 26), label, font=font, fill=TEXT)
+                    pen3.text((start_x, key_y + 30), label, font=font, fill=TEXT)
                     key_x += key_w + 10
-                key_y += 104
+                key_y += 112
             canvas.paste(panel, (0, H - keyboard_h - 8), panel)
 
         # Мягкое появление и уход кадра.
