@@ -1373,6 +1373,37 @@ class TelegramAPI:
             payload["reply_markup"] = reply_markup
         return self.call("sendMessage", payload)
 
+    def edit_message(self, chat_id: int, message_id: int, text: str,
+                     reply_markup: dict[str, Any] | None = None) -> bool:
+        """Поменять экран на месте. ``False`` — значит, правка не удалась.
+
+        Так навигация не превращает чат в ленту из девяти сообщений: экран, чью
+        кнопку нажали, становится следующим экраном. Не выходит — отправим новым
+        сообщением, поэтому отказ здесь не ошибка, а сигнал вызывающему.
+        """
+        if not message_id:
+            return False
+        if reply_markup is not None and "inline_keyboard" not in reply_markup:
+            # editMessageText принимает только inline-клавиатуру: обычная
+            # клавиатура («Отправить номер») или её снятие требуют нового сообщения.
+            return False
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": fit_html_text(text, MESSAGE_TEXT_LIMIT - 96),
+            "parse_mode": "HTML",
+            # Пустая inline-клавиатура снимает старые кнопки экрана.
+            "reply_markup": reply_markup or {"inline_keyboard": []},
+        }
+        try:
+            self.call("editMessageText", payload)
+        except RuntimeError as exc:
+            if "message is not modified" in str(exc).lower():
+                return True  # экран тот же — для человека ничего не изменилось
+            LOG.info("Экран не правится на месте (chat %s, message %s): %s", chat_id, message_id, exc)
+            return False
+        return True
+
     def send_photo(self, chat_id: int, photo: str, caption: str, reply_markup: dict[str, Any] | None = None) -> Any:
         caption = fit_html_text(caption, CAPTION_LIMIT - 24)
         payload: dict[str, Any] = {
@@ -2073,13 +2104,39 @@ def add_step_text(position: int, question: str, hint: str = "") -> str:
     return f"{text}\n\n{hint}" if hint else text
 
 
+class ScreenSender:
+    """Прокси к API: первый экран после нажатия правит то сообщение, чью кнопку нажали.
+
+    Экраны бота отправляют сообщения через ``api.send_message`` в 144 местах,
+    поэтому перехват живёт здесь, а не в каждом вызове. Захват одноразовый и
+    только для того же чата: всё, что уходит дальше (уведомления менеджеру,
+    счета, подтверждения покупки), отправляется как раньше.
+    """
+
+    def __init__(self, api: Any, take_edit_target: Callable[[int], int | None]):
+        self._api = api
+        self._take_edit_target = take_edit_target
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._api, name)
+
+    def send_message(self, chat_id: int, text: str, reply_markup: dict[str, Any] | None = None) -> Any:
+        message_id = self._take_edit_target(chat_id)
+        if message_id and self._api.edit_message(chat_id, message_id, text, reply_markup):
+            return {"message_id": message_id, "chat": {"id": chat_id}, "edited": True}
+        return self._api.send_message(chat_id, text, reply_markup)
+
+
 class BrandBot:
     def __init__(self, settings: Settings, api: TelegramAPI, db: Database, catalog: Catalog):
         self.settings = settings
-        self.api = api
         self.db = db
         self.catalog = catalog
         self.bot_username: str = ""
+        # Экран, открытый нажатием, меняется на месте: прокси перехватывает
+        # первое сообщение экрана и правит то сообщение, чью кнопку нажали.
+        self._screen_edit: tuple[int, int] | None = None
+        self.api = ScreenSender(api, self.take_screen_edit)
 
     # ------------------------------------------------------------------ utils
 
@@ -4625,6 +4682,18 @@ class BrandBot:
         if not result.get("ok"):
             self.api.send_message(chat_id, str(result.get("error") or "Не получилось принять покупку."), self.main_menu(chat_id))
 
+    # Оплата остаётся в истории: счета, отказы и подтверждения ищут позже,
+    # поэтому такие экраны не сворачиваются в одно меняющееся сообщение.
+    NON_EDITABLE_CALLBACKS = ("pay:",)
+
+    def take_screen_edit(self, chat_id: int) -> int | None:
+        """Отдать и погасить цель правки: одно нажатие — один экран на месте."""
+        target = self._screen_edit
+        self._screen_edit = None
+        if target and target[0] == int(chat_id):
+            return target[1]
+        return None
+
     def handle_callback(self, callback: dict[str, Any]) -> None:
         callback_id = callback["id"]
         data = callback.get("data", "")
@@ -4637,11 +4706,18 @@ class BrandBot:
             return
         self.db.upsert_user(user)
         self.api.answer_callback(callback_id)
-        if self.route_callback(callback_id, chat_id, user_id, data):
-            return
-        # Кнопка устарела или пришла из старого сообщения: не молчим и не
-        # пугаем ошибкой, а открываем актуальный экран.
-        self.stale(chat_id, "Эта кнопка устарела.")
+        pressed = callback["message"].get("message_id")
+        if (isinstance(pressed, int) and not isinstance(pressed, bool) and pressed > 0
+                and not data.startswith(self.NON_EDITABLE_CALLBACKS)):
+            self._screen_edit = (int(chat_id), pressed)
+        try:
+            if self.route_callback(callback_id, chat_id, user_id, data):
+                return
+            # Кнопка устарела или пришла из старого сообщения: не молчим и не
+            # пугаем ошибкой, а открываем актуальный экран.
+            self.stale(chat_id, "Эта кнопка устарела.")
+        finally:
+            self._screen_edit = None
 
     def route_callback(self, callback_id: str, chat_id: int, user_id: int, data: str) -> bool:
         """Разбор нажатия. Возвращает False, если кнопка боту неизвестна."""

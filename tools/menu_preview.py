@@ -46,6 +46,13 @@ class RecordingAPI(TelegramAPI):
         self._add("text", chat_id, text, reply_markup)
         return {"message_id": len(self.items)}
 
+    def edit_message(self, chat_id, message_id, text, reply_markup=None):
+        """Правка экрана на месте: в предпросмотре это тот же пузырь чата."""
+        if reply_markup is not None and "inline_keyboard" not in reply_markup:
+            return False
+        self._add("text", chat_id, text, reply_markup)
+        return True
+
     def send_photo(self, chat_id, photo, caption, reply_markup=None):
         self._add("photo", chat_id, caption, reply_markup, [str(photo)])
         return {"message_id": len(self.items), "photo": [{"file_id": "preview"}]}

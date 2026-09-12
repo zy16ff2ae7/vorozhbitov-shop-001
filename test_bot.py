@@ -1608,10 +1608,30 @@ class MenuAPI(TelegramAPI):
         self.documents = []
         self.pre_checkout = []
         self.calls = []
+        self.edits = []
+        self.sends = []
+        self.edit_fails = 0
 
     def send_message(self, chat_id, text, reply_markup=None):
         self.sent.append((chat_id, text, reply_markup))
+        self.sends.append((chat_id, text, reply_markup))
         return {"message_id": len(self.sent)}
+
+    def edit_message(self, chat_id, message_id, text, reply_markup=None):
+        """Правка экрана на месте. Для тестов она же — показанный экран.
+
+        Ограничение настоящее: ``editMessageText`` принимает только
+        inline-клавиатуру, поэтому обычная клавиатура («Отправить номер»)
+        правиться не может и экран уходит новым сообщением.
+        """
+        if reply_markup is not None and "inline_keyboard" not in reply_markup:
+            return False
+        if self.edit_fails:
+            self.edit_fails -= 1
+            return False
+        self.edits.append((chat_id, message_id, text, reply_markup))
+        self.sent.append((chat_id, text, reply_markup))
+        return True
 
     def send_photo(self, chat_id, photo, caption, reply_markup=None):
         self.photos.append((chat_id, photo, caption, reply_markup))
@@ -2257,6 +2277,85 @@ class NativeMenuTests(unittest.TestCase):
             self.assertIn("со старым каталогом", text)
             self.assertIn("adm:panel", button_targets(markup))
             self.assertEqual(len(bot.catalog.products_by_id), known, "память потеряла рабочий каталог")
+
+    def test_screen_opens_in_place_instead_of_a_new_message(self):
+        """Экран, чью кнопку нажали, становится следующим: чат не тонет в ленте."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+
+            def press(data, message_id):
+                bot.handle_update({
+                    "update_id": 1,
+                    "callback_query": {"id": "cb", "chat_instance": "x", "data": data,
+                                       "from": self.USER,
+                                       "message": {"message_id": message_id,
+                                                   "chat": {"id": 500, "type": "private"}}},
+                })
+
+            press("catalog", 42)
+            self.assertEqual(len(api.sends), 0, "экран ушёл новым сообщением вместо правки")
+            self.assertEqual(len(api.edits), 1)
+            chat_id, message_id, text, markup = api.edits[0]
+            self.assertEqual((chat_id, message_id), (500, 42), "правили не то сообщение")
+            self.assertTrue(any(target.startswith("cat:") for target in button_targets(markup)),
+                            "правили не экран витрины")
+            self.assertTrue(text.strip())
+
+            # Устаревшая кнопка тоже открывает актуальный экран на месте.
+            api.edits.clear()
+            press("нет-такой-кнопки", 7)
+            self.assertEqual(len(api.sends), 0)
+            self.assertEqual(api.edits[0][1], 7)
+
+            # Текст с клавиатуры править не во что — остаётся новым сообщением.
+            api.edits.clear(); api.sends.clear()
+            shown = len(api.photos)
+            bot.handle_update({"update_id": 2, "message": {
+                "message_id": 9, "date": 0, "chat": {"id": 500, "type": "private"},
+                "from": self.USER, "text": "/account"}})
+            self.assertEqual(len(api.edits), 0, "текстовая команда не должна ничего править")
+            self.assertEqual(len(api.sends), 1)
+            self.assertEqual(len(api.photos), shown)
+
+    def test_screens_that_cannot_be_edited_are_sent_as_new_messages(self):
+        """Обычная клавиатура, оплата и сбой правки не должны терять экран."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+
+            def press(data, message_id=11):
+                bot.handle_update({
+                    "update_id": 1,
+                    "callback_query": {"id": "cb", "chat_instance": "x", "data": data,
+                                       "from": self.USER,
+                                       "message": {"message_id": message_id,
+                                                   "chat": {"id": 500, "type": "private"}}},
+                })
+
+            # Экран с обычной клавиатурой («Отправить номер») править нельзя.
+            press("size:tee-sila-i-chest:L")
+            api.edits.clear(); api.sends.clear()
+            press("consent:yes")
+            self.assertEqual(len(api.edits), 0)
+            self.assertEqual(len(api.sends), 1)
+            self.assertTrue((api.sends[0][2] or {}).get("keyboard"), "пропала клавиатура номера")
+
+            # Оплата остаётся в истории: её ищут после покупки.
+            receipt = self._purchase(db, user_id=500, product_id="tee-sila-i-chest", size="L")
+            api.edits.clear(); api.sends.clear()
+            press(f"pay:{receipt['payment_id']}:stars")
+            self.assertEqual(len(api.edits), 0, "платёжный экран свернули в правку")
+
+            # Отказ правки не теряет экран: отправляем новым сообщением.
+            api.edit_fails = 1
+            api.edits.clear(); api.sends.clear()
+            press("catalog", 55)
+            self.assertEqual(len(api.edits), 0)
+            self.assertEqual(len(api.sends), 1)
+            self.assertTrue(api.sends[0][1].strip())
 
     def test_waitlist_can_be_seen_and_left(self):
         """Подписаться на размер можно было и раньше — теперь из листа можно выйти."""

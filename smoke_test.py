@@ -68,7 +68,9 @@ def callback(user_id: int, data: str) -> dict:
             "id": f"cb{len(SENT)}",
             "data": data,
             "from": {"id": user_id, "username": f"user{user_id}", "first_name": "Никита"},
-            "message": {"chat": {"id": user_id, "type": "private"}},
+            # message_id есть в настоящем callback всегда: по нему бот правит
+            # экран на месте вместо нового сообщения, и расшифровка это показывает.
+            "message": {"message_id": len(SENT) + 1, "chat": {"id": user_id, "type": "private"}},
         },
     }
 
