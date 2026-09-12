@@ -23,6 +23,7 @@ import os
 import random
 import re
 import secrets
+import shutil
 import signal
 import sqlite3
 import sys
@@ -270,6 +271,7 @@ class Catalog:
         # /reload и мастер /add подменяют каталог из потока опроса Telegram,
         # пока потоки HTTP отдают /api/catalog и проверяют заявки.
         self.lock = threading.RLock()
+        self._snap_date = ""
         self.reload()
 
     def reload(self) -> None:
@@ -380,6 +382,33 @@ class Catalog:
         self.data = data
         self.products_by_id = products
         self.save()
+        self.maybe_snapshot()
+
+    def maybe_snapshot(self) -> None:
+        """Раз в сутки кладём копию каталога в backups и держим последние семь.
+
+        Каталог — файловая база вещей: правка владельцем или сбой диска не
+        должны стоить ассортимента. Снапшот снимается после успешной записи
+        и никогда не мешает основной работе: любой сбой копии тихо логируется.
+        """
+        today = datetime.now(timezone.utc).date().isoformat()
+        if self._snap_date == today:
+            return
+        with self.lock:
+            if self._snap_date == today:
+                return
+            self._snap_date = today
+            try:
+                backup_dir = self.path.parent / "backups"
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                target = backup_dir / f"catalog-{today}.json"
+                if not target.exists():
+                    shutil.copyfile(self.path, target)
+                keep = sorted(backup_dir.glob("catalog-*.json"))
+                for old in keep[:-7]:
+                    old.unlink(missing_ok=True)
+            except OSError:
+                LOG.warning("Снапшот каталога не снялся", exc_info=True)
 
     def add_category(self, name: str) -> str:
         """Создать раздел и вернуть его id."""

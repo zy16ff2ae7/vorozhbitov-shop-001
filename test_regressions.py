@@ -932,6 +932,24 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.db.set_state(1, 'admin_add', {'step': 'category'})
         self.assertTrue(self.bot.admin_command(1, 1, '/add'))
 
+    def test_catalog_snapshot_keeps_last_seven_daily_copies(self):
+        import shutil
+        from datetime import datetime, timezone
+        copy_path = Path(self.temp.name) / 'catalog.json'
+        shutil.copy(Path(__file__).with_name('catalog.json'), copy_path)
+        catalog = Catalog(copy_path)
+        backup_dir = copy_path.parent / 'backups'
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        for day in range(1, 10):
+            (backup_dir / f'catalog-2026-01-{day:02d}.json').write_text('{}', encoding='utf-8')
+        catalog.add_product({'category': 'tee', 'name': 'Снапшот тест', 'price': '1 000',
+                             'sizes': ['S'], 'description': 'проверка копии'})
+        today = datetime.now(timezone.utc).date().isoformat()
+        names = sorted(x.name for x in backup_dir.glob('catalog-*.json'))
+        self.assertIn(f'catalog-{today}.json', names)
+        self.assertEqual(len(names), 7)
+        self.assertEqual(names[0], 'catalog-2026-01-04.json')
+
 
 if __name__ == '__main__':
     unittest.main()
