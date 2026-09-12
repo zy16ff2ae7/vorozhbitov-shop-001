@@ -1170,11 +1170,6 @@ class Database:
             "SELECT created_at, payload FROM events WHERE event='giveaway_drawn' "
             "ORDER BY id DESC LIMIT ?", (limit,)))
 
-    def set_order_note(self, order_id: int, note: str) -> None:
-        with self.lock, self.connection() as conn:
-            conn.execute("UPDATE orders SET note=? WHERE id=?",
-                         (str(note or "")[:400], order_id))
-
     def refunds_open(self) -> list[dict[str, Any]]:
         with self.connection() as conn:
             rows = conn.execute(
@@ -1195,6 +1190,10 @@ class Database:
                 (limit,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def mark_payment_refunded(self, payment_id: str) -> None:
+        self.connection().execute(
+            "UPDATE payments SET status='refunded' WHERE payment_id=?", (payment_id,))
 
     def kv_get(self, key: str) -> str:
         row = self.connection().execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
@@ -1954,6 +1953,30 @@ def audience_label(segment: str, categories: Iterable[dict[str, str]]) -> str:
     return "Сегмент не распознан"
 
 
+SUPPORT_FAQ_DEFAULT: list[dict[str, str]] = [
+    {
+        "key": "where",
+        "label": "Где моя покупка",
+        "answer": "Открой «Мои покупки» в главном меню: у каждой покупки статус — "
+                  "ждёт оплаты, подтверждена, завершена. Как только вещь собрана, "
+                  "статус обновляется здесь же.",
+    },
+    {
+        "key": "pay",
+        "label": "Как оплатить",
+        "answer": "В корзине выбери способ оплаты и нажми «Оплатить» — Telegram "
+                  "покажет платёжную форму. После оплаты покупка появится в "
+                  "«Моих покупках» со статусом «ждёт подтверждения».",
+    },
+    {
+        "key": "refund",
+        "label": "Возврат",
+        "answer": "Открой покупку и нажми «Отменить покупку» до отправки: оплата "
+                  "вернётся тем же способом, срок зависит от банка. Если вещь уже "
+                  "отправлена — напиши менеджеру кнопкой «Написать менеджеру».",
+    },
+]
+
 REFUND_REASON_LABELS = {
     "size": "Не подошёл размер",
     "changed": "Покупатель передумал",
@@ -2069,6 +2092,7 @@ def staff_commands() -> list[dict[str, str]]:
         {"command": "shelf", "description": "Витрина: скрыть и показать"},
         {"command": "refunds", "description": "Возвраты: причины и статус"},
         {"command": "again", "description": "Повторить прошлую рассылку"},
+        {"command": "faqs", "description": "Ответы поддержки: набор"},
         {"command": "grant", "description": "Назначить админа: /grant id"},
         {"command": "help", "description": "Как это работает"},
     ]
@@ -2585,8 +2609,25 @@ class BrandBot:
         lines.append("Данные нужны только для покупки и связи по ней.")
         return "\n".join(lines)
 
+    def faq_items(self) -> list[dict[str, str]]:
+        """Быстрые ответы поддержки: набор живёт в kv, владелец правит его в /faqs."""
+        raw = self.db.kv_get("support_faqs")
+        if raw:
+            try:
+                items = json.loads(raw)
+                if isinstance(items, list):
+                    return [i for i in items if isinstance(i, dict) and i.get("key")]
+            except ValueError:
+                LOG.warning("support_faqs kv is broken, falling back to default")
+        return [dict(i) for i in SUPPORT_FAQ_DEFAULT]
+
+    def save_faq_items(self, items: list[dict[str, str]]) -> None:
+        self.db.kv_set("support_faqs", compact_json(items))
+
     def support_menu(self) -> dict[str, Any]:
         rows: list[list[tuple[str, str]]] = [
+            [(icon("question", str(item.get("label"))[:24]), f"faq:{item.get('key')}")
+             for item in self.faq_items()[:4]],
             [(icon("orders", "Вопрос по покупке"), "ask")],
             [(icon("question", "Как это работает"), "help")],
         ]
@@ -4180,14 +4221,48 @@ class BrandBot:
         """Клавиатура карточки покупки: действия статуса, затем клиент, нав-ряд последний."""
         markup = self.order_status_keyboard(order_id, status) or {}
         rows = [list(r) for r in markup.get("inline_keyboard", [])]
-        # Нав-ряд остаётся последним: заметка и клиент встают перед ним.
+        # Нав-ряд остаётся последним: клиент встаёт перед ним, а не поверх выхода.
         rows.insert(max(0, len(rows) - 1),
                     [{"text": icon("account", "Клиент →"),
                       "callback_data": f"aclient:{int(user_id)}"}])
-        rows.insert(max(0, len(rows) - 1),
-                    [{"text": icon("receipt", "Заметка"),
-                      "callback_data": f"anote:{int(order_id)}"}])
         return {"inline_keyboard": rows}
+
+    def admin_faqs(self, chat_id: int) -> None:
+        """Набор быстрых ответов: правка и удаление по кнопке, добавление сверху."""
+        items = self.faq_items()
+        lines = ["<b>ОТВЕТЫ ПОДДЕРЖКИ</b>",
+                 "\nЭти кнопки видит покупатель в экране поддержки."]
+        rows: list[list[tuple[str, str]]] = []
+        if not items:
+            lines.append("\nНабор пуст — добавь первый ответ.")
+        for item in items:
+            lines.append(f"\n{ICON['question']} {esc(str(item.get('label')))}")
+            if len(rows) < 4:
+                rows.append([
+                    (icon("tools", "Править"), f"faqedit:{item.get('key')}"),
+                    (icon("cancel", "Убрать"), f"faqdel:{item.get('key')}"),
+                ])
+        rows.append([(icon("stock", "Добавить ответ"), "faqadd")])
+        self.api.send_message(chat_id, "\n".join(lines),
+                              inline_keyboard(rows + staff_nav_rows()))
+
+    def announce_product(self, chat_id: int, user_id: int, product_id: str) -> None:
+        """Анонс новинки: текст собирается из карточки и уходит в черновик рассылки."""
+        product = self.catalog.get(product_id) or next(
+            (p for p in self.catalog.data.get("products", [])
+             if str(p.get("id")) == product_id), None)
+        if not product:
+            self.api.send_message(chat_id, "Вещь не найдена — анонс не собрался.")
+            return
+        sizes = ", ".join(str(size) for size in product.get("sizes") or []) or "размеры уточним"
+        description = " ".join(str(product.get("description") or "").split())[:160]
+        text = (f"Новинка: {product.get('name')}\n"
+                f"{product.get('price')} ₽\n"
+                f"Размеры: {sizes}\n"
+                + (f"{description}\n" if description else "")
+                + "\nСмотри в витрине — тираж маленький.")
+        self.db.set_state(user_id, "broadcast_pending", {"text": text})
+        self.ask_broadcast_segment(chat_id, text)
 
     def admin_refunds(self, chat_id: int) -> None:
         """Возвраты очередью: причина и отметка «выполнен» — кнопками."""
@@ -4385,6 +4460,8 @@ class BrandBot:
             self.admin_shelf(chat_id)
         elif command == "/refunds":
             self.admin_refunds(chat_id)
+        elif command == "/faqs":
+            self.admin_faqs(chat_id)
         elif command == "/again":
             raw = self.db.kv_get("last_broadcast")
             try:
@@ -4465,16 +4542,53 @@ class BrandBot:
         self.db.set_state(user_id, "admin_add", {"step": "name", "category": category_id})
         self.api.send_message(chat_id, add_step_text(2, ADD_STEPS[0][1]))
 
-    def handle_order_note_text(self, chat_id: int, user_id: int, text: str) -> bool:
-        """Заметка к покупке: один текстовый шаг, дальше снова карточка."""
+    def handle_faq_text(self, chat_id: int, user_id: int, text: str) -> bool:
+        """Шаги набора ответов: название и текст ответа, отмена словом «отмена»."""
         state = self.db.get_state(user_id)
-        if not state or state[0] != "order_note":
+        if not state or state[0] not in ("faq_add", "faq_edit"):
             return False
-        order_id = int(state[1].get("order") or 0)
+        if text.lower() in ("отмена", "cancel"):
+            self.db.clear_state(user_id)
+            self.api.send_message(chat_id, "Отменили.", remove_keyboard())
+            self.admin_faqs(chat_id)
+            return True
+        mode, data = state[0], dict(state[1])
+        step = str(data.get("step") or "label")
+        value = " ".join(text.split())[:160]
+        if not value:
+            self.api.send_message(chat_id, "Пусто не сохраняю — напиши текст.")
+            return True
+        items = self.faq_items()
+        if mode == "faq_add":
+            if step == "label":
+                self.db.set_state(user_id, "faq_add", {**data, "step": "answer", "label": value})
+                self.api.send_message(chat_id, f"Текст ответа «{esc(value)}»? Покупатель увидит его целиком.")
+                return True
+            seq = int(self.db.kv_get("faq_seq") or 0) + 1
+            self.db.kv_set("faq_seq", str(seq))
+            items.append({"key": f"faq-{seq}", "label": str(data.get("label")), "answer": value})
+            self.save_faq_items(items)
+            self.db.clear_state(user_id)
+            self.api.send_message(chat_id, f"Ответ «{esc(str(data.get('label')))}» в наборе.")
+            self.admin_faqs(chat_id)
+            return True
+        key = str(data.get("key") or "")
+        target = next((i for i in items if str(i.get("key")) == key), None)
+        if not target:
+            self.db.clear_state(user_id)
+            self.api.send_message(chat_id, "Этого ответа уже нет в наборе.")
+            self.admin_faqs(chat_id)
+            return True
+        if step == "label":
+            self.db.set_state(user_id, "faq_edit", {**data, "step": "answer", "label": value})
+            self.api.send_message(chat_id, f"Новый текст ответа для «{esc(value)}»?")
+            return True
+        target["label"] = str(data.get("label"))
+        target["answer"] = value
+        self.save_faq_items(items)
         self.db.clear_state(user_id)
-        note = "" if text.lower() in ("без заметки", "-") else text
-        self.db.set_order_note(order_id, note)
-        self.admin_order_card(chat_id, order_id)
+        self.api.send_message(chat_id, f"Ответ «{esc(target['label'])}» обновлён.")
+        self.admin_faqs(chat_id)
         return True
 
     def handle_add_product_text(self, chat_id: int, user_id: int, text: str) -> bool:
@@ -4668,6 +4782,7 @@ class BrandBot:
             "Она уже в витрине. Скрыть — <code>/hide id</code>, вернуть — <code>/show id</code>.",
             inline_keyboard(
                 [[(icon("catalog", "Смотреть в витрине →"), f"product:{product['id']}")],
+                 [(icon("channel", "Анонс →"), f"announce:{product['id']}")],
                  [(icon("stock", "Добавить ещё"), "adm:add"), (icon("tools", "Управление"), "adm:panel")]]
             ),
         )
@@ -5346,14 +5461,42 @@ class BrandBot:
             new = min(10, max(1, self.giveaway_threshold() + step))
             self.db.kv_set("giveaway_min_invites", str(new))
             self.admin_draws(chat_id)
-        elif data.startswith("anote:") and self.is_admin(user_id):
-            order_id = int(data.split(":", 1)[1])
-            self.db.set_state(user_id, "order_note", {"order": order_id})
+        elif data.startswith("faq:") and data != "faqadd":
+            key = data.split(":", 1)[1]
+            item = next((i for i in self.faq_items() if str(i.get("key")) == key), None)
+            if not item:
+                self.show_support(chat_id, user_id)
+                return True
             self.api.send_message(
                 chat_id,
-                f"Заметка к покупке №{order_id}? Ответь текстом — сохраню в карточку.\n"
-                "Пришли «без заметки», чтобы стереть текущую.",
+                f"<b>{esc(str(item.get('label')).upper())}</b>\n\n{esc(str(item.get('answer')))}",
+                inline_keyboard([[(icon("support", "← Поддержка"), "support")]]),
             )
+            return True
+        elif data == "faqadd" and self.is_admin(user_id):
+            self.db.set_state(user_id, "faq_add", {"step": "label"})
+            self.api.send_message(chat_id, "Название кнопки? Например: «Доставка».")
+            return True
+        elif data.startswith("faqedit:") and self.is_admin(user_id):
+            key = data.split(":", 1)[1]
+            item = next((i for i in self.faq_items() if str(i.get("key")) == key), None)
+            if not item:
+                self.admin_faqs(chat_id)
+                return True
+            self.db.set_state(user_id, "faq_edit", {"key": key, "step": "label"})
+            self.api.send_message(
+                chat_id,
+                f"Новое название кнопки для ответа? Сейчас: {esc(str(item.get('label')))}.",
+            )
+            return True
+        elif data.startswith("faqdel:") and self.is_admin(user_id):
+            key = data.split(":", 1)[1]
+            items = [i for i in self.faq_items() if str(i.get("key")) != key]
+            self.save_faq_items(items)
+            self.admin_faqs(chat_id)
+            return True
+        elif data.startswith("announce:") and self.is_admin(user_id):
+            self.announce_product(chat_id, user_id, data.split(":", 1)[1])
             return True
         elif data == "rlist" and self.is_admin(user_id):
             self.admin_refunds(chat_id)
@@ -5370,9 +5513,7 @@ class BrandBot:
             return True
         elif data.startswith("rdone:") and self.is_admin(user_id):
             pid = data.split(":", 1)[1]
-            with self.db.lock, self.db.connection() as conn:
-                conn.execute("UPDATE payments SET status='refunded' WHERE payment_id=?",
-                             (pid,))
+            self.db.mark_payment_refunded(pid)
             self.db.event(chat_id, "payment_refunded", {"payment_id": pid})
             self.admin_refunds(chat_id)
             return True
@@ -5442,7 +5583,7 @@ class BrandBot:
         self.db.upsert_user(user)
         if self.db.get_state(user_id) and self.handle_add_product_text(chat_id, user_id, text):
             return
-        if self.handle_order_note_text(chat_id, user_id, text):
+        if self.handle_faq_text(chat_id, user_id, text):
             return
         if text.startswith("/") and self.admin_command(chat_id, user_id, text):
             return

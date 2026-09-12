@@ -414,8 +414,6 @@ class LimiterRegressionTests(unittest.TestCase):
         self.assertLessEqual(len(limiter.hits), 4096)
 
 
-if __name__ == '__main__':
-    unittest.main()
 
 
 class WaitlistRegressionTests(unittest.TestCase):
@@ -653,7 +651,8 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.db.add_admin(7, 1)
         for who, expected in ((1, True), (7, True), (9, False)):
             markup = self.bot.main_menu(who)['inline_keyboard']
-            targets = [b['callback_data'] for row in markup for b in row]
+            targets = [b['callback_data'] for row in markup for b in row
+                       if b.get('callback_data')]
             self.assertEqual('adm:panel' in targets, expected, who)
 
     def test_reports_screen_lists_sent_broadcasts(self):
@@ -729,14 +728,15 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         from bot import utc_now
         self.db.connection().execute(
             "INSERT INTO orders(user_id, product_id, product_name, size, quantity, "
-            "amount_rub, status, created_at) VALUES (5, 'tee', 'Футболка', 'L', 1, 4900, 'paid', ?)",
+            "phone, amount_rub, status, created_at) "
+            "VALUES (5, 'tee', 'Футболка', 'L', 1, '', 4900, 'paid', ?)",
             (utc_now(),))
         order_id = self.db.connection().execute("SELECT id FROM orders ORDER BY id DESC").fetchone()[0]
         self.bot.admin_order_card(1, order_id)
         markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
         targets = [b['callback_data'] for row in markup for b in row]
         self.assertIn('aclient:5', targets)
-        self.assertEqual(targets[-1], 'menu')
+        self.assertEqual(targets[-1], 'adm:panel')
         self.api.send_message.reset_mock()
         self.assertTrue(self.bot.route_callback('cb', 1, 1, 'aclient:5'))
         text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
@@ -763,6 +763,8 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
         self.db.add_admin(7, 1)
         self.db.event(1, 'giveaway_drawn', {'winners': [1], 'pool': 1, 'count': 1})
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        self.db.connection().execute("UPDATE users SET invited_count=4 WHERE user_id=5")
         self.assertFalse(self.bot.route_callback('cb1', 1, 7, 'draw:up'))
         self.assertEqual(self.bot.giveaway_threshold(), 3)
         self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'draw:up'))
@@ -782,22 +784,9 @@ class OwnerAccessRegressionTests(unittest.TestCase):
             "VALUES ('pay-t1', 5, 4900, 'paid', 'card', ?, ?)", (utc_now(), utc_now()))
         conn.execute(
             "INSERT INTO orders(user_id, product_id, product_name, size, quantity, "
-            "amount_rub, status, payment_id, created_at) "
-            "VALUES (5, 'tee', 'Футболка', 'L', 1, 4900, 'paid', 'pay-t1', ?)", (utc_now(),))
+            "phone, amount_rub, status, payment_id, created_at) "
+            "VALUES (5, 'tee', 'Футболка', 'L', 1, '', 4900, 'paid', 'pay-t1', ?)", (utc_now(),))
         return conn.execute("SELECT id FROM orders ORDER BY id DESC").fetchone()[0]
-
-    def test_order_note_button_saves_and_shows(self):
-        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
-        order_id = self._paid_order_with_payment()
-        self.assertTrue(self.bot.route_callback('cb1', 1, 1, f'anote:{order_id}'))
-        self.assertTrue(self.bot.handle_order_note_text(1, 1, 'Забрать в субботу'))
-        self.assertEqual(self.db.get_order(order_id)['note'], 'Забрать в субботу')
-        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
-        self.assertIn('Забрать в субботу', text)
-        self.api.send_message.reset_mock()
-        self.bot.db.set_state(1, 'order_note', {'order': order_id})
-        self.assertTrue(self.bot.handle_order_note_text(1, 1, 'без заметки'))
-        self.assertEqual(self.db.get_order(order_id)['note'], '')
 
     def test_refund_reason_buttons_and_done(self):
         self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
@@ -838,3 +827,50 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
         self.assertIn('Скидка до вечера', text)
         self.assertIn('ПРЕДПРОСМОТР', text)
+
+
+if __name__ == '__main__':
+    unittest.main()
+
+    def test_support_faq_buttons_and_owner_edit(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        self.assertTrue(self.bot.route_callback('cb1', 1, 5, 'support'))
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [b['callback_data'] for row in markup for b in row]
+        self.assertIn('faq:where', targets)
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb2', 1, 5, 'faq:where'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Мои покупки', text)
+        self.assertTrue(self.bot.admin_command(1, 1, '/faqs'))
+        self.assertTrue(self.bot.route_callback('cb3', 1, 1, 'faqadd'))
+        self.assertTrue(self.bot.handle_faq_text(1, 1, 'Доставка'))
+        self.assertTrue(self.bot.handle_faq_text(1, 1, 'СДЭК по будням, бесплатно от 5 000.'))
+        items = self.bot.faq_items()
+        self.assertEqual(items[-1]['label'], 'Доставка')
+        self.api.send_message.reset_mock()
+        self.bot.show_support(1, 5)
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [b['callback_data'] for row in markup for b in row]
+        self.assertIn(f"faq:{items[-1]['key']}", targets)
+        self.assertTrue(self.bot.route_callback('cb4', 1, 1, f"faqdel:{items[-1]['key']}"))
+        self.assertNotIn('Доставка', [i['label'] for i in self.bot.faq_items()])
+
+    def test_announce_button_drafts_broadcast_from_product(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        product = self.bot.catalog.add_product({
+            'category': 'tee', 'name': 'Футболка анонс', 'price': '4 900',
+            'sizes': ['S', 'M'], 'description': 'Плотный хлопок, оверсайз.'})
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, f"announce:{product['id']}"))
+        state = self.db.get_state(1)
+        self.assertEqual(state[0], 'broadcast_pending')
+        self.assertIn('Новинка: Футболка анонс', state[1]['text'])
+        self.assertIn('4 900', state[1]['text'])
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('КОМУ ПИШЕМ', text)
+
+
+class FaqAnnounceRegressionTests(unittest.TestCase):
+    pass
