@@ -645,3 +645,24 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.api.send_message.reset_mock()
         self.assertTrue(self.bot.admin_command(1, 1, '/draws'))
         self.assertIn('@two', self.texts())
+
+    def test_start_menu_gives_staff_the_management_window(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
+        self.db.upsert_user({'id': 9, 'username': 'buyer', 'first_name': 'Боря'})
+        self.db.add_admin(7, 1)
+        for who, expected in ((1, True), (7, True), (9, False)):
+            markup = self.bot.main_menu(who)['inline_keyboard']
+            targets = [b['callback_data'] for row in markup for b in row]
+            self.assertEqual('adm:panel' in targets, expected, who)
+
+    def test_reports_screen_lists_sent_broadcasts(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.assertTrue(self.bot.admin_command(1, 1, '/reports'))
+        self.assertIn('Рассылок ещё не было', " ".join(
+            str(c.args[1]) for c in self.api.send_message.call_args_list))
+        self.db.event(1, 'broadcast_sent', {'delivered': 8, 'failed': 0, 'segment': 'all'})
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/reports'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('доставлено 8', text)

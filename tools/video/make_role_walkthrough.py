@@ -339,13 +339,16 @@ def wait_event(rec: Recorder, chat: int, fragment: str, timeout: float = 15.0) -
 
 def run_owner(bot: BrandBot, db: Database, rec: Recorder, director: Director) -> None:
     # Пульт владельца: деньги, аудитория и рассылка — то, что команда не трогает.
-    director.say("/panel")
+    # Вход_native: из /start владелец видит кнопку «Управление магазином».
+    director.say("/start")
+    director.tap("adm:panel")
     director.tap("adm:summary")
     director.tap("adm:panel")
     director.say("/broadcast Футболка «Сила и честь»: размер L — последние штуки. Кто ждал — забирайте.")
     director.tap("seg:all")
     director.tap("admin:broadcast_confirm")
     wait_event(rec, director.chat, "РАССЫЛКА ГОТОВА")
+    director.say("/reports")
     director.tap("adm:panel")
     director.say("/giveaway 1")
     director.tap("adm:panel")

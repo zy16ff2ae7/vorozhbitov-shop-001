@@ -1130,6 +1130,11 @@ class Database:
             ORDER BY a.user_id
             """))
 
+    def recent_broadcasts(self, limit: int = 5) -> list[sqlite3.Row]:
+        return list(self.connection().execute(
+            "SELECT created_at, payload FROM events WHERE event='broadcast_sent' "
+            "ORDER BY id DESC LIMIT ?", (limit,)))
+
     def recent_draws(self, limit: int = 5) -> list[sqlite3.Row]:
         return list(self.connection().execute(
             "SELECT created_at, payload FROM events WHERE event='giveaway_drawn' "
@@ -1995,6 +2000,7 @@ def staff_commands() -> list[dict[str, str]]:
         {"command": "broadcast", "description": "Рассылка: /broadcast текст"},
         {"command": "access", "description": "Доступ команды"},
         {"command": "draws", "description": "История розыгрышей"},
+        {"command": "reports", "description": "Журнал рассылок"},
         {"command": "grant", "description": "Назначить админа: /grant id"},
         {"command": "help", "description": "Как это работает"},
     ]
@@ -2427,6 +2433,10 @@ class BrandBot:
                 [(icon("account", "Кабинет"), "account"), (icon("support", "Поддержка"), "support")],
             ]
         )
+        if chat_id and self.is_admin(int(chat_id)):
+            # Владелец и админы видят вход в пульт прямо из /start:
+            # управление магазином — такое же главное окно, как каталог.
+            rows.append([(icon("tools", "Управление магазином"), "adm:panel")])
         if self.settings.webapp_url.startswith("https://"):
             rows.append([(f"Открыть витрину {ICON['outside']}", f"webapp:{self.settings.webapp_url}")])
         return inline_keyboard(rows)
@@ -4131,6 +4141,8 @@ class BrandBot:
             self.admin_access(chat_id)
         elif command == "/draws":
             self.admin_draws(chat_id)
+        elif command == "/reports":
+            self.admin_reports(chat_id)
         elif command == "/grant":
             self.grant_admin(chat_id, user_id, argument)
         elif command == "/revoke":
@@ -4477,6 +4489,23 @@ class BrandBot:
         self.api.send_message(chat_id, f"{ICON['cancel']} Доступ снят: {esc(self._who(target))}.",
                               inline_keyboard(staff_nav_rows()))
         self.admin_access(chat_id)
+
+    def admin_reports(self, chat_id: int) -> None:
+        """Журнал рассылок: отчёты потока видны и после перезапуска бота."""
+        rows = self.db.recent_broadcasts(5)
+        if not rows:
+            self.api.send_message(
+                chat_id, "<b>ЖУРНАЛ РАССЫЛОК</b>\n\nРассылок ещё не было.\n"
+                         "<code>/broadcast текст</code> — и отчёт ляжет сюда.",
+                inline_keyboard(staff_nav_rows()))
+            return
+        lines = ["<b>ЖУРНАЛ РАССЫЛОК</b>", ""]
+        for row in rows:
+            payload = json.loads(row["payload"] or "{}")
+            label = audience_label(str(payload.get("segment", "all")), self.catalog.categories)
+            lines.append(f"{esc(str(row['created_at'])[:16])} · {esc(label)} · "
+                         f"доставлено {payload.get('delivered', 0)}, ошибок {payload.get('failed', 0)}")
+        self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(staff_nav_rows()))
 
     def admin_draws(self, chat_id: int) -> None:
         """История розыгрышей: тираж без записи нельзя проверить постфактум."""
