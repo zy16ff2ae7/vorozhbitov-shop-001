@@ -3902,16 +3902,24 @@ class BrandBot:
                 )
             else:
                 winners = random.sample(pool, min(count, len(pool)))
+                # Розыгрыш нигде больше не виден: без записи нельзя ни проверить
+                # прошлый тираж, ни понять, почему человек выиграл дважды.
+                self.db.event(user_id, "giveaway_drawn",
+                              {"winners": list(winners), "pool": len(pool), "count": count})
                 lines = [f"<b>Победители ({len(winners)})</b>", ""]
                 for winner_id in winners:
                     user = self.db.get_user(winner_id)
                     username = f"@{user['username']}" if user and user["username"] else str(winner_id)
                     lines.append(f"{esc(username)} — id {winner_id}")
                     try:
+                        # Победителю сказано «напиши менеджеру» — значит, нужна
+                        # и кнопка: сообщение без выхода заканчивается тупиком.
                         self.api.send_message(
                             winner_id,
                             "<b>Ты в розыгрыше</b>\n\n"
                             "Ссылка сработала. Напиши менеджеру — заберёшь вещь из выпуска первым.",
+                            inline_keyboard([[(icon("support", "Написать менеджеру →"), "support")],
+                                             [(icon("catalog", "Смотреть витрину"), "catalog")]]),
                         )
                     except Exception:
                         LOG.warning("Could not notify winner %s", winner_id)

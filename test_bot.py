@@ -2258,6 +2258,31 @@ class NativeMenuTests(unittest.TestCase):
             self.assertIn("adm:panel", button_targets(markup))
             self.assertEqual(len(bot.catalog.products_by_id), known, "память потеряла рабочий каталог")
 
+    def test_giveaway_winner_is_not_left_without_a_way_out(self):
+        """Победителю сказано «напиши менеджеру» — значит, нужна и кнопка."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api, giveaway_min_invites=2)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+            for uid in (801, 802):
+                db.upsert_user({"id": uid, "username": f"u{uid}", "first_name": f"U{uid}"})
+                # Пул розыгрыша собирается из приглашений — тем же путём, что в жизни.
+                for guest in range(3):
+                    db.upsert_user({"id": uid * 100 + guest, "username": f"g{uid}{guest}",
+                                    "first_name": "Гость"}, source=f"ref{uid}")
+            bot.admin_command(1, 1, "/giveaway 2")
+            self.assertIn("Победители (2)", api.last(1)[1])
+            for uid in (801, 802):
+                _, text, markup = api.last(uid)
+                self.assertIn("Ты в розыгрыше", text)
+                targets = button_targets(markup)
+                self.assertIn("support", targets, "у победителя нет кнопки менеджера")
+                self.assertIn("catalog", targets)
+            drawn = [row for row in db.connection().execute(
+                "SELECT payload FROM events WHERE event='giveaway_drawn'")]
+            self.assertEqual(len(drawn), 1, "розыгрыш не оставил следа в событиях")
+            self.assertEqual(sorted(json.loads(drawn[0]["payload"])["winners"]), [801, 802])
+
     def test_restock_notifies_each_waiter_once(self):
         """Одна запись листа ожидания — одно сообщение; купленный размер закрывает ожидание."""
         with tempfile.TemporaryDirectory() as directory:
