@@ -2409,6 +2409,25 @@ class BrandBot:
         """Старая или несуществующая кнопка: объясняем и открываем актуальное меню."""
         self.send_menu(chat_id, f"{reason}\nОткрыл актуальное меню.")
 
+    def answer_press(self, callback_id: str, text: str = "") -> None:
+        """Снять «часики» с кнопки. Отказ Telegram не должен мешать экрану."""
+        try:
+            self.api.answer_callback(callback_id, text)
+        except Exception as exc:
+            LOG.warning("Could not answer callback %s: %s", callback_id, exc)
+
+    def recover(self, chat_id: int, reason: str) -> None:
+        """Сбой не должен выглядеть как молчание: объясняем и открываем меню.
+
+        Человек нажал или написал — значит, он ждёт ответа. Если обработка
+        упала, экран с кнопками важнее точной причины: причина уходит в лог,
+        а собеседник получает выход, а не тишину до следующего /start.
+        """
+        try:
+            self.send_menu(chat_id, f"{reason}\nПопробуй ещё раз или напиши менеджеру.")
+        except Exception as exc:
+            LOG.error("Recovery screen failed for chat %s: %s", chat_id, exc)
+
     def interest_menu(self) -> dict[str, Any]:
         """Первый вопрос новому покупателю: те же две колонки, что и в главном меню."""
         options = [(category["name"], f"intr:{category['id']}") for category in self.catalog.categories[:6]]
@@ -4702,20 +4721,23 @@ class BrandBot:
         chat_id = chat["id"]
         user_id = int(user["id"])
         if chat.get("type") != "private":
-            self.api.answer_callback(callback_id, "Открой бота в личных сообщениях")
+            self.answer_press(callback_id, "Открой бота в личных сообщениях")
             return
-        self.db.upsert_user(user)
-        self.api.answer_callback(callback_id)
+        self.answer_press(callback_id)
         pressed = callback["message"].get("message_id")
         if (isinstance(pressed, int) and not isinstance(pressed, bool) and pressed > 0
                 and not data.startswith(self.NON_EDITABLE_CALLBACKS)):
             self._screen_edit = (int(chat_id), pressed)
         try:
+            self.db.upsert_user(user)
             if self.route_callback(callback_id, chat_id, user_id, data):
                 return
             # Кнопка устарела или пришла из старого сообщения: не молчим и не
             # пугаем ошибкой, а открываем актуальный экран.
             self.stale(chat_id, "Эта кнопка устарела.")
+        except Exception:
+            LOG.exception("Callback %r failed for user %s", data, user_id)
+            self.recover(chat_id, "Экран не открылся.")
         finally:
             self._screen_edit = None
 
@@ -4860,6 +4882,18 @@ class BrandBot:
         return True
 
     def handle_message(self, message: dict[str, Any]) -> None:
+        """Обработка сообщения: сбой объясняем экраном, а не тишиной."""
+        try:
+            self.route_message(message)
+        except Exception:
+            LOG.exception("Failed to handle message")
+            chat = message.get("chat") if isinstance(message, dict) else None
+            chat = chat if isinstance(chat, dict) else {}
+            chat_id = chat.get("id")
+            if isinstance(chat_id, int) and str(chat.get("type") or "private") == "private":
+                self.recover(chat_id, "Сообщение не обработалось.")
+
+    def route_message(self, message: dict[str, Any]) -> None:
         if "from" not in message or "chat" not in message:
             return
         user = message["from"]

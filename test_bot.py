@@ -2357,6 +2357,64 @@ class NativeMenuTests(unittest.TestCase):
             self.assertEqual(len(api.sends), 1)
             self.assertTrue(api.sends[0][1].strip())
 
+    def test_broken_button_is_answered_with_a_screen_not_silence(self):
+        """Сбой внутри нажатия не оставляет человека без ответа и без кнопок."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+
+            def press(data, message_id=31):
+                return bot.handle_update({
+                    "update_id": 1,
+                    "callback_query": {"id": "cb", "chat_instance": "x", "data": data,
+                                       "from": self.USER,
+                                       "message": {"message_id": message_id,
+                                                   "chat": {"id": 500, "type": "private"}}},
+                })
+
+            def boom(*args, **kwargs):
+                raise RuntimeError("база не отвечает")
+
+            bot.route_callback = boom
+            self.assertTrue(press("catalog"), "сбой кнопки вышел наружу")
+            text, markup = api.last(500)[1:]
+            self.assertIn("не открылся", text.lower(), "о сбое ничего не сказано")
+            self.assertTrue(button_targets(markup), "после сбоя человек остался без кнопок")
+            self.assertIsNone(bot._screen_edit, "захват правки не погашен после сбоя")
+
+            # Ответ на нажатие не обязан доходить: экран важнее «часиков».
+            api.sent.clear()
+            api.answer_callback = boom
+            self.assertTrue(press("account"))
+            self.assertTrue(api.last(500)[1].strip(), "экран потерялся из-за сбоя answerCallbackQuery")
+
+    def test_broken_message_is_answered_with_a_screen_not_silence(self):
+        """Сбой на тексте объясняют экраном, а не тишиной до следующего /start."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+
+            def boom(*args, **kwargs):
+                raise RuntimeError("сбой разбора")
+
+            bot.admin_command = boom
+            handled = bot.handle_update({"update_id": 2, "message": {
+                "message_id": 4, "date": 0, "chat": {"id": 500, "type": "private"},
+                "from": self.USER, "text": "/stats"}})
+            self.assertTrue(handled, "сбой сообщения вышел наружу")
+            text, markup = api.last(500)[1:]
+            self.assertIn("не обработалось", text.lower())
+            self.assertTrue(button_targets(markup), "после сбоя текста не осталось кнопок")
+
+            # В группе чужой экран не показываем: там только ответ на нажатие.
+            api.sent.clear()
+            bot.handle_update({"update_id": 3, "message": {
+                "message_id": 5, "date": 0, "chat": {"id": -100, "type": "group"},
+                "from": self.USER, "text": "/stats"}})
+            self.assertEqual(len(api.sent), 0, "в группе появился лишний экран")
+
     def test_waitlist_can_be_seen_and_left(self):
         """Подписаться на размер можно было и раньше — теперь из листа можно выйти."""
         with tempfile.TemporaryDirectory() as directory:
