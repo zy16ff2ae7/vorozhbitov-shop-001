@@ -68,7 +68,9 @@ def callback(user_id: int, data: str) -> dict:
             "id": f"cb{len(SENT)}",
             "data": data,
             "from": {"id": user_id, "username": f"user{user_id}", "first_name": "Никита"},
-            "message": {"chat": {"id": user_id, "type": "private"}},
+            # message_id есть в настоящем callback всегда: по нему бот правит
+            # экран на месте вместо нового сообщения, и расшифровка это показывает.
+            "message": {"message_id": len(SENT) + 1, "chat": {"id": user_id, "type": "private"}},
         },
     }
 
@@ -125,11 +127,24 @@ def run_scenarios(workdir: Path) -> int:
         ("Реферальная механика", callback(500, "referral")),
         ("Лист ожидания", callback(500, "wsize:tee-sila-i-chest:XXL")),
         ("Lookbook", callback(500, "lookbook")),
+        # native-меню: главный экран, покупки, карточка покупки, кабинет и поддержка.
+        ("Главное меню покупателя", message(500, "/menu")),
+        ("Мои покупки", callback(500, "my_orders")),
+        ("Карточка покупки", callback(500, "ord:1")),
+        ("Продолжить оплату", lambda: callback(500, f"draft:{db.pending_payment(500)[0]}")),
+        ("Способ оплаты", lambda: callback(500, f"pay:{db.pending_payment(500)[0]}:stars")),
+        ("Мой кабинет", callback(500, "account")),
+        ("Поддержка", callback(500, "support")),
+        ("Вопрос по покупке", callback(500, "ask")),
+        ("Вопрос ушёл менеджеру", callback(500, "ask:1")),
+        ("Старая кнопка на снятую вещь", callback(500, "product:honor-hoodie")),
+        ("Неизвестная кнопка", callback(500, "legacy:unknown")),
         ("Панель администратора", message(1, "/admin")),
-        ("Статистика", message(1, "/stats")),
-        ("Заявки", message(1, "/orders")),
-        ("Подтверждение заявки", callback(1, "order:1:confirmed")),
-        ("Завершение заявки", callback(1, "order:1:completed")),
+        ("Сводка", message(1, "/stats")),
+        ("Покупки у команды", message(1, "/orders")),
+        ("Карточка покупки у команды", callback(1, "aord:1")),
+        ("Подтверждение покупки", callback(1, "order:1:confirmed")),
+        ("Завершение покупки", callback(1, "order:1:completed")),
         ("Второй пользователь по реф-ссылке", message(600, "/start ref500")),
         ("Топ рефералов", message(1, "/top")),
         ("Черновик рассылки", message(1, "/broadcast ВЫПУСК СЕГОДНЯ В 19:00 — размеры разберут за час")),
@@ -149,7 +164,8 @@ def run_scenarios(workdir: Path) -> int:
     for title, update in steps:
         print(f"\n=== {title} ===")
         SENT.clear()
-        if title == "Подтверждение заявки":
+        update = update() if callable(update) else update
+        if title == "Подтверждение покупки":
             order = db.get_order(1)
             assert order and order["status"] == "awaiting_payment", "checkout did not create an unpaid order"
             assert db.mark_payment_paid(order["payment_id"], "stars", "smoke-charge"), "payment failed"
@@ -157,9 +173,9 @@ def run_scenarios(workdir: Path) -> int:
         if title == "Старт нового пользователя":
             assert any(method == "sendPhoto" for method, _ in SENT), "welcome photo missing"
             assert any(method == "sendVideo" for method, _ in SENT), "teaser missing"
-        if title == "Подтверждение заявки":
+        if title == "Подтверждение покупки":
             assert db.get_order(1)["status"] == "confirmed", "confirmation failed"
-        if title == "Завершение заявки":
+        if title == "Завершение покупки":
             assert db.get_order(1)["status"] == "completed", "completion failed"
         show()
 

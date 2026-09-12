@@ -4,6 +4,7 @@ from dataclasses import replace
 import hashlib
 import hmac
 import json
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -14,7 +15,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from bot import BrandBot, Catalog, Database, RateLimiter, Settings, start_health_server
+from testkit import make_settings
+from bot import BrandBot, Catalog, Database, RateLimiter, Settings, STOP_EVENT, polling_loop, start_health_server
 
 
 class CheckoutRegressionTests(unittest.TestCase):
@@ -22,13 +24,7 @@ class CheckoutRegressionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
-        self.settings = Settings(
-            token='audit-test-token', admin_ids=frozenset(), channel_url='https://t.me/test',
-            webapp_url='https://example.com', manager_chat_id=None, brand_name='Test',
-            support_username='', database_path=root / 'test.sqlite',
-            catalog_path=Path(__file__).with_name('catalog.json'), health_port=0,
-            giveaway_min_invites=3, privacy_url='',
-        )
+        self.settings = make_settings(root / 'test.sqlite', catalog_path=Path(__file__).with_name('catalog.json'), token='audit-test-token', admin_ids=frozenset(), channel_url='https://t.me/test', webapp_url='https://example.com', manager_chat_id=None, brand_name='Test', support_username='', health_port=0, giveaway_min_invites=3, privacy_url='')
         self.db = Database(self.settings.database_path)
         self.addCleanup(self.db.close_current)
         self.api = Mock()
@@ -213,7 +209,7 @@ class CheckoutRegressionTests(unittest.TestCase):
                              'M', '+79990000000', status='awaiting_payment', payment_id='legacy', amount_rub=4900)
         response = self.checkout()
         self.assertFalse(response['ok'])
-        self.assertIn('Мои заявки', response['error'])
+        self.assertIn('Мои покупки', response['error'])
         self.assertEqual(self.db.stats()['orders'], 1)
 
     def test_legacy_chat_callback_does_not_duplicate_order(self):
@@ -411,6 +407,548 @@ class LimiterRegressionTests(unittest.TestCase):
         for i in range(10000):
             limiter.allow(str(i), now=0)
         self.assertLessEqual(len(limiter.hits), 4096)
+
+
+
+
+class WaitlistRegressionTests(unittest.TestCase):
+    """Лист ожидания под нагрузкой: гонки, сбой отправки и старая схема базы."""
+
+    PRODUCT = 'tee-sila-i-chest'
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.settings = make_settings(root / 'test.sqlite', catalog_path=Path(__file__).with_name('catalog.json'), token='audit-test-token', admin_ids=frozenset({1}), channel_url='https://t.me/test', webapp_url='https://example.com', manager_chat_id=None, brand_name='Test', support_username='', health_port=0, giveaway_min_invites=3, privacy_url='')
+        self.db = Database(self.settings.database_path)
+        self.addCleanup(self.db.close_current)
+        self.api = Mock()
+        self.api.create_invoice_link.return_value = 'https://t.me/invoice/mock'
+        self.catalog = Catalog(self.settings.catalog_path)
+        self.bot = BrandBot(self.settings, self.api, self.db, self.catalog)
+
+    def waiter(self, user_id, size='M'):
+        self.db.upsert_user({'id': user_id, 'first_name': f'U{user_id}'})
+        self.assertTrue(self.db.add_to_waitlist(user_id, self.catalog.get(self.PRODUCT), size))
+
+    def pings(self, user_id):
+        return sum(1 for call in self.api.send_message.call_args_list
+                   if call.args and call.args[0] == user_id and 'РАЗМЕР ВЕРНУЛСЯ' in str(call.args[1]))
+
+    def test_buying_the_size_removes_the_waitlist_entry(self):
+        self.waiter(420, 'M')
+        self.bot.checkout_web_payload({'id': 420, 'first_name': 'Test'}, {
+            'request_id': 'wait-1', 'consent': True,
+            'customer': {'phone': '+79990000000', 'city': 'Test'},
+            'items': [{'product_id': self.PRODUCT, 'size': 'M', 'quantity': 1}]})
+        self.assertEqual(self.db.waitlist_user_ids(self.PRODUCT, 'M'), [])
+        self.assertEqual(self.db.waitlist_user_ids(self.PRODUCT, 'S'), [])
+
+    def test_repeat_restock_notifies_once(self):
+        self.waiter(421)
+        self.assertEqual(self.bot.notify_waitlist(self.PRODUCT, 'M'), 1)
+        self.assertEqual(self.bot.notify_waitlist(self.PRODUCT, 'M'), 0)
+        self.assertEqual(self.pings(421), 1)
+
+    def test_concurrent_restock_sends_one_message_per_waiter(self):
+        """Шесть одновременных /restock давали 48 одинаковых сообщений восьмерым."""
+        waiters = list(range(430, 438))
+        for uid in waiters:
+            self.waiter(uid, 'S')
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(pool.map(lambda _: self.bot.notify_waitlist(self.PRODUCT, 'S'), range(6)))
+        self.assertEqual(sum(results), len(waiters))
+        for uid in waiters:
+            self.assertEqual(self.pings(uid), 1, f'{uid} получил больше одного сообщения')
+
+    def test_failed_notification_keeps_the_waiter_queued(self):
+        self.waiter(441); self.waiter(442)
+        # Считаем только реально ушедшие сообщения: Mock помнит и неудачные вызовы.
+        delivered = []
+        failing = {441}
+
+        def send(chat_id, text, reply_markup=None):
+            if chat_id in failing:
+                raise RuntimeError('Telegram HTTP 429: too many requests')
+            delivered.append((chat_id, text))
+            return {'ok': True}
+
+        self.api.send_message.side_effect = send
+        self.assertEqual(self.bot.notify_waitlist(self.PRODUCT, 'M'), 1)
+        failing.clear()
+        self.assertEqual(self.bot.notify_waitlist(self.PRODUCT, 'M'), 1, 'недошедшее сообщение повторили')
+        pings = lambda uid: sum(1 for chat_id, text in delivered
+                                if chat_id == uid and 'РАЗМЕР ВЕРНУЛСЯ' in text)
+        self.assertEqual(pings(441), 1)
+        self.assertEqual(pings(442), 1, 'доставленного раньше не дублировали')
+
+    def test_old_database_gains_the_notified_at_column(self):
+        legacy = Path(self.temp.name) / 'legacy.sqlite'
+        conn = sqlite3.connect(legacy)
+        conn.executescript(
+            """CREATE TABLE waitlist (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+                 product_id TEXT NOT NULL, product_name TEXT NOT NULL, size TEXT NOT NULL,
+                 created_at TEXT NOT NULL, UNIQUE(user_id, product_id, size));
+               INSERT INTO waitlist(user_id, product_id, product_name, size, created_at)
+                 VALUES (5, 'tee', 'СИЛА', 'M', '2026-01-01');"""
+        )
+        conn.commit(); conn.close()
+        migrated = Database(legacy)
+        self.addCleanup(migrated.close_current)
+        columns = [row[1] for row in migrated.connection().execute('PRAGMA table_info(waitlist)')]
+        self.assertIn('notified_at', columns)
+        self.assertEqual(migrated.connection().execute('SELECT COUNT(*) FROM waitlist').fetchone()[0], 1)
+        self.assertEqual(migrated.claim_waitlist('tee', 'M'), [(5, 1)])
+        self.assertEqual(migrated.claim_waitlist('tee', 'M'), [])
+
+
+class PollingLoopRegressionTests(unittest.TestCase):
+    """Очередь обновлений: одно отравленное обновление не должно останавливать бота."""
+
+    class FakeAPI:
+        def __init__(self, batches):
+            self.batches, self.offsets = list(batches), []
+
+        def call(self, method, payload=None, timeout=None):
+            self.offsets.append(payload.get('offset'))
+            if not self.batches:
+                STOP_EVENT.set()
+                return []
+            return self.batches.pop(0)
+
+    class FakeBot:
+        def __init__(self, poison=()):
+            self.seen, self.poison = [], set(poison)
+
+        def handle_update(self, update):
+            uid = update.get('update_id') if isinstance(update, dict) else None
+            self.seen.append(uid)
+            if uid in self.poison:
+                raise RuntimeError('сбой вокруг обработчика')
+            return True
+
+    def poll(self, batches, poison=()):
+        STOP_EVENT.clear()
+        self.addCleanup(STOP_EVENT.clear)
+        api = self.FakeAPI(batches)
+        bot = self.FakeBot(poison)
+        polling_loop(api, bot)
+        return api, bot
+
+    def test_poison_update_is_skipped_and_the_queue_moves_on(self):
+        """Без пропуска смещения бот вечно перезапрашивал бы одно обновление."""
+        batch = [{'update_id': 1}, {'update_id': 2}, {'update_id': 3},
+                 {'message': {}}, 'не словарь', {'update_id': '5'}]
+        api, bot = self.poll([batch, [{'update_id': 9}], []], poison={2})
+        self.assertEqual(bot.seen, [1, 2, 3, None, '5', 9])
+        self.assertGreaterEqual(api.offsets[-1], 6)
+
+    def test_unexpected_getupdates_payload_does_not_stop_polling(self):
+        api, bot = self.poll([{'unexpected': 'dict вместо списка'}, [{'update_id': 7}], []])
+        self.assertEqual(bot.seen, [7])
+        self.assertGreaterEqual(api.offsets[-1], 8)
+
+
+class OwnerAccessRegressionTests(unittest.TestCase):
+    """Владелец раздаёт и снимает доступ команды; история розыгрышей проверяема."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.settings = make_settings(root / 'test.sqlite', catalog_path=Path(__file__).with_name('catalog.json'), token='owner-test-token', admin_ids=frozenset({1}), channel_url='https://t.me/test', webapp_url='https://example.com', manager_chat_id=None, brand_name='Test', support_username='', health_port=0, giveaway_min_invites=3, privacy_url='')
+        self.db = Database(self.settings.database_path)
+        self.addCleanup(self.db.close_current)
+        self.api = Mock()
+        self.bot = BrandBot(self.settings, self.api, self.db, Catalog(self.settings.catalog_path))
+
+    def texts(self):
+        return " ".join(str(call.args[1]) for call in self.api.send_message.call_args_list)
+
+    def test_owner_grants_admin_and_admin_cannot_grant(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
+        self.db.upsert_user({'id': 8, 'username': 'newbie', 'first_name': 'Ника'})
+        self.assertFalse(self.bot.is_admin(7))
+        self.assertTrue(self.bot.admin_command(1, 1, '/grant 7'))
+        self.assertTrue(self.db.is_admin_id(7))
+        self.assertTrue(self.bot.is_admin(7))
+        self.assertFalse(self.bot.is_owner(7))
+        self.assertIn('теперь админ', self.texts())
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 7, '/grant 8'))
+        self.assertFalse(self.db.is_admin_id(8))
+        self.assertIn('только владелец', self.texts())
+
+    def test_unknown_stranger_cannot_be_granted(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.assertTrue(self.bot.admin_command(1, 1, '/grant 999'))
+        self.assertFalse(self.db.is_admin_id(999))
+        self.assertIn('нет в базе', self.texts())
+
+    def test_revoke_by_button_is_owner_only(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
+        self.db.add_admin(7, 1)
+        self.assertFalse(self.bot.route_callback('cb1', 1, 7, 'access:revoke:7'))
+        self.assertTrue(self.db.is_admin_id(7))
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'access:revoke:7'))
+        self.assertFalse(self.db.is_admin_id(7))
+        self.assertIn('Доступ снят', self.texts())
+
+    def test_access_screen_lists_owner_and_admins(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
+        self.db.add_admin(7, 1)
+        self.assertTrue(self.bot.admin_command(1, 1, '/access'))
+        text = self.texts()
+        self.assertIn('ДОСТУП КОМАНДЫ', text)
+        self.assertIn('@owner — владелец', text)
+        self.assertIn('@member — админ', text)
+
+    def test_panel_offers_access_and_draws_within_five_rows(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.bot.admin_panel(1)
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [button['callback_data'] for row in markup for button in row]
+        self.assertIn('adm:access', targets)
+        self.assertIn('adm:draws', targets)
+        self.assertLessEqual(len(markup), 5, markup)
+
+    def test_draws_screen_shows_last_draw_and_empty_state(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 2, 'username': 'two', 'first_name': 'Рина'})
+        self.assertTrue(self.bot.admin_command(1, 1, '/draws'))
+        self.assertIn('Тиражей ещё не было', self.texts())
+        self.db.event(1, 'giveaway_drawn', {'winners': [2], 'pool': 1, 'count': 1})
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/draws'))
+        self.assertIn('@two', self.texts())
+
+    def test_start_menu_gives_staff_the_management_window(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
+        self.db.upsert_user({'id': 9, 'username': 'buyer', 'first_name': 'Боря'})
+        self.db.add_admin(7, 1)
+        for who, expected in ((1, True), (7, True), (9, False)):
+            markup = self.bot.main_menu(who)['inline_keyboard']
+            targets = [b['callback_data'] for row in markup for b in row
+                       if b.get('callback_data')]
+            self.assertEqual('adm:panel' in targets, expected, who)
+
+    def test_reports_screen_lists_sent_broadcasts(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.assertTrue(self.bot.admin_command(1, 1, '/reports'))
+        self.assertIn('Рассылок ещё не было', " ".join(
+            str(c.args[1]) for c in self.api.send_message.call_args_list))
+        self.db.event(1, 'broadcast_sent', {'delivered': 8, 'failed': 0, 'segment': 'all'})
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/reports'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('доставлено 8', text)
+
+    def test_summary_offers_money_and_digest_entries(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.bot.admin_summary(1)
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [b['callback_data'] for row in markup for b in row]
+        self.assertIn('adm:money', targets)
+        self.assertIn('adm:digest', targets)
+
+    def test_money_screen_shows_revenue_and_average_check(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        from bot import utc_now
+        self.db.connection().execute(
+            "INSERT INTO payments(payment_id, user_id, amount_rub, amount_stars, status, "
+            "method, created_at, paid_at) VALUES ('p1', 5, 4900, 0, 'paid', 'stars', ?, ?)",
+            (utc_now(), utc_now()))
+        self.assertTrue(self.bot.admin_command(1, 1, '/money'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('ДЕНЬГИ', text)
+        self.assertIn('4 900', text)
+        self.assertIn('Средний чек', text)
+
+    def test_digest_lists_deficit_sizes_and_clean_states(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'waiter', 'first_name': 'Ждан'})
+        from bot import utc_now
+        self.db.connection().execute(
+            "INSERT INTO waitlist(user_id, product_id, product_name, size, created_at) "
+            "VALUES (5, 'tee-sila-i-chest', 'Футболка «Сила и честь»', 'XXL', ?)", (utc_now(),))
+        self.assertTrue(self.bot.admin_command(1, 1, '/digest'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('ЧТО СЕГОДНЯ', text)
+        self.assertIn('XXL ×1', text)
+        self.assertIn('Возвратов нет.', text)
+
+    def test_waitlist_screen_restocks_in_one_tap(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'waiter', 'first_name': 'Ждан'})
+        self.db.set_consent(5)
+        from bot import utc_now
+        self.db.connection().execute(
+            "INSERT INTO waitlist(user_id, product_id, product_name, size, created_at) "
+            "VALUES (5, 'tee-sila-i-chest', 'Футболка «Сила и честь»', 'XXL', ?)", (utc_now(),))
+        self.assertTrue(self.bot.admin_command(1, 1, '/waitlist'))
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [b['callback_data'] for row in markup for b in row]
+        self.assertIn('wnotify:tee-sila-i-chest:XXL', targets)
+        self.api.send_message.reset_mock()
+        self.assertFalse(self.bot.route_callback('cb1', 1, 5, 'wnotify:tee-sila-i-chest:XXL'))
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'wnotify:tee-sila-i-chest:XXL'))
+        texts = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('РАЗМЕР ВЕРНУЛСЯ', texts)
+        self.assertIn('Уведомлено по листу ожидания: 1', texts)
+        self.assertEqual(self.db.waitlist_unnotified(), [])
+
+    def test_order_card_links_customer_screen_with_money(self):
+        import sqlite3 as _sql
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        self.db.set_phone(5, '+79995556677')
+        from bot import utc_now
+        self.db.connection().execute(
+            "INSERT INTO orders(user_id, product_id, product_name, size, quantity, "
+            "phone, amount_rub, status, created_at) "
+            "VALUES (5, 'tee', 'Футболка', 'L', 1, '', 4900, 'paid', ?)",
+            (utc_now(),))
+        order_id = self.db.connection().execute("SELECT id FROM orders ORDER BY id DESC").fetchone()[0]
+        self.bot.admin_order_card(1, order_id)
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [b['callback_data'] for row in markup for b in row]
+        self.assertIn('aclient:5', targets)
+        self.assertEqual(targets[-1], 'adm:panel')
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb', 1, 1, 'aclient:5'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('КЛИЕНТ', text)
+        self.assertIn('+79995556677', text)
+        self.assertIn('4 900', text)
+
+    def test_shelf_button_hides_and_shows_product(self):
+        import shutil
+        from bot import Catalog
+        catalog_copy = Path(self.temp.name) / 'catalog.json'
+        shutil.copy(Path(__file__).with_name('catalog.json'), catalog_copy)
+        self.bot.catalog = Catalog(catalog_copy)
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.assertTrue(self.bot.admin_command(1, 1, '/shelf'))
+        self.assertIsNotNone(self.bot.catalog.get('tee-sila-i-chest'))
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, 'shelf:tee-sila-i-chest'))
+        self.assertIsNone(self.bot.catalog.get('tee-sila-i-chest'))
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'shelf:tee-sila-i-chest'))
+        self.assertIsNotNone(self.bot.catalog.get('tee-sila-i-chest'))
+
+    def test_draw_threshold_buttons_are_owner_only(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
+        self.db.add_admin(7, 1)
+        self.db.event(1, 'giveaway_drawn', {'winners': [1], 'pool': 1, 'count': 1})
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        self.db.connection().execute("UPDATE users SET invited_count=4 WHERE user_id=5")
+        self.assertFalse(self.bot.route_callback('cb1', 1, 7, 'draw:up'))
+        self.assertEqual(self.bot.giveaway_threshold(), 3)
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'draw:up'))
+        self.assertEqual(self.bot.giveaway_threshold(), 4)
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 7, '/top'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Приоритет дают с 4', text)
+
+    def _paid_order_with_payment(self):
+        import sqlite3 as _sql
+        from bot import utc_now
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        conn = self.db.connection()
+        conn.execute(
+            "INSERT INTO payments(payment_id, user_id, amount_rub, status, method, created_at, paid_at) "
+            "VALUES ('pay-t1', 5, 4900, 'paid', 'card', ?, ?)", (utc_now(), utc_now()))
+        conn.execute(
+            "INSERT INTO orders(user_id, product_id, product_name, size, quantity, "
+            "phone, amount_rub, status, payment_id, created_at) "
+            "VALUES (5, 'tee', 'Футболка', 'L', 1, '', 4900, 'paid', 'pay-t1', ?)", (utc_now(),))
+        return conn.execute("SELECT id FROM orders ORDER BY id DESC").fetchone()[0]
+
+    def test_refund_reason_buttons_and_done(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        order_id = self._paid_order_with_payment()
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, f'order:{order_id}:cancelled'))
+        open_rows = self.db.refunds_open()
+        self.assertEqual(len(open_rows), 1)
+        pid = open_rows[0]['payment_id']
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/refunds'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Причина не указана', text)
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, f'rreasons:{pid}'))
+        self.assertTrue(self.bot.route_callback('cb3', 1, 1, f'rreason:{pid}:size'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Не подошёл размер', text)
+        self.assertTrue(self.bot.route_callback('cb4', 1, 1, f'rdone:{pid}'))
+        self.assertEqual(self.db.refunds_open(), [])
+        self.assertEqual(self.db.money_stats()['refunds'], 0)
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Выполнено недавно', text)
+
+    def test_again_repeats_last_broadcast(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        self.db.set_phone(5, '+79995556677')
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/again'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Прошлой рассылки нет', text)
+        self.db.set_state(1, 'broadcast_pending', {'text': 'Скидка до вечера', 'segment': 'all'})
+        self.bot.confirm_broadcast(1, 1)
+        import time as _t
+        _t.sleep(0.4)
+        self.assertIn('Скидка до вечера', self.db.kv_get('last_broadcast'))
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/again'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Скидка до вечера', text)
+        self.assertIn('ПРЕДПРОСМОТР', text)
+
+
+    def test_support_faq_buttons_and_owner_edit(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        self.assertTrue(self.bot.route_callback('cb1', 1, 5, 'support'))
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [b['callback_data'] for row in markup for b in row]
+        self.assertIn('faq:where', targets)
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb2', 1, 5, 'faq:where'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Мои покупки', text)
+        self.assertTrue(self.bot.admin_command(1, 1, '/faqs'))
+        self.assertTrue(self.bot.route_callback('cb3', 1, 1, 'faqadd'))
+        self.assertTrue(self.bot.handle_faq_text(1, 1, 'Доставка'))
+        self.assertTrue(self.bot.handle_faq_text(1, 1, 'СДЭК по будням, бесплатно от 5 000.'))
+        items = self.bot.faq_items()
+        self.assertEqual(items[-1]['label'], 'Доставка')
+        self.api.send_message.reset_mock()
+        self.bot.show_support(1, 5)
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [b['callback_data'] for row in markup for b in row]
+        self.assertIn(f"faq:{items[-1]['key']}", targets)
+        self.assertTrue(self.bot.route_callback('cb4', 1, 1, f"faqdel:{items[-1]['key']}"))
+        self.assertNotIn('Доставка', [i['label'] for i in self.bot.faq_items()])
+
+    def test_announce_button_drafts_broadcast_from_product(self):
+        import shutil
+        from bot import Catalog
+        catalog_copy = Path(self.temp.name) / 'catalog.json'
+        shutil.copy(Path(__file__).with_name('catalog.json'), catalog_copy)
+        self.bot.catalog = Catalog(catalog_copy)
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        product = self.bot.catalog.add_product({
+            'category': 'tee', 'name': 'Футболка анонс', 'price': '4 900',
+            'sizes': ['S', 'M'], 'description': 'Плотный хлопок, оверсайз.'})
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, f"announce:{product['id']}"))
+        state = self.db.get_state(1)
+        self.assertEqual(state[0], 'broadcast_pending')
+        self.assertIn('Новинка: Футболка анонс', state[1]['text'])
+        self.assertIn('4 900', state[1]['text'])
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('КОМУ ПИШЕМ', text)
+
+
+
+
+    def test_unpaid_screen_nudges_buyer_once_per_cooldown(self):
+        from bot import utc_now
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        conn = self.db.connection()
+        conn.execute(
+            "INSERT INTO payments(payment_id, user_id, amount_rub, status, method, created_at) "
+            "VALUES ('pay-drop', 5, 4900, 'pending', '', ?)", (utc_now(),))
+        conn.execute(
+            "INSERT INTO orders(user_id, product_id, product_name, size, quantity, "
+            "phone, amount_rub, status, payment_id, created_at) "
+            "VALUES (5, 'tee', 'Футболка', 'L', 1, '', 4900, 'awaiting_payment', 'pay-drop', ?)",
+            (utc_now(),))
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/unpaid'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('ЖДУТ ОПЛАТЫ', text)
+        self.assertIn('4 900', text)
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, 'nudge:pay-drop'))
+        buyer_calls = [c for c in self.api.send_message.call_args_list if c.args[0] == 5]
+        self.assertEqual(len(buyer_calls), 1)
+        self.assertIn('ЖДЁТ ОПЛАТЫ', str(buyer_calls[0].args[1]))
+        markup = buyer_calls[0].args[2]['inline_keyboard']
+        self.assertIn('draft:pay-drop',
+                      [b['callback_data'] for row in markup for b in row])
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'nudge:pay-drop'))
+        buyer_calls = [c for c in self.api.send_message.call_args_list if c.args[0] == 5]
+        self.assertEqual(buyer_calls, [])
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('через 12 часов', text)
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb3', 1, 1, 'adm:digest'))
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        self.assertIn('unpaid', [b['callback_data'] for row in markup for b in row])
+
+
+
+    def test_edit_product_buttons_update_catalog(self):
+        import shutil
+        from bot import Catalog
+        catalog_copy = Path(self.temp.name) / 'catalog.json'
+        shutil.copy(Path(__file__).with_name('catalog.json'), catalog_copy)
+        self.bot.catalog = Catalog(catalog_copy)
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, 'product:tee-sila-i-chest'))
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        self.assertIn('eedit:tee-sila-i-chest',
+                      [b['callback_data'] for row in markup for b in row])
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'eedit:tee-sila-i-chest'))
+        self.assertTrue(self.bot.route_callback('cb3', 1, 1, 'ped:tee-sila-i-chest:price'))
+        self.assertTrue(self.bot.handle_product_edit_text(1, 1, '5 200'))
+        self.assertEqual(self.bot.catalog.get('tee-sila-i-chest')['price'], '5 200')
+        self.assertTrue(self.bot.route_callback('cb4', 1, 1, 'ped:tee-sila-i-chest:sizes'))
+        self.assertTrue(self.bot.handle_product_edit_text(1, 1, ','.join(f's{i}' for i in range(9))))
+        self.assertEqual(len(self.bot.catalog.get('tee-sila-i-chest')['sizes']),
+                         len(Catalog(catalog_copy).get('tee-sila-i-chest')['sizes']))
+        self.assertTrue(self.bot.handle_product_edit_text(1, 1, 'S, M, XXL'))
+        self.assertEqual(self.bot.catalog.get('tee-sila-i-chest')['sizes'], ['S', 'M', 'XXL'])
+        self.assertTrue(self.bot.route_callback('cb5', 1, 1, 'ped:tee-sila-i-chest:desc'))
+        self.assertTrue(self.bot.handle_product_edit_text(1, 1, 'Плотный хлопок.'))
+        self.assertEqual(self.bot.catalog.get('tee-sila-i-chest')['description'],
+                         'Плотный хлопок.')
+
+    def test_pruned_menu_duplicates_still_work_as_commands(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        for command in ('/admin', '/stats', '/orders', '/access', '/draws'):
+            self.api.send_message.reset_mock()
+            self.assertTrue(self.bot.admin_command(1, 1, command), command)
+            self.assertTrue(self.api.send_message.call_args_list, command)
+        self.db.set_state(1, 'admin_add', {'step': 'category'})
+        self.assertTrue(self.bot.admin_command(1, 1, '/add'))
+
+    def test_catalog_snapshot_keeps_last_seven_daily_copies(self):
+        import shutil
+        from datetime import datetime, timezone
+        copy_path = Path(self.temp.name) / 'catalog.json'
+        shutil.copy(Path(__file__).with_name('catalog.json'), copy_path)
+        catalog = Catalog(copy_path)
+        backup_dir = copy_path.parent / 'backups'
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        for day in range(1, 10):
+            (backup_dir / f'catalog-2026-01-{day:02d}.json').write_text('{}', encoding='utf-8')
+        catalog.add_product({'category': 'tee', 'name': 'Снапшот тест', 'price': '1 000',
+                             'sizes': ['S'], 'description': 'проверка копии'})
+        today = datetime.now(timezone.utc).date().isoformat()
+        names = sorted(x.name for x in backup_dir.glob('catalog-*.json'))
+        self.assertIn(f'catalog-{today}.json', names)
+        self.assertEqual(len(names), 7)
+        self.assertEqual(names[0], 'catalog-2026-01-04.json')
 
 
 if __name__ == '__main__':
