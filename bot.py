@@ -3918,7 +3918,7 @@ class BrandBot:
         self.api.send_message(
             chat_id,
             f"Покупка №{order_id}: статус «{esc(label)}» сохранён.",
-            self.order_status_keyboard(order_id, status),
+            self.order_card_markup(order_id, status, int(order["user_id"])),
         )
 
     def admin_panel(self, chat_id: int) -> None:
@@ -4136,14 +4136,20 @@ class BrandBot:
                 inline_keyboard([[(icon("orders", "Покупки"), "adm:orders")]]),
             )
             return
-        markup = self.order_status_keyboard(order_id, str(row["status"]))
+        self.api.send_message(
+            chat_id, self.admin_order_card_text(row),
+            self.order_card_markup(order_id, str(row["status"]), int(row["user_id"])),
+        )
+
+    def order_card_markup(self, order_id: int, status: str, user_id: int) -> dict[str, Any]:
+        """Клавиатура карточки покупки: действия статуса, затем клиент, нав-ряд последний."""
+        markup = self.order_status_keyboard(order_id, status) or {}
         rows = [list(r) for r in markup.get("inline_keyboard", [])]
-        client_row = [{"text": icon("account", "Клиент →"),
-                       "callback_data": f"aclient:{int(row['user_id'])}"}]
         # Нав-ряд остаётся последним: клиент встаёт перед ним, а не поверх выхода.
-        rows.insert(max(0, len(rows) - 1), client_row)
-        self.api.send_message(chat_id, self.admin_order_card_text(row),
-                              {"inline_keyboard": rows})
+        rows.insert(max(0, len(rows) - 1),
+                    [{"text": icon("account", "Клиент →"),
+                      "callback_data": f"aclient:{int(user_id)}"}])
+        return {"inline_keyboard": rows}
 
     def admin_command(self, chat_id: int, user_id: int, text: str) -> bool:
         if not self.is_admin(user_id):
