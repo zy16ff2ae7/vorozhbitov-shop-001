@@ -27,12 +27,14 @@ from bot import (
     REF_RE,
     Settings,
     TelegramAPI,
+    ADD_TOTAL,
     audience_label,
     buyer_commands,
     ensure_catalog_exists,
     inline_keyboard,
     nav_rows,
     normalize_phone,
+    option_rows,
     order_state_lines,
     person_label,
     plural,
@@ -1881,6 +1883,35 @@ class NativeMenuTests(unittest.TestCase):
                 markup = api.last(500)[2]
                 self.assertIn("menu", button_targets(markup), f"нет возврата домой: {name}")
 
+    def test_staff_reference_screens_are_not_dead_ends(self):
+        """Справочные экраны команды ведут обратно в пульт — и пустые, и с данными."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+
+            for command in ("/waitlist", "/top", "/giveaway 1"):
+                api.sent.clear()
+                bot.admin_command(1, 1, command)
+                self.assertIn("adm:panel", button_targets(api.last(1)[2]), f"тупик: {command} (пусто)")
+
+            db.add_to_waitlist(500, bot.catalog.get("tee-sila-i-chest"), "XL")
+            db.upsert_user({"id": 600, "username": "friend", "first_name": "Друг"}, "ref500")
+            for command in ("/waitlist", "/top"):
+                api.sent.clear()
+                bot.admin_command(1, 1, command)
+                text, markup = api.last(1)[1], api.last(1)[2]
+                self.assertIn("adm:panel", button_targets(markup), f"тупик: {command}")
+            api.sent.clear()
+            bot.admin_command(1, 1, "/waitlist")
+            self.assertIn("Ждут размер: 1", api.last(1)[1])
+            self.assertIn("/restock", api.last(1)[1])
+            api.sent.clear()
+            bot.admin_command(1, 1, "/top")
+            self.assertIn("@buyer", api.last(1)[1])
+            self.assertIn("/giveaway", api.last(1)[1])
+
     def test_support_request_carries_the_purchase_context(self):
         """Вопрос по покупке уходит менеджеру с номером и статусом."""
         with tempfile.TemporaryDirectory() as directory:
@@ -2097,6 +2128,98 @@ class NativeMenuTests(unittest.TestCase):
                 if not bot.route_callback("cb", user_id, user_id, target):
                     dead.append(target)
             self.assertEqual(dead, [], "кнопки, которые бот не разбирает")
+
+    def test_option_rows_pairs_equal_choices(self):
+        """Равноправные варианты складываются в колонки, остаток не теряется."""
+        self.assertEqual(option_rows([("a", "1"), ("b", "2"), ("c", "3")]),
+                         [[("a", "1"), ("b", "2")], [("c", "3")]])
+        self.assertEqual(option_rows([], 3), [])
+        self.assertEqual(option_rows([("a", "1")], 1), [[("a", "1")]])
+
+    def test_staff_orders_is_one_list_and_card_opens_by_number(self):
+        """Покупки у команды — один список, карточка с действием открывается по номеру."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+            waiting = self._purchase(db, product_id="tee-sila-i-chest", size="L")
+            working = self._purchase(db, product_id="tag-sila-i-chest", size="ONE SIZE")
+            db.mark_payment_paid(working["payment_id"], "stars", "charge")
+            db.set_order_status(working["order_ids"][0], "confirmed")
+            waiting_id = waiting["order_ids"][0]
+
+            bot.admin_orders(1)
+            sent = [item for item in api.sent if item[0] == 1]
+            self.assertEqual(len(sent), 1, "список покупок обязан быть одним сообщением")
+            text, markup = sent[0][1], sent[0][2]
+            self.assertIn("<b>ПОКУПКИ</b>", text)
+            self.assertIn("<b>Ждут оплаты</b>", text)
+            self.assertIn("<b>В работе</b>", text)
+            self.assertIn("@buyer", text)
+            targets = button_targets(markup)
+            self.assertIn(f"aord:{waiting_id}", targets)
+            self.assertIn(f"aord:{working['order_ids'][0]}", targets)
+            self.assertIn("adm:panel", targets)
+            self.assertLessEqual(max(len(row) for row in button_rows(markup)), 3)
+
+            api.sent.clear()
+            self.assertTrue(bot.route_callback("cb", 1, 1, f"aord:{waiting_id}"))
+            card_text, card_markup = api.last(1)[1], api.last(1)[2]
+            self.assertIn(f"ПОКУПКА №{waiting_id}", card_text)
+            self.assertIn("Клиент:", card_text)
+            self.assertIn("💳 Оплата:", card_text)
+            # Главное действие — следующий этап, нижний ряд — как у всех экранов команды.
+            self.assertIn(f"order:{waiting_id}:paid", button_targets(card_markup))
+            self.assertEqual(button_rows(card_markup)[-1], ["← Покупки", "🛠 Управление"])
+
+            # Покупателю чужая карточка недоступна: кнопка для него просто устарела.
+            self.assertFalse(bot.route_callback("cb", 500, 500, f"aord:{waiting_id}"))
+
+    def test_add_wizard_counts_steps_and_shows_the_buyer_card(self):
+        """Мастер /add: счётчик шагов, разделы в колонки, проверка — настоящей карточкой."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+
+            bot.start_add_product(1, 1)
+            text, markup = api.last(1)[1], api.last(1)[2]
+            self.assertIn(f"ШАГ 1/{ADD_TOTAL}", text)
+            self.assertEqual(len(button_rows(markup)[0]), 2, "разделы витрины — в две колонки")
+            self.assertEqual(button_rows(markup)[-1], ["✖ Отмена"])
+
+            bot.route_callback("cb", 1, 1, "addcat:access")
+            self.assertIn(f"ШАГ 2/{ADD_TOTAL}", api.last(1)[1])
+            for answer in ("DROP 002 CAP", "3 900 ₽", "ONE SIZE", "Кепка второго выпуска.", "/skip"):
+                bot.handle_add_product_text(1, 1, answer)
+            text, markup = api.last(1)[1], api.last(1)[2]
+            self.assertIn(f"ШАГ {ADD_TOTAL}/{ADD_TOTAL}", text)
+            # Владелец видит ровно ту карточку, которую получит покупатель.
+            self.assertIn("<b>DROP 002 CAP</b>", text)
+            self.assertIn("<b>3 900 ₽</b>", text)
+            self.assertIn("Кепка второго выпуска.", text)
+            self.assertIn("📏 Размеры: ONE SIZE", text)
+            self.assertEqual(button_rows(markup), [["🛍 Опубликовать →"], ["✖ Отмена"]])
+
+            bot.route_callback("cb", 1, 1, "add:publish")
+            self.assertIn("ВЕЩЬ ОПУБЛИКОВАНА", api.last(1)[1])
+            self.assertEqual(button_rows(api.last(1)[2])[0], ["🛍 Смотреть в витрине →"])
+            self.assertIsNotNone(bot.catalog.get("drop-002-cap"))
+
+    def test_broadcast_segments_are_paired_and_cancellable(self):
+        """Сегменты рассылки в две колонки, отмена — отдельной строкой."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+            bot.admin_command(1, 1, "/broadcast ВЫПУСК СЕГОДНЯ В 19:00")
+            rows = button_rows(api.last(1)[2])
+            self.assertEqual(rows[-1], ["✖ Отмена"])
+            self.assertTrue(all(len(row) == 2 for row in rows[:-1]), rows)
+            targets = button_targets(api.last(1)[2])
+            self.assertIn("seg:all", targets)
+            self.assertIn("seg:interest:hoodie", targets)
 
     def test_navigation_rows_never_duplicate_home(self):
         """Если назад — это и есть главное меню, второй такой кнопки не появляется."""

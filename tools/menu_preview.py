@@ -207,11 +207,38 @@ def screens() -> list[tuple[str, str, list[dict]]]:
         shoot("Сводка", "деньги, работа и база не смешаны",
               lambda bot, db: bot.admin_summary(1))
 
-        def staff_order(bot, db):
-            receipt = purchase(db, 500, "tee-sila-i-chest", "L")
-            bot.admin_command(1, 1, "/orders")
+        def staff_orders(bot, db):
+            purchase(db, 500, "tee-sila-i-chest", "L")
+            working = purchase(db, 500, "tag-sila-i-chest", "ONE SIZE")
+            db.mark_payment_paid(working["payment_id"], "stars", "preview-charge")
+            db.set_order_status(working["order_ids"][0], "confirmed")
+            bot.admin_orders(1)
 
-        shoot("Покупки у команды", "одно главное действие по этапу", staff_order)
+        shoot("Покупки у команды", "один список вместо десяти карточек подряд", staff_orders)
+
+        def staff_order_card(bot, db):
+            receipt = purchase(db, 500, "tee-sila-i-chest", "L")
+            bot.admin_order_card(1, receipt["order_ids"][0])
+
+        shoot("Карточка покупки у команды", "клиент, деньги, этап и одно главное действие", staff_order_card)
+
+        def add_wizard(bot, db):
+            bot.start_add_product(1, 1)
+            bot.route_callback("cb", 1, 1, "addcat:access")
+            for answer in ("DROP 002 CAP", "3 900 ₽", "ONE SIZE",
+                           "Кепка второго выпуска. Мелкая партия, добивать не будем.", "/skip"):
+                bot.handle_add_product_text(1, 1, answer)
+
+        shoot("Мастер «Новая вещь»", "счётчик шагов, а в конце — та же карточка, что увидит покупатель", add_wizard)
+
+        def staff_reference(bot, db):
+            db.add_to_waitlist(500, bot.catalog.get("tee-sila-i-chest"), "XL")
+            db.upsert_user({"id": 600, "username": "friend", "first_name": "Друг"}, "ref500")
+            bot.admin_command(1, 1, "/waitlist")
+            bot.admin_command(1, 1, "/top")
+
+        shoot("Справочные экраны команды", "лист ожидания и топ приглашений — с выходом обратно в пульт",
+              staff_reference)
     return groups
 
 

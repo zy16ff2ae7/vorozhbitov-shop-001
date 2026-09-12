@@ -139,9 +139,10 @@ def run_scenarios(workdir: Path) -> int:
         ("Неизвестная кнопка", callback(500, "legacy:unknown")),
         ("Панель администратора", message(1, "/admin")),
         ("Сводка", message(1, "/stats")),
-        ("Покупки", message(1, "/orders")),
-        ("Подтверждение заявки", callback(1, "order:1:confirmed")),
-        ("Завершение заявки", callback(1, "order:1:completed")),
+        ("Покупки у команды", message(1, "/orders")),
+        ("Карточка покупки у команды", callback(1, "aord:1")),
+        ("Подтверждение покупки", callback(1, "order:1:confirmed")),
+        ("Завершение покупки", callback(1, "order:1:completed")),
         ("Второй пользователь по реф-ссылке", message(600, "/start ref500")),
         ("Топ рефералов", message(1, "/top")),
         ("Черновик рассылки", message(1, "/broadcast ВЫПУСК СЕГОДНЯ В 19:00 — размеры разберут за час")),
@@ -162,7 +163,7 @@ def run_scenarios(workdir: Path) -> int:
         print(f"\n=== {title} ===")
         SENT.clear()
         update = update() if callable(update) else update
-        if title == "Подтверждение заявки":
+        if title == "Подтверждение покупки":
             order = db.get_order(1)
             assert order and order["status"] == "awaiting_payment", "checkout did not create an unpaid order"
             assert db.mark_payment_paid(order["payment_id"], "stars", "smoke-charge"), "payment failed"
@@ -170,9 +171,9 @@ def run_scenarios(workdir: Path) -> int:
         if title == "Старт нового пользователя":
             assert any(method == "sendPhoto" for method, _ in SENT), "welcome photo missing"
             assert any(method == "sendVideo" for method, _ in SENT), "teaser missing"
-        if title == "Подтверждение заявки":
+        if title == "Подтверждение покупки":
             assert db.get_order(1)["status"] == "confirmed", "confirmation failed"
-        if title == "Завершение заявки":
+        if title == "Завершение покупки":
             assert db.get_order(1)["status"] == "completed", "completion failed"
         show()
 

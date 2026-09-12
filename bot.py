@@ -1563,6 +1563,26 @@ def nav_rows(back: tuple[str, str] | None = None) -> list[list[tuple[str, str]]]
     return [[(f"{ICON['back']} {label}", target), (icon("home", "Главная"), "menu")]]
 
 
+def staff_nav_rows() -> list[list[tuple[str, str]]]:
+    """Нижний ряд служебного экрана: обратно в пульт или в режим покупателя.
+
+    Без него справочные экраны команды заканчивались тупиком — вернуться
+    можно было только командой с клавиатуры.
+    """
+    return [[(icon("tools", "Управление"), "adm:panel"), (icon("account", "Режим покупателя"), "menu")]]
+
+
+def option_rows(options: Iterable[tuple[str, str]], per_row: int = 2) -> list[list[tuple[str, str]]]:
+    """Равноправные варианты — в несколько колонок.
+
+    Приём один и для главного меню, и для разделов витрины, и для служебных
+    списков: выбор не меняется, а экран становится вдвое короче.
+    """
+    items = list(options)
+    width = max(1, int(per_row))
+    return [items[index:index + width] for index in range(0, len(items), width)]
+
+
 def plural(count: int, one: str, few: str, many: str) -> str:
     """Русская считалка: 1 вещь, 2 вещи, 5 вещей."""
     if 11 <= count % 100 <= 14:
@@ -1808,6 +1828,18 @@ ADD_STEPS = [
     ("photo_url", "Ссылка на фото (http или https). Или /skip — добавить позже."),
 ]
 ADD_KEYS = [key for key, _ in ADD_STEPS]
+# Шаг 1 — раздел, дальше ADD_STEPS, последний — проверка перед публикацией.
+ADD_TOTAL = len(ADD_STEPS) + 2
+
+
+def add_step_text(position: int, question: str, hint: str = "") -> str:
+    """Экран мастера добавления вещи: один заголовок и счётчик шагов.
+
+    Владелец проходит мастера редко, поэтому без «шаг 3 из 7» он не понимает,
+    сколько ещё вводить и можно ли бросить на полпути.
+    """
+    text = f"<b>НОВАЯ ВЕЩЬ · ШАГ {position}/{ADD_TOTAL}</b>\n\n{question}"
+    return f"{text}\n\n{hint}" if hint else text
 
 
 class BrandBot:
@@ -2050,7 +2082,7 @@ class BrandBot:
     def interest_menu(self) -> dict[str, Any]:
         """Первый вопрос новому покупателю: те же две колонки, что и в главном меню."""
         options = [(category["name"], f"intr:{category['id']}") for category in self.catalog.categories[:6]]
-        rows = [options[index:index + 2] for index in range(0, len(options), 2)]
+        rows = option_rows(options)
         rows.append([("Пока не знаю", "intr:skip")])
         return inline_keyboard(rows)
 
@@ -3273,7 +3305,7 @@ class BrandBot:
             rows.append([(f"{primary[0]} →", f"order:{order_id}:{primary[1]}")])
         if status in {"new", "awaiting_payment", "paid", "confirmed"}:
             rows.append([(icon("cancel", "Отменить покупку"), f"order:{order_id}:cancelled")])
-        rows.append([(icon("tools", "Управление"), "adm:panel")])
+        rows.append([(f"{ICON['back']} Покупки", "adm:orders"), (icon("tools", "Управление"), "adm:panel")])
         return inline_keyboard(rows) if rows else None
 
     def update_order_status(self, chat_id: int, order_id: int, status: str) -> None:
@@ -3363,6 +3395,73 @@ class BrandBot:
             ),
         )
 
+    def admin_orders(self, chat_id: int) -> None:
+        """Покупки у команды одним списком: карточка с действием — по номеру.
+
+        Раньше команда получала заголовок и до десяти полных карточек подряд,
+        поэтому в чате нельзя было найти ни своё же сообщение, ни конец списка.
+        """
+        orders = self.db.recent_orders()
+        if not orders:
+            self.api.send_message(
+                chat_id,
+                "<b>ПОКУПОК ПОКА НЕТ</b>\n\nКак только оформят первую — она появится здесь.",
+                inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]),
+            )
+            return
+        lines = ["<b>ПОКУПКИ</b>", "", "Показаны последние · открой номер, чтобы сменить этап."]
+        for title, statuses in self.ORDER_GROUPS:
+            group = [row for row in orders if str(row["status"]) in statuses]
+            if not group:
+                continue
+            lines.append("")
+            lines.append(f"<b>{title}</b>")
+            for row in group:
+                amount = int(row["amount_rub"] or 0)
+                who = f"@{row['username']}" if row["username"] else str(row["first_name"] or row["user_id"])
+                lines.append(
+                    f"№{int(row['id'])} · {esc(row['product_name'])} · {esc(row['size'])}"
+                    + (f" · {format_rub(amount)}" if amount else "")
+                    + f" · {esc(who)}"
+                )
+        rows = option_rows(((f"№{int(row['id'])}", f"aord:{int(row['id'])}") for row in orders), 3)
+        rows.append([(icon("tools", "Управление"), "adm:panel")])
+        self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(rows))
+
+    def admin_order_card_text(self, row: Any) -> str:
+        """Карточка покупки у команды: клиент, состав, деньги и этап."""
+        status = str(row["status"])
+        payment = self.db.get_payment(str(row["payment_id"] or "")) if row["payment_id"] else None
+        who = f"@{row['username']}" if row["username"] else str(row["first_name"] or "")
+        lines = [
+            f"<b>ПОКУПКА №{int(row['id'])} · {esc(ORDER_STATUS_LABELS.get(status, status)).upper()}</b>",
+            f"{esc(row['product_name'])} · размер {esc(row['size'])} · {int(row['quantity'] or 1)} шт.",
+            f"{ICON['account']} Клиент: {esc(who or str(row['user_id']))} · {esc(row['phone'] or 'номер не указан')}",
+            "",
+        ]
+        lines.extend(order_state_lines(status, payment, int(row["amount_rub"] or 0)))
+        note = str(row["note"] or "").strip()
+        if note:
+            lines.append("")
+            lines.append(f"{ICON['receipt']} {esc(note[:200])}")
+        lines.extend(["", f"Оформлена {esc(self.format_date(row['created_at']))}"])
+        return "\n".join(lines)
+
+    def admin_order_card(self, chat_id: int, order_id: int) -> None:
+        row = self.db.get_order(order_id)
+        if not row:
+            self.api.send_message(
+                chat_id,
+                "<b>ПОКУПКА НЕ НАЙДЕНА</b>\n\nНомер неверный или покупку уже удалили.",
+                inline_keyboard([[(icon("orders", "Покупки"), "adm:orders")]]),
+            )
+            return
+        self.api.send_message(
+            chat_id,
+            self.admin_order_card_text(row),
+            self.order_status_keyboard(order_id, str(row["status"])),
+        )
+
     def admin_command(self, chat_id: int, user_id: int, text: str) -> bool:
         if not self.is_admin(user_id):
             return False
@@ -3371,32 +3470,7 @@ class BrandBot:
         if command in {"/stats", "/summary"}:
             self.admin_summary(chat_id)
         elif command == "/orders":
-            orders = self.db.recent_orders()
-            if not orders:
-                self.api.send_message(
-                    chat_id,
-                    "<b>ПОКУПОК ПОКА НЕТ</b>\n\nКак только оформят первую — она появится здесь.",
-                    inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]),
-                )
-            else:
-                self.api.send_message(
-                    chat_id,
-                    "<b>ПОСЛЕДНИЕ ПОКУПКИ</b>\n\nОдна карточка — одно главное действие по этапу.",
-                    inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]),
-                )
-                for row in orders:
-                    username = f"@{row['username']}" if row["username"] else row["first_name"]
-                    status = str(row["status"])
-                    label = ORDER_STATUS_LABELS.get(status, status)
-                    payment = self.db.get_payment(str(row["payment_id"] or "")) if row["payment_id"] else None
-                    text = (
-                        f"<b>ПОКУПКА №{row['id']} · {esc(label).upper()}</b>\n"
-                        f"{esc(row['product_name'])} · размер {esc(row['size'])} · {int(row['quantity'] or 1)} шт.\n"
-                        f"Клиент: {esc(username or str(row['user_id']))} · {esc(row['phone'])}\n"
-                        + "\n".join(order_state_lines(status, payment, int(row["amount_rub"] or 0)))
-                        + (f"\n{ICON['receipt']} {esc(row['note'])}" if str(row["note"] or "").strip() else "")
-                    )
-                    self.api.send_message(chat_id, text, self.order_status_keyboard(int(row["id"]), status))
+            self.admin_orders(chat_id)
         elif command == "/broadcast":
             if not argument:
                 self.api.send_message(chat_id, "Использование: <code>/broadcast текст рассылки</code>")
@@ -3417,30 +3491,46 @@ class BrandBot:
         elif command == "/waitlist":
             rows = self.db.waitlist_rows()
             if not rows:
-                self.api.send_message(chat_id, "<b>ЛИСТ ОЖИДАНИЯ ПУСТ</b>\n\nНикто не ждёт размер — значит, дефицита нет.")
+                self.api.send_message(
+                    chat_id,
+                    "<b>ЛИСТ ОЖИДАНИЯ ПУСТ</b>\n\nНикто не ждёт размер — значит, дефицита нет.",
+                    inline_keyboard(staff_nav_rows()),
+                )
             else:
-                lines = ["<b>ЛИСТ ОЖИДАНИЯ</b>", ""]
+                lines = ["<b>ЛИСТ ОЖИДАНИЯ</b>", "", f"Ждут размер: {len(rows)}", ""]
                 for row in rows:
-                    username = f"@{row['username']}" if row["username"] else row["first_name"]
-                    lines.append(f"{esc(row['product_name'])} · {esc(row['size'])} · {esc(username or row['user_id'])}")
-                self.api.send_message(chat_id, "\n".join(lines))
+                    who = f"@{row['username']}" if row["username"] else str(row["first_name"] or "")
+                    lines.append(
+                        f"• {esc(row['product_name'])} · {esc(row['size'])} · {esc(who or str(row['user_id']))}"
+                    )
+                lines.extend(["", "Написать им, когда размер вернётся: <code>/restock id размер</code>"])
+                self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(staff_nav_rows()))
         elif command == "/top":
             rows = self.db.top_referrers()
             if not rows:
-                self.api.send_message(chat_id, "Никто пока никого не привёл.")
+                self.api.send_message(
+                    chat_id,
+                    "<b>ПОКА ПУСТО</b>\n\nНикто никого не привёл — приглашения ещё не сработали.",
+                    inline_keyboard(staff_nav_rows()),
+                )
             else:
-                lines = ["<b>ТОП ПРИГЛАШЕНИЙ</b>", ""]
+                threshold = max(1, self.settings.giveaway_min_invites)
+                lines = ["<b>ТОП ПРИГЛАШЕНИЙ</b>", "", f"Приоритет дают с {threshold} "
+                         + plural(threshold, "приглашённого", "приглашённых", "приглашённых"), ""]
                 for index, row in enumerate(rows, start=1):
-                    username = f"@{row['username']}" if row["username"] else row["first_name"]
-                    lines.append(f"{index}. {esc(username or row['user_id'])} — {row['invited_count']}")
-                self.api.send_message(chat_id, "\n".join(lines))
+                    who = f"@{row['username']}" if row["username"] else str(row["first_name"] or "")
+                    lines.append(f"{index}. {esc(who or str(row['user_id']))} — {int(row['invited_count'])}")
+                lines.extend(["", "Выбрать победителей: <code>/giveaway N</code>"])
+                self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(staff_nav_rows()))
         elif command == "/giveaway":
             count = int(argument) if argument.isdigit() else 1
             pool = self.db.giveaway_pool(self.settings.giveaway_min_invites)
             if not pool:
                 self.api.send_message(
                     chat_id,
+                    f"<b>РОЗЫГРЫШ ПУСТ</b>\n\n"
                     f"Никто ещё не набрал {self.settings.giveaway_min_invites} приглашённых.",
+                    inline_keyboard(staff_nav_rows()),
                 )
             else:
                 winners = random.sample(pool, min(count, len(pool)))
@@ -3457,7 +3547,7 @@ class BrandBot:
                         )
                     except Exception:
                         LOG.warning("Could not notify winner %s", winner_id)
-                self.api.send_message(chat_id, "\n".join(lines))
+                self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(staff_nav_rows()))
         elif command in ("/add", "/new"):
             self.start_add_product(chat_id, user_id)
         elif command == "/hide":
@@ -3489,20 +3579,23 @@ class BrandBot:
 
     def start_add_product(self, chat_id: int, user_id: int) -> None:
         self.db.set_state(user_id, "admin_add", {"step": "category"})
-        rows = [[(category["name"], f"addcat:{category['id']}")] for category in self.catalog.categories]
-        rows.append([("Новая категория", "addcat:new")])
+        rows = option_rows((category["name"], f"addcat:{category['id']}") for category in self.catalog.categories)
+        rows.append([(icon("catalog", "Новый раздел"), "addcat:new")])
         rows.append([(icon("cancel", "Отмена"), "admin:cancel")])
         self.api.send_message(
             chat_id,
-            "<b>НОВАЯ ВЕЩЬ · ШАГ 1</b>\n\nКуда её положим?\n"
-            "Дальше спросим название, цену, размеры и описание — по одному шагу.",
+            add_step_text(1, "Куда её положим?",
+                          "Дальше спросим название, цену, размеры и описание — по одному шагу."),
             inline_keyboard(rows),
         )
 
     def pick_add_category(self, chat_id: int, user_id: int, category_id: str) -> None:
         if category_id == "new":
             self.db.set_state(user_id, "admin_add", {"step": "new_category"})
-            self.api.send_message(chat_id, "Название новой категории? Например: Верхняя одежда")
+            self.api.send_message(
+                chat_id,
+                "<b>НОВЫЙ РАЗДЕЛ</b>\n\nНазвание? Например: Верхняя одежда",
+            )
             return
         if not any(category["id"] == category_id for category in self.catalog.categories):
             self.api.send_message(
@@ -3512,7 +3605,7 @@ class BrandBot:
             )
             return
         self.db.set_state(user_id, "admin_add", {"step": "name", "category": category_id})
-        self.api.send_message(chat_id, ADD_STEPS[0][1])
+        self.api.send_message(chat_id, add_step_text(2, ADD_STEPS[0][1]))
 
     def handle_add_product_text(self, chat_id: int, user_id: int, text: str) -> bool:
         state = self.db.get_state(user_id)
@@ -3550,7 +3643,10 @@ class BrandBot:
                 self.catalog.reload()
             data = {"step": "name", "category": category_id}
             self.db.set_state(user_id, "admin_add", data)
-            self.api.send_message(chat_id, f"Категория «{esc(name)}» создана.\n\n{ADD_STEPS[0][1]}")
+            self.api.send_message(
+                chat_id,
+                f"Раздел «{esc(name)}» создан.\n\n{add_step_text(2, ADD_STEPS[0][1])}",
+            )
             return True
 
         if step not in ADD_KEYS:
@@ -3597,7 +3693,7 @@ class BrandBot:
         if position < len(ADD_STEPS):
             data["step"] = ADD_KEYS[position]
             self.db.set_state(user_id, "admin_add", data)
-            self.api.send_message(chat_id, ADD_STEPS[position][1])
+            self.api.send_message(chat_id, add_step_text(position + 2, ADD_STEPS[position][1]))
             return True
 
         product = {
@@ -3612,13 +3708,21 @@ class BrandBot:
         data["preview"] = product
         data["step"] = "confirm"
         self.db.set_state(user_id, "admin_add", data)
-        sizes = " · ".join(esc(size) for size in product["sizes"])
+        category = next(
+            (str(item["name"]) for item in self.catalog.categories if item["id"] == product["category"]),
+            "Каталог",
+        )
+        # Показываем ту же карточку, что увидит покупатель: расхождений между
+        # черновиком и витриной не остаётся, правки не приходится держать в уме.
         self.api.send_message(
             chat_id,
-            f"<b>Проверь перед публикацией</b>\n\n"
-            f"<b>{esc(product['name'])}</b>\n<b>{esc(product['price'])}</b>\n\n"
-            f"{esc(product['description'])}\n\nРазмеры: {sizes}",
-            inline_keyboard([[("Опубликовать", "add:publish")], [("Отмена", "admin:cancel")]]),
+            add_step_text(ADD_TOTAL, "Проверь — так карточку увидит покупатель.")
+            + f"\n\n{ICON['catalog']} Раздел: {esc(category)}\n\n"
+            + self.product_card_text(product),
+            inline_keyboard(
+                [[(icon("catalog", "Опубликовать →"), "add:publish")],
+                 [(icon("cancel", "Отмена"), "admin:cancel")]]
+            ),
         )
         return True
 
@@ -3632,16 +3736,24 @@ class BrandBot:
         self.db.event(user_id, "product_added", {"product_id": product["id"]})
         self.api.send_message(
             chat_id,
-            f"Опубликовано: <b>{esc(product['name'])}</b>\n"
+            f"<b>ВЕЩЬ ОПУБЛИКОВАНА</b>\n\n"
+            f"{esc(product['name'])}\n"
             f"id: <code>{esc(product['id'])}</code>\n\n"
-            "Вещь уже в витрине. Скрыть — <code>/hide id</code>.",
-            inline_keyboard([[("Смотреть в витрине", f"product:{product['id']}")], [("Панель", "adm:panel")]]),
+            "Она уже в витрине. Скрыть — <code>/hide id</code>, вернуть — <code>/show id</code>.",
+            inline_keyboard(
+                [[(icon("catalog", "Смотреть в витрине →"), f"product:{product['id']}")],
+                 [(icon("stock", "Добавить ещё"), "adm:add"), (icon("tools", "Управление"), "adm:panel")]]
+            ),
         )
 
     def segment_keyboard(self) -> dict[str, Any]:
-        rows = [[(label, f"seg:{key}")] for key, label in SEGMENT_LABELS.items()]
-        for category in self.catalog.categories[:6]:
-            rows.append([(f"Интерес: {category['name']}", f"seg:interest:{category['id']}")])
+        """Кому пишем: сегменты в две колонки, отмена — отдельной строкой."""
+        options = [(label, f"seg:{key}") for key, label in SEGMENT_LABELS.items()]
+        options += [
+            (f"Интерес: {category['name']}", f"seg:interest:{category['id']}")
+            for category in self.catalog.categories[:6]
+        ]
+        rows = option_rows(options)
         rows.append([(icon("cancel", "Отмена"), "admin:cancel")])
         return inline_keyboard(rows)
 
@@ -3665,7 +3777,7 @@ class BrandBot:
             f"{ICON['account']} Аудитория: {esc(label)}\n"
             f"{ICON['channel']} Получателей: {len(audience)}",
             inline_keyboard(
-                [[("Отправить →", "admin:broadcast_confirm")],
+                [[(icon("channel", "Отправить →"), "admin:broadcast_confirm")],
                  [(icon("cancel", "Отмена"), "admin:cancel")]]
             ),
         )
@@ -4129,6 +4241,11 @@ class BrandBot:
         elif data == "admin:cancel" and self.is_admin(user_id):
             self.db.clear_state(user_id)
             self.api.send_message(chat_id, "Отменено.")
+        elif data.startswith("aord:") and self.is_admin(user_id):
+            try:
+                self.admin_order_card(chat_id, int(data.split(":", 1)[1]))
+            except ValueError:
+                self.stale(chat_id, "Эта кнопка устарела.")
         elif data.startswith("adm:") and self.is_admin(user_id):
             action = data.split(":", 1)[1]
             if action == "add":
