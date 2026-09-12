@@ -562,3 +562,86 @@ class PollingLoopRegressionTests(unittest.TestCase):
         api, bot = self.poll([{'unexpected': 'dict вместо списка'}, [{'update_id': 7}], []])
         self.assertEqual(bot.seen, [7])
         self.assertGreaterEqual(api.offsets[-1], 8)
+
+
+class OwnerAccessRegressionTests(unittest.TestCase):
+    """Владелец раздаёт и снимает доступ команды; история розыгрышей проверяема."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.settings = Settings(
+            token='owner-test-token', admin_ids=frozenset({1}), channel_url='https://t.me/test',
+            webapp_url='https://example.com', manager_chat_id=None, brand_name='Test',
+            support_username='', database_path=root / 'test.sqlite',
+            catalog_path=Path(__file__).with_name('catalog.json'), health_port=0,
+            giveaway_min_invites=3, privacy_url='',
+        )
+        self.db = Database(self.settings.database_path)
+        self.addCleanup(self.db.close_current)
+        self.api = Mock()
+        self.bot = BrandBot(self.settings, self.api, self.db, Catalog(self.settings.catalog_path))
+
+    def texts(self):
+        return " ".join(str(call.args[1]) for call in self.api.send_message.call_args_list)
+
+    def test_owner_grants_admin_and_admin_cannot_grant(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
+        self.db.upsert_user({'id': 8, 'username': 'newbie', 'first_name': 'Ника'})
+        self.assertFalse(self.bot.is_admin(7))
+        self.assertTrue(self.bot.admin_command(1, 1, '/grant 7'))
+        self.assertTrue(self.db.is_admin_id(7))
+        self.assertTrue(self.bot.is_admin(7))
+        self.assertFalse(self.bot.is_owner(7))
+        self.assertIn('теперь админ', self.texts())
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 7, '/grant 8'))
+        self.assertFalse(self.db.is_admin_id(8))
+        self.assertIn('только владелец', self.texts())
+
+    def test_unknown_stranger_cannot_be_granted(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.assertTrue(self.bot.admin_command(1, 1, '/grant 999'))
+        self.assertFalse(self.db.is_admin_id(999))
+        self.assertIn('нет в базе', self.texts())
+
+    def test_revoke_by_button_is_owner_only(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
+        self.db.add_admin(7, 1)
+        self.assertFalse(self.bot.route_callback('cb1', 1, 7, 'access:revoke:7'))
+        self.assertTrue(self.db.is_admin_id(7))
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'access:revoke:7'))
+        self.assertFalse(self.db.is_admin_id(7))
+        self.assertIn('Доступ снят', self.texts())
+
+    def test_access_screen_lists_owner_and_admins(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
+        self.db.add_admin(7, 1)
+        self.assertTrue(self.bot.admin_command(1, 1, '/access'))
+        text = self.texts()
+        self.assertIn('ДОСТУП КОМАНДЫ', text)
+        self.assertIn('@owner — владелец', text)
+        self.assertIn('@member — админ', text)
+
+    def test_panel_offers_access_and_draws_within_five_rows(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.bot.admin_panel(1)
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [button['callback_data'] for row in markup for button in row]
+        self.assertIn('adm:access', targets)
+        self.assertIn('adm:draws', targets)
+        self.assertLessEqual(len(markup), 5, markup)
+
+    def test_draws_screen_shows_last_draw_and_empty_state(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 2, 'username': 'two', 'first_name': 'Рина'})
+        self.assertTrue(self.bot.admin_command(1, 1, '/draws'))
+        self.assertIn('Тиражей ещё не было', self.texts())
+        self.db.event(1, 'giveaway_drawn', {'winners': [2], 'pool': 1, 'count': 1})
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/draws'))
+        self.assertIn('@two', self.texts())

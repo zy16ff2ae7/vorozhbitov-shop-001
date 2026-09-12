@@ -514,6 +514,11 @@ class Database:
                 payload TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS admins (
+                user_id INTEGER PRIMARY KEY,
+                added_by INTEGER,
+                added_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS payments (
                 payment_id TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -1103,6 +1108,32 @@ class Database:
             "INSERT INTO events(user_id, event, payload, created_at) VALUES (?, ?, ?, ?)",
             (user_id, event, compact_json(payload or {}), utc_now()),
         )
+
+    def is_admin_id(self, user_id: int) -> bool:
+        row = self.connection().execute(
+            "SELECT 1 FROM admins WHERE user_id=?", (user_id,)).fetchone()
+        return row is not None
+
+    def add_admin(self, user_id: int, added_by: int) -> None:
+        self.connection().execute(
+            "INSERT INTO admins(user_id, added_by, added_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id) DO NOTHING", (user_id, added_by, utc_now()))
+
+    def remove_admin(self, user_id: int) -> None:
+        self.connection().execute("DELETE FROM admins WHERE user_id=?", (user_id,))
+
+    def admin_rows(self) -> list[sqlite3.Row]:
+        return list(self.connection().execute(
+            """
+            SELECT a.user_id, a.added_at, u.username, u.first_name
+            FROM admins a LEFT JOIN users u ON u.user_id = a.user_id
+            ORDER BY a.user_id
+            """))
+
+    def recent_draws(self, limit: int = 5) -> list[sqlite3.Row]:
+        return list(self.connection().execute(
+            "SELECT created_at, payload FROM events WHERE event='giveaway_drawn' "
+            "ORDER BY id DESC LIMIT ?", (limit,)))
 
     def kv_get(self, key: str) -> str:
         row = self.connection().execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
@@ -1962,6 +1993,9 @@ def staff_commands() -> list[dict[str, str]]:
         {"command": "orders", "description": "Все покупки"},
         {"command": "add", "description": "Добавить вещь"},
         {"command": "broadcast", "description": "Рассылка: /broadcast текст"},
+        {"command": "access", "description": "Доступ команды"},
+        {"command": "draws", "description": "История розыгрышей"},
+        {"command": "grant", "description": "Назначить админа: /grant id"},
         {"command": "help", "description": "Как это работает"},
     ]
 
@@ -2193,6 +2227,10 @@ class BrandBot:
             self.flush_notifications(key=key)
 
     def is_admin(self, user_id: int) -> bool:
+        return user_id in self.settings.admin_ids or self.db.is_admin_id(user_id)
+
+    def is_owner(self, user_id: int) -> bool:
+        """Владелец — из настройки ADMIN_IDS: только он раздаёт и снимает доступ."""
         return user_id in self.settings.admin_ids
 
     def cta(self, kind: str = "menu") -> str:
@@ -3825,8 +3863,8 @@ class BrandBot:
     def admin_panel(self, chat_id: int) -> None:
         """Пульт владельца: сводка сверху, разделы в две колонки, выход в режим покупателя.
 
-        Список команд шире кнопок: /broadcast, /restock, /giveaway, /hide и /show
-        остаются командами, чтобы не раздувать панель.
+        Список команд шире кнопок: /broadcast, /restock, /giveaway, /hide, /show,
+        /export и /reload остаются командами, чтобы не раздувать панель.
         """
         stats = self.db.stats()
         text = (
@@ -3844,7 +3882,7 @@ class BrandBot:
                     [(f"{ICON['stats']} Сводка →", "adm:summary")],
                     [(icon("orders", "Покупки"), "adm:orders"), (icon("wait", "Лист ожидания"), "adm:waitlist")],
                     [(icon("catalog", "Добавить вещь"), "adm:add"), (icon("trophy", "Топ рефералов"), "adm:top")],
-                    [(icon("export", "Экспорт базы"), "adm:export"), (icon("reload", "Перечитать каталог"), "adm:reload")],
+                    [(icon("account", "Доступ команды"), "adm:access"), (icon("trophy", "Розыгрыши"), "adm:draws")],
                     [(icon("account", "Режим покупателя"), "menu")],
                 ]
             ),
@@ -4089,6 +4127,19 @@ class BrandBot:
                         f"Вещь {esc(argument)} снова в витрине." if shown else "Не нашёл такой id.",
                         inline_keyboard(staff_nav_rows()),
                     )
+        elif command == "/access":
+            self.admin_access(chat_id)
+        elif command == "/draws":
+            self.admin_draws(chat_id)
+        elif command == "/grant":
+            self.grant_admin(chat_id, user_id, argument)
+        elif command == "/revoke":
+            target = self._resolve_user(argument)
+            if target is None:
+                self.api.send_message(chat_id, "Использование: <code>/revoke id или @username</code>",
+                                      inline_keyboard(staff_nav_rows()))
+            else:
+                self.revoke_admin(chat_id, user_id, target)
         elif command == "/export":
             self.api.send_document(chat_id, "users.csv", self.db.export_users_csv(), "Экспорт базы")
         elif command == "/reload":
@@ -4346,6 +4397,103 @@ class BrandBot:
         rows = option_rows(options)
         rows.append([(icon("cancel", "Отмена"), "admin:cancel")])
         return inline_keyboard(rows)
+
+    def _who(self, user_id: int) -> str:
+        user = self.db.get_user(user_id)
+        if user and user["username"]:
+            return f"@{user['username']}"
+        if user and user["first_name"]:
+            return str(user["first_name"])
+        return str(user_id)
+
+    def admin_access(self, chat_id: int) -> None:
+        """Кто в доступе: владельцы из настройки и назначенные админы."""
+        lines = ["<b>ДОСТУП КОМАНДЫ</b>", ""]
+        for owner_id in sorted(self.settings.admin_ids):
+            lines.append(f"{ICON['ok']} {esc(self._who(owner_id))} — владелец")
+        rows: list[list[tuple[str, str]]] = []
+        for row in self.db.admin_rows():
+            who = self._who(int(row["user_id"]))
+            lines.append(f"{ICON['tools']} {esc(who)} — админ")
+            rows.append([(icon("cancel", f"Снять {who}"), f"access:revoke:{int(row['user_id'])}")])
+        if rows:
+            lines.append("\nСнять — кнопкой или <code>/revoke id</code>.")
+        else:
+            lines.append("\nАдминов пока нет. Назначить: <code>/grant id или @username</code>.")
+        rows.append(staff_nav_rows()[0])
+        self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(rows))
+
+    def _resolve_user(self, argument: str) -> int | None:
+        argument = argument.strip().lstrip("@")
+        if argument.isdigit():
+            return int(argument)
+        if not argument:
+            return None
+        row = self.db.connection().execute(
+            "SELECT user_id FROM users WHERE lower(username)=lower(?)", (argument,)).fetchone()
+        return int(row["user_id"]) if row else None
+
+    def grant_admin(self, chat_id: int, user_id: int, argument: str) -> None:
+        if not self.is_owner(user_id):
+            self.api.send_message(chat_id, "Назначать админов может только владелец.",
+                                  inline_keyboard(staff_nav_rows()))
+            return
+        target = self._resolve_user(argument)
+        if not argument:
+            self.api.send_message(chat_id, "Использование: <code>/grant id или @username</code>",
+                                  inline_keyboard(staff_nav_rows()))
+            return
+        if target is None or self.db.get_user(target) is None:
+            self.api.send_message(
+                chat_id, "Такого человека нет в базе: назначить можно того, "
+                         "кто уже писал боту.", inline_keyboard(staff_nav_rows()))
+            return
+        if target in self.settings.admin_ids:
+            self.api.send_message(chat_id, f"{esc(self._who(target))} — владелец, он уже в доступе.",
+                                  inline_keyboard(staff_nav_rows()))
+            return
+        if self.db.is_admin_id(target):
+            self.api.send_message(chat_id, f"{esc(self._who(target))} уже админ.",
+                                  inline_keyboard(staff_nav_rows()))
+            return
+        self.db.add_admin(target, user_id)
+        self.db.event(user_id, "admin_granted", {"target": target})
+        self.api.send_message(chat_id, f"{ICON['ok']} {esc(self._who(target))} — теперь админ: "
+                                       "пульт и покупки команды открыты.",
+                              inline_keyboard(staff_nav_rows()))
+        self.admin_access(chat_id)
+
+    def revoke_admin(self, chat_id: int, user_id: int, target: int) -> None:
+        if not self.is_owner(user_id):
+            self.api.send_message(chat_id, "Снимать доступ может только владелец.",
+                                  inline_keyboard(staff_nav_rows()))
+            return
+        if not self.db.is_admin_id(target):
+            self.api.send_message(chat_id, f"{esc(self._who(target))} не админ — снимать нечего.",
+                                  inline_keyboard(staff_nav_rows()))
+            return
+        self.db.remove_admin(target)
+        self.db.event(user_id, "admin_revoked", {"target": target})
+        self.api.send_message(chat_id, f"{ICON['cancel']} Доступ снят: {esc(self._who(target))}.",
+                              inline_keyboard(staff_nav_rows()))
+        self.admin_access(chat_id)
+
+    def admin_draws(self, chat_id: int) -> None:
+        """История розыгрышей: тираж без записи нельзя проверить постфактум."""
+        draws = self.db.recent_draws(5)
+        if not draws:
+            self.api.send_message(
+                chat_id, "<b>РОЗЫГРЫШИ</b>\n\nТиражей ещё не было.\n"
+                         "<code>/giveaway N</code> выберет победителей из топа приглашений.",
+                inline_keyboard(staff_nav_rows()))
+            return
+        lines = ["<b>РОЗЫГРЫШИ</b>", ""]
+        for row in draws:
+            payload = json.loads(row["payload"] or "{}")
+            winners = payload.get("winners") or []
+            names = ", ".join(esc(self._who(int(w))) for w in winners) or "—"
+            lines.append(f"{esc(str(row['created_at'])[:16])} · из {payload.get('pool', 0)}: {names}")
+        self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(staff_nav_rows()))
 
     def ask_broadcast_segment(self, chat_id: int, text: str) -> None:
         """Кому пишем: экран показывается и повторно, если ответили текстом."""
@@ -4867,12 +5015,21 @@ class BrandBot:
                 self.admin_order_card(chat_id, int(data.split(":", 1)[1]))
             except ValueError:
                 self.stale(chat_id, "Эта кнопка устарела.")
+        elif data.startswith("access:revoke:") and self.is_owner(user_id):
+            try:
+                self.revoke_admin(chat_id, user_id, int(data.split(":")[2]))
+            except (IndexError, ValueError):
+                return False
         elif data.startswith("adm:") and self.is_admin(user_id):
             action = data.split(":", 1)[1]
             if action == "add":
                 self.start_add_product(chat_id, user_id)
             elif action in {"summary", "stats"}:
                 self.admin_summary(chat_id)
+            elif action == "access":
+                self.admin_access(chat_id)
+            elif action == "draws":
+                self.admin_draws(chat_id)
             elif action in {"panel", "orders", "waitlist", "top", "export", "reload"}:
                 self.admin_command(chat_id, user_id, f"/{action}")
             else:

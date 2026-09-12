@@ -351,9 +351,12 @@ def run_owner(bot: BrandBot, db: Database, rec: Recorder, director: Director) ->
     director.tap("adm:panel")
     director.tap("adm:top")
     director.tap("adm:panel")
-    director.tap("adm:export")
+    director.tap("adm:draws")
     director.tap("adm:panel")
-    director.tap("adm:reload")
+    director.say("/grant 501")
+    director.tap("access:revoke:501")
+    director.say("/export")
+    director.say("/reload")
     director.tap_label("Режим покупателя")
 
 
