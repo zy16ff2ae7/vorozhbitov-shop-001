@@ -771,3 +771,70 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.assertTrue(self.bot.admin_command(1, 7, '/top'))
         text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
         self.assertIn('Приоритет дают с 4', text)
+
+    def _paid_order_with_payment(self):
+        import sqlite3 as _sql
+        from bot import utc_now
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        conn = self.db.connection()
+        conn.execute(
+            "INSERT INTO payments(payment_id, user_id, amount_rub, status, method, created_at, paid_at) "
+            "VALUES ('pay-t1', 5, 4900, 'paid', 'card', ?, ?)", (utc_now(), utc_now()))
+        conn.execute(
+            "INSERT INTO orders(user_id, product_id, product_name, size, quantity, "
+            "amount_rub, status, payment_id, created_at) "
+            "VALUES (5, 'tee', 'Футболка', 'L', 1, 4900, 'paid', 'pay-t1', ?)", (utc_now(),))
+        return conn.execute("SELECT id FROM orders ORDER BY id DESC").fetchone()[0]
+
+    def test_order_note_button_saves_and_shows(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        order_id = self._paid_order_with_payment()
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, f'anote:{order_id}'))
+        self.assertTrue(self.bot.handle_order_note_text(1, 1, 'Забрать в субботу'))
+        self.assertEqual(self.db.get_order(order_id)['note'], 'Забрать в субботу')
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Забрать в субботу', text)
+        self.api.send_message.reset_mock()
+        self.bot.db.set_state(1, 'order_note', {'order': order_id})
+        self.assertTrue(self.bot.handle_order_note_text(1, 1, 'без заметки'))
+        self.assertEqual(self.db.get_order(order_id)['note'], '')
+
+    def test_refund_reason_buttons_and_done(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        order_id = self._paid_order_with_payment()
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, f'order:{order_id}:cancelled'))
+        open_rows = self.db.refunds_open()
+        self.assertEqual(len(open_rows), 1)
+        pid = open_rows[0]['payment_id']
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/refunds'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Причина не указана', text)
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, f'rreasons:{pid}'))
+        self.assertTrue(self.bot.route_callback('cb3', 1, 1, f'rreason:{pid}:size'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Не подошёл размер', text)
+        self.assertTrue(self.bot.route_callback('cb4', 1, 1, f'rdone:{pid}'))
+        self.assertEqual(self.db.refunds_open(), [])
+        self.assertEqual(self.db.money_stats()['refunds'], 0)
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Выполнено недавно', text)
+
+    def test_again_repeats_last_broadcast(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        self.db.set_phone(5, '+79995556677')
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/again'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Прошлой рассылки нет', text)
+        self.db.set_state(1, 'broadcast_pending', {'text': 'Скидка до вечера', 'segment': 'all'})
+        self.bot.confirm_broadcast(1, 1)
+        import time as _t
+        _t.sleep(0.4)
+        self.assertIn('Скидка до вечера', self.db.kv_get('last_broadcast'))
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 1, '/again'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Скидка до вечера', text)
+        self.assertIn('ПРЕДПРОСМОТР', text)

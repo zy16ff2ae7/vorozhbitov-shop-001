@@ -1170,6 +1170,32 @@ class Database:
             "SELECT created_at, payload FROM events WHERE event='giveaway_drawn' "
             "ORDER BY id DESC LIMIT ?", (limit,)))
 
+    def set_order_note(self, order_id: int, note: str) -> None:
+        with self.lock, self.connection() as conn:
+            conn.execute("UPDATE orders SET note=? WHERE id=?",
+                         (str(note or "")[:400], order_id))
+
+    def refunds_open(self) -> list[dict[str, Any]]:
+        with self.connection() as conn:
+            rows = conn.execute(
+                "SELECT p.payment_id, p.amount_rub, p.created_at, o.id AS order_id, "
+                "o.product_name, o.size, o.user_id FROM payments p "
+                "JOIN orders o ON o.payment_id = p.payment_id "
+                "WHERE p.status='refund_required' ORDER BY p.created_at"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def refunds_done(self, limit: int = 5) -> list[dict[str, Any]]:
+        with self.connection() as conn:
+            rows = conn.execute(
+                "SELECT p.payment_id, p.amount_rub, p.paid_at, o.id AS order_id, "
+                "o.product_name, o.user_id FROM payments p "
+                "JOIN orders o ON o.payment_id = p.payment_id "
+                "WHERE p.status='refunded' ORDER BY p.created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def kv_get(self, key: str) -> str:
         row = self.connection().execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
         return str(row[0]) if row else ""
@@ -1928,6 +1954,13 @@ def audience_label(segment: str, categories: Iterable[dict[str, str]]) -> str:
     return "Сегмент не распознан"
 
 
+REFUND_REASON_LABELS = {
+    "size": "Не подошёл размер",
+    "changed": "Покупатель передумал",
+    "defect": "Брак или дефект",
+    "other": "Другое",
+}
+
 ORDER_STATUS_LABELS = {
     "new": "новая",
     "awaiting_payment": "ждёт оплаты",
@@ -2034,6 +2067,8 @@ def staff_commands() -> list[dict[str, str]]:
         {"command": "money", "description": "Деньги: выручка и чек"},
         {"command": "digest", "description": "Дайджест: что сегодня"},
         {"command": "shelf", "description": "Витрина: скрыть и показать"},
+        {"command": "refunds", "description": "Возвраты: причины и статус"},
+        {"command": "again", "description": "Повторить прошлую рассылку"},
         {"command": "grant", "description": "Назначить админа: /grant id"},
         {"command": "help", "description": "Как это работает"},
     ]
@@ -4145,11 +4180,58 @@ class BrandBot:
         """Клавиатура карточки покупки: действия статуса, затем клиент, нав-ряд последний."""
         markup = self.order_status_keyboard(order_id, status) or {}
         rows = [list(r) for r in markup.get("inline_keyboard", [])]
-        # Нав-ряд остаётся последним: клиент встаёт перед ним, а не поверх выхода.
+        # Нав-ряд остаётся последним: заметка и клиент встают перед ним.
         rows.insert(max(0, len(rows) - 1),
                     [{"text": icon("account", "Клиент →"),
                       "callback_data": f"aclient:{int(user_id)}"}])
+        rows.insert(max(0, len(rows) - 1),
+                    [{"text": icon("receipt", "Заметка"),
+                      "callback_data": f"anote:{int(order_id)}"}])
         return {"inline_keyboard": rows}
+
+    def admin_refunds(self, chat_id: int) -> None:
+        """Возвраты очередью: причина и отметка «выполнен» — кнопками."""
+        open_rows = self.db.refunds_open()
+        lines: list[str] = ["<b>ВОЗВРАТЫ</b>"]
+        rows: list[list[tuple[str, str]]] = []
+        if not open_rows:
+            lines.append("\nОчередь пуста: возвраты не требуются.")
+        for row in open_rows:
+            pid = str(row["payment_id"])
+            reason = self.db.kv_get(f"rreason:{pid}")
+            lines.append(
+                f"\n{ICON['cancel']} Покупка №{int(row['order_id'])} · "
+                f"{esc(str(row['product_name'])[:24])} · {format_rub(int(row['amount_rub']))}"
+                + (f"\n{ICON['tools']} Причина: {esc(reason)}" if reason
+                   else "\nПричина не указана — выбери кнопкой.")
+            )
+            if len(rows) < 4:
+                rows.append([
+                    (icon("tools", "Причина →"), f"rreasons:{pid}"),
+                    (icon("ok", "Возврат выполнен"), f"rdone:{pid}"),
+                ])
+        done = self.db.refunds_done()
+        if done:
+            lines.append(f"\n{ICON['ok']} Выполнено недавно:")
+            for row in done:
+                pid = str(row["payment_id"])
+                reason = self.db.kv_get(f"rreason:{pid}") or "без причины"
+                lines.append(f"№{int(row['order_id'])} · "
+                             f"{format_rub(int(row['amount_rub']))} · {esc(reason)}")
+        self.api.send_message(chat_id, "\n".join(lines),
+                              inline_keyboard(rows + staff_nav_rows()))
+
+    def admin_refund_reasons(self, chat_id: int, payment_id: str) -> None:
+        rows = [[(label, f"rreason:{payment_id}:{key}")
+                 for key, label in list(REFUND_REASON_LABELS.items())[i:i + 2]]
+                for i in (0, 2)]
+        rows.append([(icon("cancel", "← Возвраты"), "rlist")])
+        self.api.send_message(
+            chat_id,
+            f"<b>ПРИЧИНА ВОЗВРАТА</b>\n\nОплата {esc(payment_id[:12])}.\n"
+            "Причина попадёт в экран возвратов и в журнал.",
+            inline_keyboard(rows),
+        )
 
     def admin_command(self, chat_id: int, user_id: int, text: str) -> bool:
         if not self.is_admin(user_id):
@@ -4301,6 +4383,27 @@ class BrandBot:
             self.admin_digest(chat_id)
         elif command == "/shelf":
             self.admin_shelf(chat_id)
+        elif command == "/refunds":
+            self.admin_refunds(chat_id)
+        elif command == "/again":
+            raw = self.db.kv_get("last_broadcast")
+            try:
+                saved = json.loads(raw) if raw else {}
+            except ValueError:
+                saved = {}
+            text_last = str(saved.get("text") or "").strip()
+            if not text_last:
+                self.api.send_message(
+                    chat_id,
+                    "Прошлой рассылки нет — повторять нечего.\n"
+                    "Собери новую: <code>/broadcast текст</code>.",
+                    inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]),
+                )
+            else:
+                segment = str(saved.get("segment") or "all")
+                self.db.set_state(user_id, "broadcast_pending",
+                                  {"text": text_last, "segment": segment})
+                self.preview_broadcast(chat_id, user_id, segment)
         elif command == "/grant":
             self.grant_admin(chat_id, user_id, argument)
         elif command == "/revoke":
@@ -4361,6 +4464,18 @@ class BrandBot:
             return
         self.db.set_state(user_id, "admin_add", {"step": "name", "category": category_id})
         self.api.send_message(chat_id, add_step_text(2, ADD_STEPS[0][1]))
+
+    def handle_order_note_text(self, chat_id: int, user_id: int, text: str) -> bool:
+        """Заметка к покупке: один текстовый шаг, дальше снова карточка."""
+        state = self.db.get_state(user_id)
+        if not state or state[0] != "order_note":
+            return False
+        order_id = int(state[1].get("order") or 0)
+        self.db.clear_state(user_id)
+        note = "" if text.lower() in ("без заметки", "-") else text
+        self.db.set_order_note(order_id, note)
+        self.admin_order_card(chat_id, order_id)
+        return True
 
     def handle_add_product_text(self, chat_id: int, user_id: int, text: str) -> bool:
         state = self.db.get_state(user_id)
@@ -4739,6 +4854,7 @@ class BrandBot:
                 self.segment_keyboard(),
             )
             return
+        self.db.kv_set("last_broadcast", compact_json({"text": text, "segment": segment}))
         # Рассылка идёт в отдельном потоке: раньше она выполнялась прямо в
         # цикле опроса и на 10 000 получателей морозила бота примерно на 7 минут.
         thread = threading.Thread(
@@ -5230,6 +5346,36 @@ class BrandBot:
             new = min(10, max(1, self.giveaway_threshold() + step))
             self.db.kv_set("giveaway_min_invites", str(new))
             self.admin_draws(chat_id)
+        elif data.startswith("anote:") and self.is_admin(user_id):
+            order_id = int(data.split(":", 1)[1])
+            self.db.set_state(user_id, "order_note", {"order": order_id})
+            self.api.send_message(
+                chat_id,
+                f"Заметка к покупке №{order_id}? Ответь текстом — сохраню в карточку.\n"
+                "Пришли «без заметки», чтобы стереть текущую.",
+            )
+            return True
+        elif data == "rlist" and self.is_admin(user_id):
+            self.admin_refunds(chat_id)
+            return True
+        elif data.startswith("rreasons:") and self.is_admin(user_id):
+            self.admin_refund_reasons(chat_id, data.split(":", 1)[1])
+            return True
+        elif data.startswith("rreason:") and self.is_admin(user_id):
+            _, pid, key = (data.split(":", 2) + ["", "", ""])[:3]
+            label = REFUND_REASON_LABELS.get(key, "")
+            if label:
+                self.db.kv_set(f"rreason:{pid}", label)
+            self.admin_refunds(chat_id)
+            return True
+        elif data.startswith("rdone:") and self.is_admin(user_id):
+            pid = data.split(":", 1)[1]
+            with self.db.lock, self.db.connection() as conn:
+                conn.execute("UPDATE payments SET status='refunded' WHERE payment_id=?",
+                             (pid,))
+            self.db.event(chat_id, "payment_refunded", {"payment_id": pid})
+            self.admin_refunds(chat_id)
+            return True
         elif data.startswith("wnotify:") and self.is_admin(user_id):
             parts = data.split(":", 2)
             if len(parts) != 3 or not parts[1] or not parts[2]:
@@ -5295,6 +5441,8 @@ class BrandBot:
             return
         self.db.upsert_user(user)
         if self.db.get_state(user_id) and self.handle_add_product_text(chat_id, user_id, text):
+            return
+        if self.handle_order_note_text(chat_id, user_id, text):
             return
         if text.startswith("/") and self.admin_command(chat_id, user_id, text):
             return
