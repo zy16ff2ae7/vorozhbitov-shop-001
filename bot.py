@@ -32,7 +32,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -1130,6 +1130,36 @@ class Database:
             ORDER BY a.user_id
             """))
 
+    def money_stats(self) -> dict[str, int]:
+        """Деньги отдельно от работы: всего, сегодня, за неделю, средний чек."""
+        conn = self.connection()
+        today = utc_now()[:10]
+        week = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()[:10]
+        paid = "SELECT COALESCE(SUM(amount_rub), 0), COUNT(*) FROM payments WHERE status='paid'"
+        total, count = conn.execute(paid).fetchone()
+        return {
+            "paid_total": int(total or 0),
+            "paid_count": int(count or 0),
+            "paid_today": int(conn.execute(
+                "SELECT COALESCE(SUM(amount_rub), 0) FROM payments "
+                "WHERE status='paid' AND substr(paid_at, 1, 10)=?", (today,)).fetchone()[0] or 0),
+            "paid_week": int(conn.execute(
+                "SELECT COALESCE(SUM(amount_rub), 0) FROM payments "
+                "WHERE status='paid' AND substr(paid_at, 1, 10)>=?", (week,)).fetchone()[0] or 0),
+            "refunds": int(conn.execute(
+                "SELECT COUNT(*) FROM payments WHERE status='refund_required'").fetchone()[0] or 0),
+        }
+
+    def waitlist_unnotified(self) -> list[sqlite3.Row]:
+        return list(self.connection().execute(
+            "SELECT product_id, product_name, size, COUNT(*) AS c FROM waitlist "
+            "WHERE notified_at IS NULL GROUP BY product_id, size ORDER BY c DESC"))
+
+    def orders_new(self) -> int:
+        row = self.connection().execute(
+            "SELECT COUNT(*) FROM orders WHERE status='new'").fetchone()
+        return int(row[0] or 0)
+
     def recent_broadcasts(self, limit: int = 5) -> list[sqlite3.Row]:
         return list(self.connection().execute(
             "SELECT created_at, payload FROM events WHERE event='broadcast_sent' "
@@ -2001,6 +2031,8 @@ def staff_commands() -> list[dict[str, str]]:
         {"command": "access", "description": "Доступ команды"},
         {"command": "draws", "description": "История розыгрышей"},
         {"command": "reports", "description": "Журнал рассылок"},
+        {"command": "money", "description": "Деньги: выручка и чек"},
+        {"command": "digest", "description": "Дайджест: что сегодня"},
         {"command": "grant", "description": "Назначить админа: /grant id"},
         {"command": "help", "description": "Как это работает"},
     ]
@@ -3425,6 +3457,24 @@ class BrandBot:
             inline_keyboard([[(icon("catalog", "Каталог"), "catalog")]] + nav_rows()),
         )
 
+    def restock_reply(self, chat_id: int, product_id: str, size: str) -> None:
+        """Ответ на ресток: из команды или из кнопки листа ожидания."""
+        delivered = self.notify_waitlist(product_id, size)
+        if delivered:
+            self.api.send_message(
+                chat_id, f"Уведомлено по листу ожидания: {delivered}.",
+                inline_keyboard(staff_nav_rows()))
+            return
+        waiting = len(self.db.waitlist_user_ids(product_id, size))
+        if waiting:
+            text = (
+                f"Никого не оповестил: все {waiting} уже получали сообщение об этом размере.\n"
+                "Одна запись листа ожидания — одно сообщение, иначе люди тонут в повторах."
+            )
+        else:
+            text = "По этому размеру никто не ждёт — оповещать некого."
+        self.api.send_message(chat_id, text, inline_keyboard(staff_nav_rows()))
+
     def notify_waitlist(self, product_id: str, size: str) -> int:
         """Оповестить тех, кто ждёт размер. Каждая запись срабатывает один раз."""
         delivered = 0
@@ -3918,10 +3968,53 @@ class BrandBot:
             chat_id,
             text,
             inline_keyboard(
-                [[(icon("orders", "Покупки"), "adm:orders")]]
+                [[(icon("pay", "Деньги →"), "adm:money"),
+                  (icon("notice", "Что сегодня"), "adm:digest")]]
+                + [[(icon("orders", "Покупки"), "adm:orders")]]
                 + [[(icon("tools", "Управление"), "adm:panel"), (icon("account", "Режим покупателя"), "menu")]]
             ),
         )
+
+    def admin_money(self, chat_id: int) -> None:
+        """Экран денег: владелец смотрит выручку без сводки-простыни."""
+        money = self.db.money_stats()
+        avg = money["paid_total"] // money["paid_count"] if money["paid_count"] else 0
+        lines = [
+            "<b>ДЕНЬГИ</b>", "",
+            f"{ICON['pay']} Получено всего: {esc(format_rub(money['paid_total']))}",
+            f"{ICON['pay']} Сегодня: {esc(format_rub(money['paid_today']))}",
+            f"{ICON['pay']} За 7 дней: {esc(format_rub(money['paid_week']))}",
+            f"{ICON['receipt']} Средний чек: {esc(format_rub(avg))} · оплачено {money['paid_count']}",
+        ]
+        if money["refunds"]:
+            lines.append(f"{ICON['notice']} Возвратов к вниманию: {money['refunds']}")
+        self.api.send_message(
+            chat_id, "\n".join(lines),
+            inline_keyboard([[(icon("stats", "Сводка"), "adm:summary")]] + staff_nav_rows()))
+
+    def admin_digest(self, chat_id: int) -> None:
+        """Что сегодня хозяйству: подтверждения, оплаты, дефицит, возвраты."""
+        stats = self.db.stats()
+        waits = self.db.waitlist_unnotified()
+        lines = [
+            "<b>ЧТО СЕГОДНЯ</b>", "",
+            f"{ICON['orders']} Покупок сегодня: {stats['orders_today']} · "
+            f"новых без подтверждения: {self.db.orders_new()}",
+            f"{ICON['pay']} Ждут оплаты: {stats['awaiting_payment']} · "
+            f"оплачено всего: {stats['paid']}",
+        ]
+        if waits:
+            sizes = ", ".join(f"{esc(str(r['size']))} ×{int(r['c'])}" for r in waits[:4])
+            lines.append(f"{ICON['wait']} Вернуть размеры: {sizes}")
+        else:
+            lines.append(f"{ICON['wait']} Лист ожидания чист: дефицита нет")
+        if stats["refunds"]:
+            lines.append(f"{ICON['notice']} Возвраты: {stats['refunds']} — посмотрите")
+        else:
+            lines.append("Возвратов нет.")
+        self.api.send_message(
+            chat_id, "\n".join(lines),
+            inline_keyboard([[(icon("stats", "Сводка"), "adm:summary")]] + staff_nav_rows()))
 
     def admin_orders(self, chat_id: int) -> None:
         """Покупки у команды одним списком: карточка с действием — по номеру.
@@ -4010,23 +4103,7 @@ class BrandBot:
             if len(parts) != 2:
                 self.api.send_message(chat_id, "Использование: <code>/restock id_товара размер</code>")
             else:
-                delivered = self.notify_waitlist(parts[0], parts[1])
-                if delivered:
-                    self.api.send_message(
-                        chat_id,
-                        f"Уведомлено по листу ожидания: {delivered}.",
-                        inline_keyboard(staff_nav_rows()),
-                    )
-                else:
-                    waiting = len(self.db.waitlist_user_ids(parts[0], parts[1]))
-                    if waiting:
-                        text = (
-                            f"Никого не оповестил: все {waiting} уже получали сообщение об этом размере.\n"
-                            "Одна запись листа ожидания — одно сообщение, иначе люди тонут в повторах."
-                        )
-                    else:
-                        text = "По этому размеру никто не ждёт — оповещать некого."
-                    self.api.send_message(chat_id, text, inline_keyboard(staff_nav_rows()))
+                self.restock_reply(chat_id, parts[0], parts[1])
         elif command == "/waitlist":
             rows = self.db.waitlist_rows()
             if not rows:
@@ -4053,9 +4130,16 @@ class BrandBot:
                         f"• {esc(row['product_name'])} · {esc(row['size'])} · "
                         f"{esc(who or str(row['user_id']))}{tail}"
                     )
-                lines.extend(["", "Написать им, когда размер вернётся: <code>/restock id размер</code>",
+                lines.extend(["", "Написать им, когда размер вернётся: кнопкой ниже "
+                              "или <code>/restock id размер</code>.",
                               "Повторно тем же людям не пишем — одна запись даёт одно сообщение."])
-                self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(staff_nav_rows()))
+                rows: list[list[tuple[str, str]]] = []
+                for row in self.db.waitlist_unnotified()[:3]:
+                    name = str(row["product_name"])[:14]
+                    rows.append([(icon("channel", f"Вернуть {row['size']} · {name}"),
+                                  f"wnotify:{row['product_id']}:{row['size']}")])
+                rows.append(staff_nav_rows()[0])
+                self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(rows))
         elif command == "/top":
             rows = self.db.top_referrers()
             if not rows:
@@ -4143,6 +4227,10 @@ class BrandBot:
             self.admin_draws(chat_id)
         elif command == "/reports":
             self.admin_reports(chat_id)
+        elif command == "/money":
+            self.admin_money(chat_id)
+        elif command == "/digest":
+            self.admin_digest(chat_id)
         elif command == "/grant":
             self.grant_admin(chat_id, user_id, argument)
         elif command == "/revoke":
@@ -5049,12 +5137,21 @@ class BrandBot:
                 self.revoke_admin(chat_id, user_id, int(data.split(":")[2]))
             except (IndexError, ValueError):
                 return False
+        elif data.startswith("wnotify:") and self.is_admin(user_id):
+            parts = data.split(":", 2)
+            if len(parts) != 3 or not parts[1] or not parts[2]:
+                return False
+            self.restock_reply(chat_id, parts[1], parts[2])
         elif data.startswith("adm:") and self.is_admin(user_id):
             action = data.split(":", 1)[1]
             if action == "add":
                 self.start_add_product(chat_id, user_id)
             elif action in {"summary", "stats"}:
                 self.admin_summary(chat_id)
+            elif action == "money":
+                self.admin_money(chat_id)
+            elif action == "digest":
+                self.admin_digest(chat_id)
             elif action == "access":
                 self.admin_access(chat_id)
             elif action == "draws":

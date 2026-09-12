@@ -36,7 +36,7 @@ sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(BASE_DIR / "tools"))
 sys.path.insert(0, str(BASE_DIR / "tools" / "video"))
 
-from bot import BrandBot, Catalog, Database, Settings, TelegramAPI  # noqa: E402
+from bot import BrandBot, Catalog, Database, Settings, TelegramAPI, utc_now  # noqa: E402
 import chat_render as ui  # noqa: E402
 
 FPS = 30
@@ -303,6 +303,13 @@ def run_team(bot: BrandBot, db: Database, rec: Recorder, director: Director) -> 
         guest_director.tap("size:tee-sila-i-chest:M")
         guest_director.tap("consent:yes")
         guest_director.say("Отправить номер телефона", contact_phone="+79990001122")
+        # Живой лист ожидания: XXL команда ресточит кнопкой в кадре,
+        # а M остаётся дефицитом для дайджеста владельца.
+        for who, size in ((501, "XXL"), (3, "M")):
+            db.connection().execute(
+                "INSERT INTO waitlist(user_id, product_id, product_name, size, created_at) "
+                "VALUES (?, 'tee-sila-i-chest', 'Футболка «Сила и честь»', ?, ?)",
+                (who, size, utc_now()))
     finally:
         rec.muted = False
 
@@ -322,7 +329,7 @@ def run_team(bot: BrandBot, db: Database, rec: Recorder, director: Director) -> 
     director.tap("add:publish")
     director.tap("adm:panel")
     director.tap("adm:waitlist")
-    director.say("/restock tee-sila-i-chest XXL")
+    director.tap_label("Вернуть XXL")
     director.tap("adm:panel")
 
 
@@ -343,6 +350,9 @@ def run_owner(bot: BrandBot, db: Database, rec: Recorder, director: Director) ->
     director.say("/start")
     director.tap("adm:panel")
     director.tap("adm:summary")
+    director.tap("adm:money")
+    director.tap("adm:summary")
+    director.tap("adm:digest")
     director.tap("adm:panel")
     director.say("/broadcast Футболка «Сила и честь»: размер L — последние штуки. Кто ждал — забирайте.")
     director.tap("seg:all")

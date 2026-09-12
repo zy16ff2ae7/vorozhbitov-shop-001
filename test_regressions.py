@@ -666,3 +666,57 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.assertTrue(self.bot.admin_command(1, 1, '/reports'))
         text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
         self.assertIn('доставлено 8', text)
+
+    def test_summary_offers_money_and_digest_entries(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.bot.admin_summary(1)
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [b['callback_data'] for row in markup for b in row]
+        self.assertIn('adm:money', targets)
+        self.assertIn('adm:digest', targets)
+
+    def test_money_screen_shows_revenue_and_average_check(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        from bot import utc_now
+        self.db.connection().execute(
+            "INSERT INTO payments(payment_id, user_id, amount_rub, amount_stars, status, "
+            "method, created_at, paid_at) VALUES ('p1', 5, 4900, 0, 'paid', 'stars', ?, ?)",
+            (utc_now(), utc_now()))
+        self.assertTrue(self.bot.admin_command(1, 1, '/money'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('ДЕНЬГИ', text)
+        self.assertIn('4 900', text)
+        self.assertIn('Средний чек', text)
+
+    def test_digest_lists_deficit_sizes_and_clean_states(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'waiter', 'first_name': 'Ждан'})
+        from bot import utc_now
+        self.db.connection().execute(
+            "INSERT INTO waitlist(user_id, product_id, product_name, size, created_at) "
+            "VALUES (5, 'tee-sila-i-chest', 'Футболка «Сила и честь»', 'XXL', ?)", (utc_now(),))
+        self.assertTrue(self.bot.admin_command(1, 1, '/digest'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('ЧТО СЕГОДНЯ', text)
+        self.assertIn('XXL ×1', text)
+        self.assertIn('Возвратов нет.', text)
+
+    def test_waitlist_screen_restocks_in_one_tap(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'waiter', 'first_name': 'Ждан'})
+        self.db.set_consent(5)
+        from bot import utc_now
+        self.db.connection().execute(
+            "INSERT INTO waitlist(user_id, product_id, product_name, size, created_at) "
+            "VALUES (5, 'tee-sila-i-chest', 'Футболка «Сила и честь»', 'XXL', ?)", (utc_now(),))
+        self.assertTrue(self.bot.admin_command(1, 1, '/waitlist'))
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [b['callback_data'] for row in markup for b in row]
+        self.assertIn('wnotify:tee-sila-i-chest:XXL', targets)
+        self.api.send_message.reset_mock()
+        self.assertFalse(self.bot.route_callback('cb1', 1, 5, 'wnotify:tee-sila-i-chest:XXL'))
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'wnotify:tee-sila-i-chest:XXL'))
+        texts = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('РАЗМЕР ВЕРНУЛСЯ', texts)
+        self.assertIn('Уведомлено по листу ожидания: 1', texts)
+        self.assertEqual(self.db.waitlist_unnotified(), [])
