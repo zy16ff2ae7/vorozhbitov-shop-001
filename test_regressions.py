@@ -940,6 +940,15 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.assertEqual(self.bot.catalog.get('tee-sila-i-chest')['description'],
                          'Плотный хлопок.')
 
+    def test_pruned_menu_duplicates_still_work_as_commands(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        for command in ('/admin', '/stats', '/orders', '/access', '/draws'):
+            self.api.send_message.reset_mock()
+            self.assertTrue(self.bot.admin_command(1, 1, command), command)
+            self.assertTrue(self.api.send_message.call_args_list, command)
+        self.db.set_state(1, 'admin_add', {'step': 'category'})
+        self.assertTrue(self.bot.admin_command(1, 1, '/add'))
+
 
 if __name__ == '__main__':
     unittest.main()

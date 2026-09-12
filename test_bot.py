@@ -1771,7 +1771,10 @@ class NativeMenuTests(unittest.TestCase):
         self.assertEqual(buyer, {"start", "catalog", "orders", "support", "help"})
         # Служебные команды покупатель не видит: их вешаем отдельным scope.
         self.assertFalse(buyer & {"admin", "stats", "add", "broadcast"})
-        self.assertTrue({"admin", "stats", "add", "broadcast"} <= staff)
+        self.assertTrue({"broadcast", "grant", "shelf", "refunds", "unpaid",
+                         "again", "faqs", "reports", "money", "digest"} <= staff)
+        # Дубли кнопок пульта в меню не шумят, но сами команды работают.
+        self.assertFalse({"admin", "stats", "orders", "add", "access", "draws"} & staff)
         for item in buyer_commands() + staff_commands():
             self.assertTrue(item["description"], item)
             self.assertLessEqual(len(item["description"]), 30, item)

@@ -2106,16 +2106,15 @@ def buyer_commands() -> list[dict[str, str]]:
 
 
 def staff_commands() -> list[dict[str, str]]:
-    """Команды команды. Вешаются отдельным scope — покупатель их не видит."""
+    """Команды команды. Вешаются отдельным scope — покупатель их не видит.
+
+    В меню только уникальные входы: дубли кнопок пульта (/admin, /stats,
+    /orders, /add, /access, /draws) из экрана убраны, но сами команды
+    работают — кто привык печатать, не потеряет привычку.
+    """
     return [
         {"command": "start", "description": "Главное меню"},
-        {"command": "admin", "description": "Управление магазином"},
-        {"command": "stats", "description": "Сводка"},
-        {"command": "orders", "description": "Все покупки"},
-        {"command": "add", "description": "Добавить вещь"},
         {"command": "broadcast", "description": "Рассылка: /broadcast текст"},
-        {"command": "access", "description": "Доступ команды"},
-        {"command": "draws", "description": "История розыгрышей"},
         {"command": "reports", "description": "Журнал рассылок"},
         {"command": "money", "description": "Деньги: выручка и чек"},
         {"command": "digest", "description": "Дайджест: что сегодня"},
