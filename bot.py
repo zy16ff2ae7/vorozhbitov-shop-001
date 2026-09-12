@@ -1254,8 +1254,7 @@ class TelegramAPI:
         raise RuntimeError(f"Telegram request failed: {last_error}")
 
     def send_message(self, chat_id: int, text: str, reply_markup: dict[str, Any] | None = None) -> Any:
-        if len(text) > 4000:
-            text = text[:3990] + "…"
+        text = fit_html_text(text, MESSAGE_TEXT_LIMIT - 96)
         payload: dict[str, Any] = {
             "chat_id": chat_id,
             "text": text,
@@ -1267,8 +1266,7 @@ class TelegramAPI:
         return self.call("sendMessage", payload)
 
     def send_photo(self, chat_id: int, photo: str, caption: str, reply_markup: dict[str, Any] | None = None) -> Any:
-        if len(caption) > 1024:
-            caption = caption[:1010] + "…"
+        caption = fit_html_text(caption, CAPTION_LIMIT - 24)
         payload: dict[str, Any] = {
             "chat_id": chat_id,
             "photo": photo,
@@ -1287,8 +1285,7 @@ class TelegramAPI:
         reply_markup: dict[str, Any] | None = None,
     ) -> Any:
         """Upload a local JPEG/PNG as sendPhoto — works even if WEBAPP_URL is unreachable."""
-        if len(caption) > 1024:
-            caption = caption[:1010] + "…"
+        caption = fit_html_text(caption, CAPTION_LIMIT - 24)
         content = path.read_bytes()
         filename = path.name or "photo.jpg"
         mime = mimetypes.guess_type(filename)[0] or "image/jpeg"
@@ -1348,8 +1345,7 @@ class TelegramAPI:
         Uploading a few megabytes on every ``/start`` is wasteful, so callers
         cache the returned ``file_id`` and pass it next time.
         """
-        if len(caption) > 1024:
-            caption = caption[:1010] + "…"
+        caption = fit_html_text(caption, CAPTION_LIMIT - 24)
         fields: dict[str, str] = {
             "chat_id": str(chat_id),
             "caption": caption,
@@ -1477,11 +1473,87 @@ class TelegramAPI:
         return result.get("result")
 
 
+# Ошибки Telegram, после которых повторять доставку бессмысленно.
+BLOCKED_DELIVERY_MARKERS = (
+    "bot was blocked",
+    "blocked by the user",
+    "user is deactivated",
+    "chat not found",
+    "have no rights to send a message",
+    "bot can't initiate conversation",
+)
+UNDELIVERABLE_MARKERS = (
+    "message is too long",
+    "can't parse entities",
+    "can't parse message entities",
+    "wrong type of the web page content",
+)
+
+MESSAGE_TEXT_LIMIT = 4096
+CAPTION_LIMIT = 1024
+BUTTON_TEXT_LIMIT = 64
+_HTML_TAG_RE = re.compile(
+    r"</?(b|i|u|s|span|code|pre|a|em|strong|blockquote|tg-spoiler)\b[^>]*>"
+)
+
+
+def fit_html_text(text: Any, limit: int) -> str:
+    """Укорачивает HTML-текст под лимит Telegram, не ломая разметку.
+
+    Обрезка посреди тега или экранированной сущности (``&amp;`` → ``&am``)
+    даёт «Can't parse entities»: Telegram отклоняет сообщение целиком, а очередь
+    доставки повторяет попытку без конца. Поэтому режем по границе строки или
+    тега и закрываем то, что осталось незакрытым.
+    """
+    value = str(text or "")
+    if len(value) <= limit:
+        return value
+    reserve = 48  # многоточие и закрывающие теги
+    cut = value[:max(1, limit - reserve)]
+    newline = cut.rfind("\n")
+    if newline >= limit // 2:
+        cut = cut[:newline]
+    else:
+        opened, closed = cut.rfind("<"), cut.rfind(">")
+        if opened > closed:
+            cut = cut[:opened]  # не резать внутри тега
+    amp = cut.rfind("&")
+    if amp != -1 and ";" not in cut[amp:amp + 10]:
+        cut = cut[:amp]  # не рвать сущность
+    stack: list[str] = []
+    for match in _HTML_TAG_RE.finditer(cut):
+        tag, name = match.group(0), match.group(1)
+        if tag.startswith("</"):
+            if name in stack:
+                stack.remove(name)
+        elif not tag.endswith("/>"):
+            stack.append(name)
+    tail = "".join(f"</{name}>" for name in reversed(stack))
+    return f"{cut.rstrip()}…{tail}"[:limit]
+
+
+def button_label(text: Any, limit: int = BUTTON_TEXT_LIMIT) -> str:
+    """Подпись кнопки в пределах лимита Telegram.
+
+    Длинное название вещи из каталога ломает не кнопку, а всю клавиатуру:
+    сообщение с подписью длиннее 64 символов Telegram отклоняет целиком.
+    """
+    value = " ".join(str(text or "").split())
+    if len(value) <= limit:
+        return value
+    cut = value[:limit - 1].rstrip()
+    space = cut.rfind(" ")
+    if space > limit // 2:
+        cut = cut[:space]
+    return cut + "…"
+
+
 def inline_keyboard(rows: Iterable[Iterable[tuple[str, str]]]) -> dict[str, Any]:
     keyboard = []
     for row in rows:
         buttons = []
         for label, target in row:
+            label = button_label(label)
             if target.startswith("webapp:"):
                 buttons.append({"text": label, "web_app": {"url": target.removeprefix("webapp:")}})
                 continue
@@ -1866,6 +1938,12 @@ PHONE_STATES = frozenset({"awaiting_consent", "awaiting_profile_phone", "awaitin
 # Шаг 1 — раздел, дальше ADD_STEPS, последний — проверка перед публикацией.
 ADD_TOTAL = len(ADD_STEPS) + 2
 
+# Пределы ввода мастера: названия попадают в кнопки (лимит Telegram 64 знака),
+# описание — в карточку вещи, которая обязана влезть в одно сообщение (4096).
+ADD_NAME_LIMIT = 48
+ADD_CATEGORY_LIMIT = 32
+ADD_DESCRIPTION_LIMIT = 1200
+
 
 def add_step_text(position: int, question: str, hint: str = "") -> str:
     """Экран мастера добавления вещи: один заголовок и счётчик шагов.
@@ -1902,8 +1980,31 @@ class BrandBot:
                                                      (utc_now(), row["notification_id"]))
                         continue
                 self.api.send_message(row["chat_id"], row["body"], json.loads(row["markup"]) if row["markup"] else None)
-            except Exception:
-                LOG.warning("Notification delivery deferred: %s", row["notification_id"], exc_info=True)
+            except Exception as exc:
+                reason = str(exc).lower()
+                notification_id = row["notification_id"]
+                if any(marker in reason for marker in BLOCKED_DELIVERY_MARKERS):
+                    # Собеседник заблокировал бота: помечаем, чтобы рассылки и
+                    # уведомления его больше не трогали, и не повторяем вечно.
+                    chat_id = int(row["chat_id"])
+                    if chat_id > 0:
+                        self.db.mark_blocked(chat_id)
+                    self.db.connection().execute(
+                        "UPDATE notifications SET delivered_at=? WHERE notification_id=?",
+                        (utc_now(), notification_id),
+                    )
+                    LOG.warning("Notification dropped, chat %s is unavailable: %s", chat_id, notification_id)
+                    continue
+                if any(marker in reason for marker in UNDELIVERABLE_MARKERS):
+                    # Такое сообщение не доставится никогда: повтор — это только
+                    # вечный лог и лишние запросы к Telegram.
+                    self.db.connection().execute(
+                        "UPDATE notifications SET delivered_at=? WHERE notification_id=?",
+                        (utc_now(), notification_id),
+                    )
+                    LOG.error("Notification undeliverable, dropped: %s — %s", notification_id, exc)
+                    continue
+                LOG.warning("Notification delivery deferred: %s", notification_id, exc_info=True)
                 delay = min(3600, 30 * 2 ** min(row["attempts"], 7))
                 self.db.connection().execute("UPDATE notifications SET next_attempt_at=? WHERE notification_id=?",
                                              (stamp + delay, row["notification_id"]))
@@ -3763,6 +3864,13 @@ class BrandBot:
             name = text.strip()
             if not name:
                 return True
+            if len(name) > ADD_CATEGORY_LIMIT:
+                self.api.send_message(
+                    chat_id,
+                    f"Название раздела — максимум {ADD_CATEGORY_LIMIT} знака: оно попадает в кнопки.\n"
+                    "Напиши короче.",
+                )
+                return True
             base = slugify(name, "category")
             category_id = base
             index = 2
@@ -3792,6 +3900,20 @@ class BrandBot:
             return True
         elif not value:
             self.api.send_message(chat_id, "Пусто не подойдёт. Напиши ещё раз или «Отмена».")
+            return True
+        if step == "name" and len(value) > ADD_NAME_LIMIT:
+            self.api.send_message(
+                chat_id,
+                f"Название длиннее {ADD_NAME_LIMIT} знаков — в кнопки витрины оно не влезет.\n"
+                "Сократи до сути, подробности допишешь в описание.",
+            )
+            return True
+        if step == "description" and len(value) > ADD_DESCRIPTION_LIMIT:
+            self.api.send_message(
+                chat_id,
+                f"Описание длиннее {ADD_DESCRIPTION_LIMIT} знаков — карточка вещи не влезет "
+                "в одно сообщение Telegram.\nСократи: две-четыре фразы читают, простыню нет.",
+            )
             return True
         if step == "price":
             # Цена уходит прямо в счёт, поэтому неоднозначный ввод отклоняем

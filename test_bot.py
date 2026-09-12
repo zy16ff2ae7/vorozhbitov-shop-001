@@ -29,9 +29,11 @@ from bot import (
     TelegramAPI,
     ADD_TOTAL,
     audience_label,
+    button_label,
     buyer_commands,
     channel_target,
     ensure_catalog_exists,
+    fit_html_text,
     inline_keyboard,
     nav_rows,
     normalize_phone,
@@ -2092,6 +2094,99 @@ class NativeMenuTests(unittest.TestCase):
             # Главное меню — оно и есть точка возврата, кнопки «menu» в нём нет.
             self.assertIn("остановились", text)
             self.assertIn("catalog", button_targets(markup))
+
+    def test_message_and_button_limits_are_respected(self):
+        """Обрезка не ломает разметку, а подпись кнопки не превышает лимит Telegram."""
+        text = "<b>ЗАГОЛОВОК</b>\n" + "Описание &amp; сущности <i>курсив</i>\n" * 200
+        cut = fit_html_text(text, 4000)
+        self.assertLessEqual(len(cut), 4000)
+        self.assertEqual(cut.count("<b>"), cut.count("</b>"))
+        self.assertEqual(cut.count("<i>"), cut.count("</i>"))
+        # Ни порванной сущности, ни тега, разрезанного пополам.
+        self.assertNotIn("&am\n", cut)
+        self.assertFalse(cut.rstrip("…").endswith("&am"))
+        self.assertIsNone(re.search(r"<[^>]*$", cut.replace("…", "")))
+        self.assertEqual(fit_html_text("коротко", 4000), "коротко")
+        self.assertEqual(fit_html_text("", 1024), "")
+
+        self.assertEqual(len(button_label("н" * 200)), 64)
+        self.assertEqual(button_label("Каталог"), "Каталог")
+        self.assertEqual(button_label("  два   пробела\n"), "два пробела")
+        markup = inline_keyboard([[("Очень длинное название вещи из каталога " * 4, "product:x")]])
+        self.assertLessEqual(len(markup["inline_keyboard"][0][0]["text"]), 64)
+        self.assertEqual(markup["inline_keyboard"][0][0]["callback_data"], "product:x")
+
+    def test_add_wizard_rejects_input_that_would_break_the_screen(self):
+        """Длинные названия и описания не пускаем: из них не собрать экран."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+
+            bot.start_add_product(1, 1)
+            bot.route_callback("cb", 1, 1, "addcat:new")
+            bot.handle_add_product_text(1, 1, "Р" * 40)
+            self.assertIn("максимум 32", api.last(1)[1])
+            self.assertEqual(db.get_state(1)[1]["step"], "new_category")
+
+            bot.handle_add_product_text(1, 1, "Верхняя одежда")
+            bot.handle_add_product_text(1, 1, "Н" * 60)
+            self.assertIn("Название длиннее", api.last(1)[1])
+            self.assertEqual(db.get_state(1)[1]["step"], "name")
+
+            bot.handle_add_product_text(1, 1, "ПАРКА")
+            bot.handle_add_product_text(1, 1, "12 900 ₽")
+            bot.handle_add_product_text(1, 1, "S, M")
+            bot.handle_add_product_text(1, 1, "о" * 1300)
+            self.assertIn("Описание длиннее", api.last(1)[1])
+            self.assertEqual(db.get_state(1)[1]["step"], "description")
+
+            # Короткие значения проходят прежним путём.
+            bot.handle_add_product_text(1, 1, "Тёплая парка.")
+            self.assertEqual(db.get_state(1)[1]["step"], "photo_url")
+
+    def test_permanent_delivery_failures_stop_retrying(self):
+        """Блокировка и недоставляемое сообщение не повторяются вечно."""
+        class FailingAPI(MenuAPI):
+            def __init__(self, error, chat):
+                super().__init__()
+                self.error, self.chat, self.attempts = error, chat, 0
+
+            def send_message(self, chat_id, text, reply_markup=None):
+                if chat_id == self.chat:
+                    self.attempts += 1
+                    raise RuntimeError(self.error)
+                return super().send_message(chat_id, text, reply_markup)
+
+        cases = (
+            ('Telegram HTTP 403: {"ok":false,"description":"Forbidden: bot was blocked by the user"}', True),
+            ('Telegram HTTP 400: {"ok":false,"description":"Forbidden: user is deactivated"}', True),
+            ('Telegram HTTP 400: {"ok":false,"description":"Bad Request: message is too long"}', False),
+            ("Telegram request failed: connection reset", False),
+        )
+        for error, expect_blocked in cases:
+            with self.subTest(error=error[:40]), tempfile.TemporaryDirectory() as directory:
+                api = FailingAPI(error, 500)
+                bot, db = self._bot(directory, api)
+                db.upsert_user(self.USER)
+                db.enqueue_message("probe:1", 500, "покупателю")
+                db.enqueue_message("probe:2", 900, "менеджеру")
+                bot.flush_notifications()
+                row = db.connection().execute(
+                    "SELECT delivered_at FROM notifications WHERE notification_id='probe:1'"
+                ).fetchone()
+                self.assertEqual(db.get_user(500)["is_blocked"], 1 if expect_blocked else 0)
+                if "connection reset" in error:
+                    # Временный сбой: повторяем, но не чаще экспоненциальной задержки.
+                    self.assertIsNone(row["delivered_at"])
+                    self.assertEqual(api.attempts, 1)
+                    bot.flush_notifications(now=time.time() + 10 ** 6)
+                    self.assertEqual(api.attempts, 2)
+                else:
+                    self.assertTrue(row["delivered_at"], "постоянный сбой обязан снять задачу с очереди")
+                    self.assertEqual(api.attempts, 1, "постоянный сбой не должен повторяться")
+                # Соседнее сообщение при этом доставлено.
+                self.assertIn("менеджеру", [item[1] for item in api.sent])
 
     def test_staff_reference_screens_are_not_dead_ends(self):
         """Справочные экраны команды ведут обратно в пульт — и пустые, и с данными."""
