@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from testkit import make_settings
 from bot import BrandBot, Catalog, Database, RateLimiter, Settings, STOP_EVENT, polling_loop, start_health_server
 
 
@@ -23,13 +24,7 @@ class CheckoutRegressionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
-        self.settings = Settings(
-            token='audit-test-token', admin_ids=frozenset(), channel_url='https://t.me/test',
-            webapp_url='https://example.com', manager_chat_id=None, brand_name='Test',
-            support_username='', database_path=root / 'test.sqlite',
-            catalog_path=Path(__file__).with_name('catalog.json'), health_port=0,
-            giveaway_min_invites=3, privacy_url='',
-        )
+        self.settings = make_settings(root / 'test.sqlite', catalog_path=Path(__file__).with_name('catalog.json'), token='audit-test-token', admin_ids=frozenset(), channel_url='https://t.me/test', webapp_url='https://example.com', manager_chat_id=None, brand_name='Test', support_username='', health_port=0, giveaway_min_invites=3, privacy_url='')
         self.db = Database(self.settings.database_path)
         self.addCleanup(self.db.close_current)
         self.api = Mock()
@@ -425,13 +420,7 @@ class WaitlistRegressionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
-        self.settings = Settings(
-            token='audit-test-token', admin_ids=frozenset({1}), channel_url='https://t.me/test',
-            webapp_url='https://example.com', manager_chat_id=None, brand_name='Test',
-            support_username='', database_path=root / 'test.sqlite',
-            catalog_path=Path(__file__).with_name('catalog.json'), health_port=0,
-            giveaway_min_invites=3, privacy_url='',
-        )
+        self.settings = make_settings(root / 'test.sqlite', catalog_path=Path(__file__).with_name('catalog.json'), token='audit-test-token', admin_ids=frozenset({1}), channel_url='https://t.me/test', webapp_url='https://example.com', manager_chat_id=None, brand_name='Test', support_username='', health_port=0, giveaway_min_invites=3, privacy_url='')
         self.db = Database(self.settings.database_path)
         self.addCleanup(self.db.close_current)
         self.api = Mock()
@@ -569,13 +558,7 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
-        self.settings = Settings(
-            token='owner-test-token', admin_ids=frozenset({1}), channel_url='https://t.me/test',
-            webapp_url='https://example.com', manager_chat_id=None, brand_name='Test',
-            support_username='', database_path=root / 'test.sqlite',
-            catalog_path=Path(__file__).with_name('catalog.json'), health_port=0,
-            giveaway_min_invites=3, privacy_url='',
-        )
+        self.settings = make_settings(root / 'test.sqlite', catalog_path=Path(__file__).with_name('catalog.json'), token='owner-test-token', admin_ids=frozenset({1}), channel_url='https://t.me/test', webapp_url='https://example.com', manager_chat_id=None, brand_name='Test', support_username='', health_port=0, giveaway_min_invites=3, privacy_url='')
         self.db = Database(self.settings.database_path)
         self.addCleanup(self.db.close_current)
         self.api = Mock()

@@ -16,6 +16,7 @@ from pathlib import Path
 
 from dataclasses import replace
 
+from testkit import make_settings
 from bot import (
     BASE_DIR,
     BrandBot,
@@ -283,20 +284,7 @@ class BotTests(unittest.TestCase):
         root = Path(directory)
         catalog_path = root / "catalog.json"
         shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
-        settings = Settings(
-            token="fake",
-            admin_ids=frozenset(),
-            channel_url="https://t.me/channel",
-            webapp_url="https://shop.example/app",
-            manager_chat_id=None,
-            brand_name="ВОРОЖБИТОВ",
-            support_username="",
-            database_path=root / "bot.sqlite3",
-            catalog_path=catalog_path,
-            health_port=8080,
-            giveaway_min_invites=3,
-            privacy_url="",
-        )
+        settings = make_settings(root / "bot.sqlite3", catalog_path=catalog_path, token="fake", admin_ids=frozenset(), channel_url="https://t.me/channel", webapp_url="https://shop.example/app", manager_chat_id=None, brand_name="ВОРОЖБИТОВ", support_username="", health_port=8080, giveaway_min_invites=3, privacy_url="")
         db = make_db(directory)
         return BrandBot(settings, api, db, Catalog(catalog_path)), db
 
@@ -440,20 +428,7 @@ class BotTests(unittest.TestCase):
             root = Path(directory)
             catalog_path = root / "catalog.json"
             shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
-            settings = Settings(
-                token="fake",
-                admin_ids=frozenset(),
-                channel_url="https://t.me/channel",
-                webapp_url="",
-                manager_chat_id=None,
-                brand_name="ВОРОЖБИТОВ",
-                support_username="",
-                database_path=root / "bot.sqlite3",
-                catalog_path=catalog_path,
-                health_port=8080,
-                giveaway_min_invites=3,
-                privacy_url="",
-            )
+            settings = make_settings(root / "bot.sqlite3", catalog_path=catalog_path, token="fake", admin_ids=frozenset(), channel_url="https://t.me/channel", webapp_url="", manager_chat_id=None, brand_name="ВОРОЖБИТОВ", support_username="", health_port=8080, giveaway_min_invites=3, privacy_url="")
             db = make_db(directory)
             catalog = Catalog(catalog_path)
             api = FakeAPI()
@@ -501,20 +476,7 @@ class BotTests(unittest.TestCase):
             root = Path(directory)
             catalog_path = root / "catalog.json"
             shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
-            settings = Settings(
-                token="fake",
-                admin_ids=frozenset(),
-                channel_url="https://t.me/channel",
-                webapp_url="",
-                manager_chat_id=None,
-                brand_name="ВОРОЖБИТОВ",
-                support_username="",
-                database_path=root / "bot.sqlite3",
-                catalog_path=catalog_path,
-                health_port=8080,
-                giveaway_min_invites=3,
-                privacy_url="",
-            )
+            settings = make_settings(root / "bot.sqlite3", catalog_path=catalog_path, token="fake", admin_ids=frozenset(), channel_url="https://t.me/channel", webapp_url="", manager_chat_id=None, brand_name="ВОРОЖБИТОВ", support_username="", health_port=8080, giveaway_min_invites=3, privacy_url="")
             db = make_db(directory)
             catalog = Catalog(catalog_path)
             api = FakeAPI()
@@ -590,20 +552,7 @@ class BotTests(unittest.TestCase):
             root = Path(directory)
             catalog_path = root / "catalog.json"
             shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
-            settings = Settings(
-                token="fake",
-                admin_ids=frozenset(),
-                channel_url="https://t.me/channel",
-                webapp_url="",
-                manager_chat_id=None,
-                brand_name="ВОРОЖБИТОВ",
-                support_username="",
-                database_path=root / "bot.sqlite3",
-                catalog_path=catalog_path,
-                health_port=8080,
-                giveaway_min_invites=3,
-                privacy_url="",
-            )
+            settings = make_settings(root / "bot.sqlite3", catalog_path=catalog_path, token="fake", admin_ids=frozenset(), channel_url="https://t.me/channel", webapp_url="", manager_chat_id=None, brand_name="ВОРОЖБИТОВ", support_username="", health_port=8080, giveaway_min_invites=3, privacy_url="")
             db = make_db(directory)
             catalog = Catalog(catalog_path)
             api = FakeAPI()
@@ -669,20 +618,7 @@ class BotTests(unittest.TestCase):
             root = Path(directory)
             catalog_path = root / "catalog.json"
             shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
-            settings = Settings(
-                token="fake",
-                admin_ids=frozenset(),
-                channel_url="https://t.me/channel",
-                webapp_url="",
-                manager_chat_id=None,
-                brand_name="ВОРОЖБИТОВ",
-                support_username="",
-                database_path=root / "bot.sqlite3",
-                catalog_path=catalog_path,
-                health_port=8080,
-                giveaway_min_invites=3,
-                privacy_url="",
-            )
+            settings = make_settings(root / "bot.sqlite3", catalog_path=catalog_path, token="fake", admin_ids=frozenset(), channel_url="https://t.me/channel", webapp_url="", manager_chat_id=None, brand_name="ВОРОЖБИТОВ", support_username="", health_port=8080, giveaway_min_invites=3, privacy_url="")
             db = make_db(directory)
             catalog = Catalog(catalog_path)
             api = FakeAPI()
@@ -748,20 +684,7 @@ class BotTests(unittest.TestCase):
             root = Path(directory)
             catalog_path = root / "catalog.json"
             shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
-            settings = Settings(
-                token="fake",
-                admin_ids=frozenset(),
-                channel_url="https://t.me/channel",
-                webapp_url="",
-                manager_chat_id=None,
-                brand_name="ВОРОЖБИТОВ",
-                support_username="",
-                database_path=root / "bot.sqlite3",
-                catalog_path=catalog_path,
-                health_port=8080,
-                giveaway_min_invites=3,
-                privacy_url="",
-            )
+            settings = make_settings(root / "bot.sqlite3", catalog_path=catalog_path, token="fake", admin_ids=frozenset(), channel_url="https://t.me/channel", webapp_url="", manager_chat_id=None, brand_name="ВОРОЖБИТОВ", support_username="", health_port=8080, giveaway_min_invites=3, privacy_url="")
             db = make_db(directory)
             catalog = Catalog(catalog_path)
             api = FakeAPI()
@@ -844,20 +767,7 @@ class BotTests(unittest.TestCase):
             catalog_path = root / "catalog.json"
             shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
             token = "123456:SHOPTOKEN"
-            settings = Settings(
-                token=token,
-                admin_ids=frozenset(),
-                channel_url="https://t.me/channel",
-                webapp_url="https://shop.example.com",
-                manager_chat_id=None,
-                brand_name="ВОРОЖБИТОВ",
-                support_username="",
-                database_path=root / "bot.sqlite3",
-                catalog_path=catalog_path,
-                health_port=8080,
-                giveaway_min_invites=3,
-                privacy_url="",
-            )
+            settings = make_settings(root / "bot.sqlite3", catalog_path=catalog_path, token=token, admin_ids=frozenset(), channel_url="https://t.me/channel", webapp_url="https://shop.example.com", manager_chat_id=None, brand_name="ВОРОЖБИТОВ", support_username="", health_port=8080, giveaway_min_invites=3, privacy_url="")
             db = Database(settings.database_path)
             db.upsert_user({"id": 77, "first_name": "Buyer"})
             db.upsert_user({"id": 88, "first_name": "Other"})
@@ -1436,26 +1346,7 @@ class BotTests(unittest.TestCase):
             catalog_path = root / "catalog.json"
             shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
             token = "123456:SHOPTOKEN"
-            settings = Settings(
-                token=token,
-                admin_ids=frozenset(),
-                channel_url="https://t.me/channel",
-                webapp_url="https://shop.example.com",
-                manager_chat_id=None,
-                brand_name="ВОРОЖБИТОВ",
-                support_username="",
-                database_path=root / "bot.sqlite3",
-                catalog_path=catalog_path,
-                health_port=8080,
-                giveaway_min_invites=3,
-                privacy_url="",
-                lava_shop_id="shop",
-                lava_secret_key="secret",
-                lava_hook_key="hook",
-                crypto_pay_token="",
-                stars_enabled=True,
-                stars_rub_per_star=2.0,
-            )
+            settings = make_settings(root / "bot.sqlite3", catalog_path=catalog_path, token=token, admin_ids=frozenset(), channel_url="https://t.me/channel", webapp_url="https://shop.example.com", manager_chat_id=None, brand_name="ВОРОЖБИТОВ", support_username="", health_port=8080, giveaway_min_invites=3, privacy_url="", lava_shop_id="shop", lava_secret_key="secret", lava_hook_key="hook", crypto_pay_token="", stars_enabled=True, stars_rub_per_star=2.0)
             db = Database(settings.database_path)
             catalog = Catalog(catalog_path)
             api = FakeAPI()
@@ -1532,20 +1423,7 @@ class BotTests(unittest.TestCase):
             root = Path(directory)
             catalog_path = root / "catalog.json"
             shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
-            settings = Settings(
-                token="fake",
-                admin_ids=frozenset(),
-                channel_url="https://t.me/channel",
-                webapp_url="",
-                manager_chat_id=None,
-                brand_name="ВОРОЖБИТОВ",
-                support_username="",
-                database_path=root / "bot.sqlite3",
-                catalog_path=catalog_path,
-                health_port=8080,
-                giveaway_min_invites=3,
-                privacy_url="",
-            )
+            settings = make_settings(root / "bot.sqlite3", catalog_path=catalog_path, token="fake", admin_ids=frozenset(), channel_url="https://t.me/channel", webapp_url="", manager_chat_id=None, brand_name="ВОРОЖБИТОВ", support_username="", health_port=8080, giveaway_min_invites=3, privacy_url="")
             db = make_db(directory)
             catalog = Catalog(catalog_path)
             api = FakeAPI()
@@ -1716,20 +1594,7 @@ class NativeMenuTests(unittest.TestCase):
         root = Path(directory)
         catalog_path = root / "catalog.json"
         shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
-        settings = Settings(
-            token="fake",
-            admin_ids=frozenset({1}),
-            channel_url="https://t.me/channel",
-            webapp_url="https://shop.example/app",
-            manager_chat_id=900,
-            brand_name="ВОРОЖБИТОВ",
-            support_username="manager",
-            database_path=root / "bot.sqlite3",
-            catalog_path=catalog_path,
-            health_port=8080,
-            giveaway_min_invites=3,
-            privacy_url="",
-        )
+        settings = make_settings(root / "bot.sqlite3", catalog_path=catalog_path, token="fake", admin_ids=frozenset({1}), channel_url="https://t.me/channel", webapp_url="https://shop.example/app", manager_chat_id=900, brand_name="ВОРОЖБИТОВ", support_username="manager", health_port=8080, giveaway_min_invites=3, privacy_url="")
         settings = replace(settings, **overrides)
         db = make_db(directory)
         return BrandBot(settings, api or MenuAPI(), db, Catalog(catalog_path)), db
