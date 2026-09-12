@@ -940,24 +940,6 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.assertEqual(self.bot.catalog.get('tee-sila-i-chest')['description'],
                          'Плотный хлопок.')
 
-    def test_auto_digest_sends_once_and_switches_off(self):
-        from datetime import datetime, timezone
-        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
-        morning = datetime(2026, 9, 12, 9, 30, tzinfo=timezone.utc)
-        self.api.send_message.reset_mock()
-        self.assertTrue(self.bot.maybe_daily_digest(morning))
-        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
-        self.assertIn('ЧТО СЕГОДНЯ', text)
-        self.assertFalse(self.bot.maybe_daily_digest(morning))
-        self.api.send_message.reset_mock()
-        self.assertTrue(self.bot.route_callback('cb1', 1, 1, 'adigest:off'))
-        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
-        self.assertIn('Автодайджест утром: выключен', text)
-        self.assertFalse(self.bot.maybe_daily_digest(morning))
-        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'adigest:on'))
-        self.assertTrue(self.bot.auto_digest_on())
-        self.assertFalse(self.bot.route_callback('cb3', 1, 7, 'adigest:off'))
-
 
 if __name__ == '__main__':
     unittest.main()

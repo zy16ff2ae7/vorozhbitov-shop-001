@@ -208,7 +208,6 @@ class Settings:
     stars_enabled: bool = True
     stars_rub_per_star: float = 2.0
     trusted_proxy_ips: frozenset[str] = frozenset()
-    digest_hour: int | None = 9
 
     def public_origin(self) -> str:
         parsed = urllib.parse.urlparse(self.webapp_url)
@@ -247,7 +246,6 @@ class Settings:
             manager_chat_id=int(manager_raw) if manager_raw.lstrip("-").isdigit() else None,
             brand_name=os.getenv("BRAND_NAME", "ВОРОЖБИТОВ").strip() or "ВОРОЖБИТОВ",
             support_username=os.getenv("SUPPORT_USERNAME", "").strip().lstrip("@"),
-            digest_hour=_digest_hour(os.getenv("DIGEST_HOUR", "9")),
             database_path=BASE_DIR / os.getenv("DATABASE_PATH", "data/bot.sqlite3"),
             catalog_path=BASE_DIR / os.getenv("CATALOG_PATH", "data/catalog.json"),
             health_port=int(os.getenv("PORT", "8080")),
@@ -2105,19 +2103,6 @@ def buyer_commands() -> list[dict[str, str]]:
         {"command": "support", "description": "Поддержка"},
         {"command": "help", "description": "Как это работает"},
     ]
-
-
-def _digest_hour(raw: str | None) -> int | None:
-    """Час утреннего дайджеста из env; пустая строка выключает его совсем."""
-    value = str(raw or "").strip()
-    if not value:
-        return None
-    try:
-        hour = int(value)
-    except ValueError:
-        LOG.warning("DIGEST_HOUR не число (%r) — беру 9 утра", value)
-        return 9
-    return min(23, max(0, hour))
 
 
 def staff_commands() -> list[dict[str, str]]:
@@ -4195,17 +4180,10 @@ class BrandBot:
             lines.append(f"{ICON['notice']} Возвраты: {stats['refunds']} — посмотрите")
         else:
             lines.append("Возвратов нет.")
-        state = "включён" if self.auto_digest_on() else "выключен"
-        hour = self.settings.digest_hour
-        when = f", каждый день в {hour}:00" if hour is not None else ""
-        lines.append(f"{ICON['channel']} Автодайджест утром: {state}{when}.")
-        toggle = ("adigest:off" if self.auto_digest_on() else "adigest:on")
-        toggle_label = ("Не присылать" if self.auto_digest_on() else "Присылать утром")
         self.api.send_message(
             chat_id, "\n".join(lines),
             inline_keyboard([[(icon("stats", "Сводка"), "adm:summary")],
-                             [(icon("pay", "Ждут оплаты →"), "unpaid")],
-                             [(icon("channel", toggle_label), toggle)]]
+                             [(icon("pay", "Ждут оплаты →"), "unpaid")]]
                             + staff_nav_rows()))
 
     def admin_orders(self, chat_id: int) -> None:
@@ -4405,27 +4383,6 @@ class BrandBot:
             return f"{hours} {plural(hours, 'час', 'часа', 'часов')}"
         days = hours // 24
         return f"{days} {plural(days, 'день', 'дня', 'дней')}"
-
-    def auto_digest_on(self) -> bool:
-        return self.db.kv_get("auto_digest") != "off" and self.settings.digest_hour is not None
-
-    def toggle_auto_digest(self, on: bool) -> None:
-        self.db.kv_set("auto_digest", "on" if on else "off")
-
-    def maybe_daily_digest(self, now: datetime) -> bool:
-        """Утренний дайджест владельцу: раз в день, выключается одной кнопкой."""
-        if not self.auto_digest_on():
-            return False
-        hour = int(self.settings.digest_hour or 0)
-        if now.hour != hour:
-            return False
-        today = now.date().isoformat()
-        if self.db.kv_get("auto_digest_last") == today:
-            return False
-        self.db.kv_set("auto_digest_last", today)
-        for owner_id in sorted(self.settings.admin_ids):
-            self.admin_digest(owner_id)
-        return True
 
     def nudge_payment(self, chat_id: int, user_id: int, payment_id: str) -> None:
         stamp = self.db.kv_get(f"nudge_at:{payment_id}")
@@ -5746,10 +5703,6 @@ class BrandBot:
         elif data == "unpaid" and self.is_admin(user_id):
             self.admin_unpaid(chat_id)
             return True
-        elif data.startswith("adigest:") and self.is_owner(user_id):
-            self.toggle_auto_digest(data.endswith(":on"))
-            self.admin_digest(chat_id)
-            return True
         elif data.startswith("nudge:") and self.is_admin(user_id):
             self.nudge_payment(chat_id, user_id, data.split(":", 1)[1])
             return True
@@ -6599,13 +6552,6 @@ def polling_loop(api: TelegramAPI, bot: BrandBot) -> None:
                 # обновления нельзя: цикл спотыкался бы об одно и то же вечно.
                 LOG.warning("getUpdates вернул %s вместо списка", type(updates).__name__)
                 updates = []
-            try:
-                if bot.maybe_daily_digest(datetime.now(timezone.utc)):
-                    LOG.info("Утренний дайджест отправлен владельцу")
-            except Exception:
-                # Дайджест не должен останавливать опрос: без страховки сбой
-                # вокруг него морозил бы очередь обновлений до перезапуска.
-                LOG.exception("Автодайджест сбоил — цикл продолжает опрос")
             for update in updates:
                 if not isinstance(update, dict):
                     LOG.warning("Пропущено обновление не-словарь: %.120r", update)
