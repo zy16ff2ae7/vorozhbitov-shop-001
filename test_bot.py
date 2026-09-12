@@ -2258,6 +2258,94 @@ class NativeMenuTests(unittest.TestCase):
             self.assertIn("adm:panel", button_targets(markup))
             self.assertEqual(len(bot.catalog.products_by_id), known, "память потеряла рабочий каталог")
 
+    def test_waitlist_can_be_seen_and_left(self):
+        """Подписаться на размер можно было и раньше — теперь из листа можно выйти."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            product = bot.catalog.get("tee-sila-i-chest")
+
+            # Пусто: ни строки в кабинете, ни кнопки — шум не добавляем.
+            bot.route_callback("cb", 500, 500, "account")
+            _, text, markup = api.last(500)
+            self.assertNotIn("Ждёшь:", text)
+            self.assertNotIn("waits", button_targets(markup))
+
+            db.add_to_waitlist(500, product, "XL")
+            db.add_to_waitlist(500, product, "M")
+            api.sent.clear()
+            bot.route_callback("cb", 500, 500, "account")
+            _, text, markup = api.last(500)
+            self.assertIn("Ждёшь:", text)
+            self.assertIn("XL", text)
+            self.assertIn("M", text)
+            self.assertIn("waits", button_targets(markup))
+            self.assertTrue(any("Жду размер (2)" in button["text"]
+                                for row in (markup or {}).get("inline_keyboard", [])
+                                for button in row))
+
+            api.sent.clear()
+            bot.route_callback("cb", 500, 500, "waits")
+            _, text, markup = api.last(500)
+            self.assertIn("ЧТО Я ЖДУ", text)
+            stops = [target for target in button_targets(markup) if target.startswith("wstop:")]
+            self.assertEqual(len(stops), 2)
+            self.assertIn("account", button_targets(markup), "у экрана нет выхода")
+            self.assertTrue(all(len(button["text"]) <= 64
+                                for row in markup["inline_keyboard"] for button in row))
+
+            # Снял одну запись — экран показан заново, вторая на месте.
+            api.sent.clear()
+            bot.route_callback("cb", 500, 500, stops[0])
+            _, text, markup = api.last(500)
+            self.assertIn("ЧТО Я ЖДУ", text)
+            stops = [target for target in button_targets(markup) if target.startswith("wstop:")]
+            self.assertEqual(len(stops), 1)
+
+            # Снял последнюю — честное пустое состояние, а не тишина.
+            api.sent.clear()
+            bot.route_callback("cb", 500, 500, stops[0])
+            _, text, markup = api.last(500)
+            self.assertIn("ТЫ НИЧЕГО НЕ ЖДЁШЬ", text)
+            self.assertIn("account", button_targets(markup))
+
+            # Чужая запись кнопкой не снимается.
+            db.upsert_user({"id": 601, "username": "other", "first_name": "O"})
+            db.add_to_waitlist(601, product, "S")
+            foreign = int(db.waitlist_for_user(601)[0]["id"])
+            api.sent.clear()
+            bot.route_callback("cb", 500, 500, f"wstop:{foreign}")
+            self.assertEqual(len(db.waitlist_for_user(601)), 1, "снята чужая запись")
+            self.assertIn("ТЫ НИЧЕГО НЕ ЖДЁШЬ", api.last(500)[1])
+
+            # Мусор в callback не роняет обработку и не оставляет человека в тишине.
+            api.sent.clear()
+            bot.route_callback("cb", 500, 500, "wstop:не-число")
+            self.assertTrue(api.last(500)[2])
+
+    def test_restock_ping_offers_a_way_out(self):
+        """Сообщение о возврате размера предлагает и забрать, и больше не ждать."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            db.add_to_waitlist(500, bot.catalog.get("tee-sila-i-chest"), "XL")
+
+            self.assertEqual(bot.notify_waitlist("tee-sila-i-chest", "XL"), 1)
+            _, text, markup = api.last(500)
+            self.assertIn("РАЗМЕР ВЕРНУЛСЯ", text)
+            targets = button_targets(markup)
+            self.assertIn("want:tee-sila-i-chest", targets)
+            stop = next(target for target in targets if target.startswith("wstop:"))
+            self.assertTrue(any("Больше не ждать" in button["text"]
+                                for row in markup["inline_keyboard"] for button in row))
+
+            bot.route_callback("cb", 500, 500, stop)
+            self.assertEqual(db.waitlist_for_user(500), [])
+            self.assertEqual(bot.notify_waitlist("tee-sila-i-chest", "XL"), 0,
+                             "отписавшемуся продолжают писать")
+
     def test_giveaway_winner_is_not_left_without_a_way_out(self):
         """Победителю сказано «напиши менеджеру» — значит, нужна и кнопка."""
         with tempfile.TemporaryDirectory() as directory:

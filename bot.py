@@ -1039,7 +1039,7 @@ class Database:
         try:
             conn.execute("BEGIN IMMEDIATE")
             rows = list(conn.execute(
-                "SELECT user_id FROM waitlist WHERE product_id=? AND size=? AND notified_at IS NULL",
+                "SELECT user_id, id FROM waitlist WHERE product_id=? AND size=? AND notified_at IS NULL",
                 (product_id, size),
             ))
             if rows:
@@ -1048,7 +1048,7 @@ class Database:
                     (utc_now(), product_id, size),
                 )
             conn.execute("COMMIT")
-            return [row[0] for row in rows]
+            return [(row[0], row[1]) for row in rows]
         except Exception:
             if conn.in_transaction:
                 conn.execute("ROLLBACK")
@@ -1074,6 +1074,21 @@ class Database:
             self.connection().executemany(
                 "DELETE FROM waitlist WHERE user_id=? AND product_id=? AND size=?", pairs
             )
+
+    def waitlist_for_user(self, user_id: int, limit: int = 20) -> list[sqlite3.Row]:
+        """Что ждёт этот человек: без этого подписаться можно, а выйти нельзя."""
+        return list(self.connection().execute(
+            "SELECT id, product_id, product_name, size, notified_at FROM waitlist "
+            "WHERE user_id=? ORDER BY id DESC LIMIT ?",
+            (user_id, max(1, int(limit))),
+        ))
+
+    def remove_waitlist_entry(self, entry_id: int, user_id: int) -> bool:
+        """Снять запись — только свою: чужой лист ожидания кнопкой не трогается."""
+        cursor = self.connection().execute(
+            "DELETE FROM waitlist WHERE id=? AND user_id=?", (entry_id, user_id)
+        )
+        return cursor.rowcount > 0
 
     def waitlist_user_ids(self, product_id: str, size: str) -> list[int]:
         return [
@@ -2344,12 +2359,17 @@ class BrandBot:
         rows.append([("Пока не знаю", "intr:skip")])
         return inline_keyboard(rows)
 
-    def account_menu(self) -> dict[str, Any]:
+    def account_menu(self, user_id: int) -> dict[str, Any]:
         """Кабинет покупателя: свои данные, приоритет, бренд и канал."""
         rows = [
             [(icon("notice", "Узнать первым"), "profile"), (icon("link", "Привести друга"), "referral")],
             [(icon("size", "Подобрать размер"), "size_guide:account"), (icon("info", "О бренде"), "about")],
         ]
+        waiting = self.db.waitlist_for_user(user_id)
+        if waiting:
+            # Кнопка появляется, только когда есть что снимать: пустой раздел — шум.
+            label = "Жду размер" if len(waiting) == 1 else f"Жду размер ({len(waiting)})"
+            rows.append([(icon("wait", label), "waits")])
         rows.extend(self.channel_rows())
         rows.extend(nav_rows(("Главное меню", "menu")))
         return inline_keyboard(rows)
@@ -2365,6 +2385,10 @@ class BrandBot:
         size = str(user["pref_size"]) if user and user["pref_size"] else ""
         if size:
             lines.append(f"{ICON['size']} Твой размер: {esc(size)}")
+        waiting = self.db.waitlist_for_user(user_id, 3)
+        if waiting:
+            listed = ", ".join(esc(row["size"]) for row in waiting)
+            lines.append(f"{ICON['wait']} Ждёшь: {listed} — снять можно в «Жду размер»")
         lines.append("")
         lines.append("Данные нужны только для покупки и связи по ней.")
         return "\n".join(lines)
@@ -2682,6 +2706,38 @@ class BrandBot:
         else:
             text = f"Этот размер уже в листе: <b>{esc(product['name'])}</b> · {esc(size)}."
         self.api.send_message(chat_id, text + self.cta("channel"), self.main_menu(chat_id))
+
+    def show_my_waits(self, chat_id: int, user_id: int) -> None:
+        """Что человек ждёт и как перестать: подписаться можно было и раньше, выйти — нет."""
+        rows = self.db.waitlist_for_user(user_id)
+        if not rows:
+            self.api.send_message(
+                chat_id,
+                "<b>ТЫ НИЧЕГО НЕ ЖДЁШЬ</b>\n\n"
+                "Лист ожидания пуст. Нужный размер ищи в витрине — он там появится.",
+                inline_keyboard([[(icon("catalog", "Открыть витрину"), "catalog")]]
+                                + nav_rows(("Кабинет", "account"))),
+            )
+            return
+        lines = ["<b>ЧТО Я ЖДУ</b>", "", "Напишем, как только размер вернётся.", ""]
+        buttons: list[list[tuple[str, str]]] = []
+        for row in rows:
+            lines.append(f"• {esc(row['product_name'])} · размер {esc(row['size'])}")
+            buttons.append([(icon("cancel", f"Не ждать: {row['product_name']} · {row['size']}"),
+                             f"wstop:{int(row['id'])}")])
+        self.api.send_message(chat_id, "\n".join(lines),
+                              inline_keyboard(buttons + nav_rows(("Кабинет", "account"))))
+
+    def stop_waiting(self, chat_id: int, user_id: int, raw_entry_id: str) -> None:
+        entry_id = int(raw_entry_id) if str(raw_entry_id).isdigit() else 0
+        if not entry_id or not self.db.remove_waitlist_entry(entry_id, user_id):
+            # Записи уже нет: размер купили или сняли раньше. Экран всё равно
+            # показываем заново — молчание человек принял бы за сбой.
+            self.db.event(user_id, "waitlist_remove_miss", {"entry_id": entry_id})
+            self.show_my_waits(chat_id, user_id)
+            return
+        self.db.event(user_id, "waitlist_remove", {"entry_id": entry_id})
+        self.show_my_waits(chat_id, user_id)
 
     def line_amount(self, product: dict[str, Any], quantity: int) -> int:
         amount = parse_price_strict(product.get("price"))
@@ -3252,13 +3308,16 @@ class BrandBot:
         if not product:
             return 0
         failed: list[int] = []
-        for recipient in self.db.claim_waitlist(product_id, size):
+        for recipient, entry_id in self.db.claim_waitlist(product_id, size):
             try:
                 self.api.send_message(
                     recipient,
                     f"<b>РАЗМЕР ВЕРНУЛСЯ</b>\n\n{esc(product['name'])} — размер {esc(size)} снова в наличии.\n"
                     "Бери сейчас: размер могут разобрать быстро.",
-                    inline_keyboard([[("Забрать размер →", f"want:{product_id}")]]),
+                    inline_keyboard([
+                        [("Забрать размер →", f"want:{product_id}")],
+                        [(icon("cancel", f"Больше не ждать {esc(size)}"), f"wstop:{entry_id}")],
+                    ]),
                 )
                 delivered += 1
                 time.sleep(0.04)
@@ -4616,8 +4675,12 @@ class BrandBot:
             if len(parts) < 3:
                 return False
             self.confirm_waitlist(chat_id, user_id, parts[1], parts[2])
+        elif data == "waits":
+            self.show_my_waits(chat_id, user_id)
+        elif data.startswith("wstop:"):
+            self.stop_waiting(chat_id, user_id, data.split(":", 1)[1])
         elif data == "account":
-            self.api.send_message(chat_id, self.account_text(user_id), self.account_menu())
+            self.api.send_message(chat_id, self.account_text(user_id), self.account_menu(user_id))
         elif data == "support":
             self.show_support(chat_id, user_id)
         elif data == "help":
@@ -4836,7 +4899,7 @@ class BrandBot:
         elif command in {"/orders", "/purchases"}:
             self.show_my_orders(chat_id, user_id)
         elif command == "/account":
-            self.api.send_message(chat_id, self.account_text(user_id), self.account_menu())
+            self.api.send_message(chat_id, self.account_text(user_id), self.account_menu(user_id))
         elif command == "/support":
             self.show_support(chat_id, user_id)
         elif command == "/help":

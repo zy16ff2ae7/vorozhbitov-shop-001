@@ -513,7 +513,7 @@ class WaitlistRegressionTests(unittest.TestCase):
         columns = [row[1] for row in migrated.connection().execute('PRAGMA table_info(waitlist)')]
         self.assertIn('notified_at', columns)
         self.assertEqual(migrated.connection().execute('SELECT COUNT(*) FROM waitlist').fetchone()[0], 1)
-        self.assertEqual(migrated.claim_waitlist('tee', 'M'), [5])
+        self.assertEqual(migrated.claim_waitlist('tee', 'M'), [(5, 1)])
         self.assertEqual(migrated.claim_waitlist('tee', 'M'), [])
 
 
