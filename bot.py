@@ -596,8 +596,10 @@ class Database:
                 (
                     user_id,
                     telegram_user.get("username"),
-                    telegram_user.get("first_name", ""),
-                    telegram_user.get("last_name", ""),
+                    # Колонки NOT NULL: явный null из подписанного initData или
+                    # из служебного сообщения не должен ронять запрос целиком.
+                    str(telegram_user.get("first_name") or ""),
+                    str(telegram_user.get("last_name") or ""),
                     source,
                     referrer,
                     now,
@@ -619,8 +621,8 @@ class Database:
                 """,
                 (
                     telegram_user.get("username"),
-                    telegram_user.get("first_name", ""),
-                    telegram_user.get("last_name", ""),
+                    str(telegram_user.get("first_name") or ""),
+                    str(telegram_user.get("last_name") or ""),
                     source,
                     referrer,
                     now,
@@ -1489,6 +1491,13 @@ def inline_keyboard(rows: Iterable[Iterable[tuple[str, str]]]) -> dict[str, Any]
     return {"inline_keyboard": keyboard}
 
 
+def consent_keyboard() -> dict[str, Any]:
+    """Согласие выбирается кнопкой — и только так: текстом его не принять."""
+    return inline_keyboard(
+        [[(f"{ICON['ok']} Согласен", "consent:yes")], [(f"{ICON['cancel']} Не сейчас", "consent:no")]]
+    )
+
+
 def contact_keyboard() -> dict[str, Any]:
     return {
         "keyboard": [[{"text": "Отправить номер", "request_contact": True}], [{"text": "Отмена"}]],
@@ -1539,6 +1548,7 @@ ICON = {
     "home": "🏠",
     "back": "←",
     "outside": "↗",
+    "ok": "✅",
     "cancel": "✖",
 }
 
@@ -1561,6 +1571,27 @@ def nav_rows(back: tuple[str, str] | None = None) -> list[list[tuple[str, str]]]
     if target == "menu":
         return [[(f"{ICON['back']} {label}", target)]]
     return [[(f"{ICON['back']} {label}", target), (icon("home", "Главная"), "menu")]]
+
+
+def channel_target(url: Any) -> str:
+    """Ссылка на канал, если по ней действительно есть канал.
+
+    Пустое значение и дефолтный ``https://t.me/`` делают кнопку «Канал» битой:
+    Telegram отклоняет такое сообщение целиком, и покупатель не получает ни
+    экрана, ни кнопки — вместо «пустой витрины» выходит тишина.
+    """
+    value = str(url or "").strip()
+    if value.startswith("tg://"):
+        return value if "domain=" in value else ""
+    if not value.startswith(("https://", "http://")):
+        return ""
+    parsed = urllib.parse.urlparse(value)
+    host = parsed.netloc.lower()
+    if not host:
+        return ""
+    if host in {"t.me", "telegram.me", "telegram.dog"} and not parsed.path.strip("/"):
+        return ""
+    return value
 
 
 def staff_nav_rows() -> list[list[tuple[str, str]]]:
@@ -1828,6 +1859,10 @@ ADD_STEPS = [
     ("photo_url", "Ссылка на фото (http или https). Или /skip — добавить позже."),
 ]
 ADD_KEYS = [key for key, _ in ADD_STEPS]
+
+# Состояния, в которых бот ждёт номер телефона текстом или кнопкой «Поделиться».
+# Всё остальное — экраны с кнопками: текст там номером не считается.
+PHONE_STATES = frozenset({"awaiting_consent", "awaiting_profile_phone", "awaiting_order_phone"})
 # Шаг 1 — раздел, дальше ADD_STEPS, последний — проверка перед публикацией.
 ADD_TOTAL = len(ADD_STEPS) + 2
 
@@ -1889,10 +1924,29 @@ class BrandBot:
         if kind == "drop":
             return "\n\nСмотри выпуск — тираж маленький, потом не будет."
         if kind == "channel":
+            if not self.channel_link():
+                # Обещать канал, которого нет, — значит оставить человека в тупике.
+                return ""
             return f"\n\nНовости — в канале «{brand}». Там узнаёшь первым."
         if kind == "size":
             return "\n\nНет размера? Нажми «Ждать размер» — напишем, когда вернётся."
         return "\n\nОткрой витрину и смотри, что осталось."
+
+    def channel_link(self) -> str:
+        """Ссылка на канал бренда: пустая строка, если канал не настроен."""
+        return channel_target(self.settings.channel_url)
+
+    def channel_rows(self) -> list[list[tuple[str, str]]]:
+        """Ряд с кнопкой канала — только когда канал действительно существует."""
+        link = self.channel_link()
+        return [[(icon("channel", "Канал"), link)]] if link else []
+
+    def price_is_payable(self, product: dict[str, Any]) -> bool:
+        """По этой вещи можно выставить счёт: цена разбирается и больше нуля."""
+        try:
+            return self.line_amount(product, 1) > 0
+        except PriceError:
+            return False
 
     def ref_link(self, user_id: int) -> str:
         if not self.bot_username:
@@ -2091,8 +2145,8 @@ class BrandBot:
         rows = [
             [(icon("notice", "Узнать первым"), "profile"), (icon("link", "Привести друга"), "referral")],
             [(icon("size", "Подобрать размер"), "size_guide:account"), (icon("info", "О бренде"), "about")],
-            [(icon("channel", "Канал"), self.settings.channel_url)],
         ]
+        rows.extend(self.channel_rows())
         rows.extend(nav_rows(("Главное меню", "menu")))
         return inline_keyboard(rows)
 
@@ -2189,11 +2243,9 @@ class BrandBot:
                 chat_id,
                 "<b>ВИТРИНА</b>\n\n"
                 "Вещи готовятся — в каталоге пока пусто.\n"
-                "Канал пишет о выпуске первым, до открытия продаж." + self.cta("channel"),
-                inline_keyboard(
-                    [[(icon("channel", "Канал"), self.settings.channel_url)]]
-                    + nav_rows(("Главное меню", "menu"))
-                ),
+                + ("Канал пишет о выпуске первым, до открытия продаж." if self.channel_link()
+                   else "Как только выпуск откроется, вещи появятся здесь."),
+                inline_keyboard(self.channel_rows() + nav_rows(("Главное меню", "menu"))),
             )
             return
         total = sum(count for _, count in sections)
@@ -2223,11 +2275,9 @@ class BrandBot:
                 chat_id,
                 f"<b>{esc(title.upper())}</b>\n\n"
                 "Здесь пока пусто — выпуск готовится.\n"
-                "Канал пишет первым, а не когда всё разберут." + self.cta("channel"),
-                inline_keyboard(
-                    [[(icon("channel", "Канал"), self.settings.channel_url)]]
-                    + nav_rows(("Витрина", "catalog"))
-                ),
+                + ("Канал пишет первым, а не когда всё разберут." if self.channel_link()
+                   else "Загляни в другие разделы — там может быть не пусто."),
+                inline_keyboard(self.channel_rows() + nav_rows(("Витрина", "catalog"))),
             )
             return
         rows = [[(f"{p['name']} · {p['price']}", f"product:{p['id']}")] for p in products]
@@ -2251,6 +2301,10 @@ class BrandBot:
         if badge:
             price += f" · {esc(badge)}"
         lines.append(price)
+        if not self.price_is_payable(product):
+            # Цену в каталоге записали диапазоном или припиской: счёт по ней не
+            # выставить. Говорим сразу, а не после согласия и номера телефона.
+            lines.append("Цену сейчас не посчитать — оформим вручную через поддержку.")
         description = str(product.get("description") or "").strip()
         if description:
             lines.extend(["", esc(description)])
@@ -2313,10 +2367,15 @@ class BrandBot:
             "Каталог",
         )
         text = self.product_card_text(product)
+        primary = (
+            [("Выбрать размер →", f"want:{product_id}")]
+            if self.price_is_payable(product)
+            else [(icon("support", "Написать менеджеру →"), "support")]
+        )
         keyboard = inline_keyboard(
             [
                 # Главное действие — отдельной широкой строкой, остальное ниже.
-                [("Выбрать размер →", f"want:{product_id}")],
+                primary,
                 [(icon("wait", "Ждать размер"), f"wait:{product_id}"),
                  (icon("size", "Замеры"), f"size_guide:product:{product_id}")],
             ]
@@ -2378,6 +2437,20 @@ class BrandBot:
         product = self.catalog.get(product_id)
         if not product or size not in [str(item) for item in product["sizes"]]:
             self.product_missing(chat_id, "Этот вариант уже разобрали.")
+            return
+        if not self.price_is_payable(product):
+            self.api.send_message(
+                chat_id,
+                f"<b>ЦЕНА НЕДСТУПНА</b>\n\n"
+                f"{esc(str(product['name']))} · размер {esc(size)}\n"
+                "Цена этой вещи записана так, что счёт по ней не выставить.\n"
+                "Напиши менеджеру — оформим вручную, без потери места в очереди.",
+                inline_keyboard(
+                    [[(icon("support", "Поддержка →"), "support")],
+                     [(icon("wait", "Ждать размер"), f"wait:{product_id}")]]
+                    + nav_rows((str(product["name"]), f"product:{product_id}"))
+                ),
+            )
             return
         user = self.db.get_user(user_id)
         if user and user["phone"]:
@@ -2533,7 +2606,35 @@ class BrandBot:
             methods.append((icon("pay", "Звёзды"), f"pay:{payment_id}:stars"))
         if not methods:
             return None
-        rows = [methods[index:index + 2] for index in range(0, len(methods), 2)]
+        rows = option_rows(methods)
+        rows.extend(nav_rows(("Мои покупки", "my_orders")))
+        return inline_keyboard(rows)
+
+    def pay_methods_text(self) -> str:
+        """Чем можно оплатить сейчас: неподключённые способы не обещаем."""
+        names: list[str] = []
+        if self.settings.lava_ready():
+            names.append("карта / СБП")
+        if self.settings.crypto_ready():
+            names.append("крипта")
+        if self.settings.stars_enabled:
+            names.append("звёзды Telegram")
+        if not names:
+            return ""
+        if len(names) == 1:
+            return names[0]
+        return ", ".join(names[:-1]) + " или " + names[-1]
+
+    def pay_fallback_keyboard(self, payment_id: str = "") -> dict[str, Any]:
+        """Куда идти, когда оплатить не вышло: назад к счёту, в поддержку и домой.
+
+        Без этого ряда отказ способа оплаты оставлял покупателя в тупике:
+        сообщение приходило вообще без кнопок.
+        """
+        rows: list[list[tuple[str, str]]] = []
+        if payment_id:
+            rows.append([(icon("pay", "К способам оплаты"), f"draft:{payment_id}")])
+        rows.append([(icon("support", "Поддержка"), "support")])
         rows.extend(nav_rows(("Мои покупки", "my_orders")))
         return inline_keyboard(rows)
 
@@ -2546,13 +2647,22 @@ class BrandBot:
         source: str = "витрины",
         *, queue_only: bool = False,
     ) -> None:
-        keyboard = self.pay_keyboard(payment_id, chat_id) or self.main_menu(chat_id)
+        keyboard = self.pay_keyboard(payment_id, chat_id)
+        methods = self.pay_methods_text()
+        tail = (
+            f"\n\nОплати сейчас — {methods}. Деньги списываются сразу. "
+            "Если размера нет — возврат через менеджера."
+            if methods else
+            "\n\nОплата в боте пока не подключена. Напиши менеджеру — "
+            "оформим вручную и сохраним место в очереди."
+        )
+        if keyboard is None:
+            keyboard = self.pay_fallback_keyboard()
         text = (
             f"<b>ПОКУПКА ПРИНЯТА · {esc(format_rub(amount_rub))}</b>\n\n"
             "Собрано из " + esc(source) + ":\n"
             + "\n".join(order_lines)
-            + "\n\nОплати сейчас — карта, СБП, крипта или звёзды Telegram. "
-            "Деньги списываются сразу. Если размера нет — возврат через менеджера."
+            + tail
         )
         self.deliver_message(f"offer:{payment_id}:{chat_id}", chat_id, text, keyboard, queue_only=queue_only)
 
@@ -2642,7 +2752,10 @@ class BrandBot:
     def start_method_pay(self, chat_id: int, user_id: int, payment_id: str, method: str) -> None:
         payment = self.db.get_payment(payment_id)
         if not payment or int(payment["user_id"]) != user_id:
-            self.api.send_message(chat_id, "Оплата не найдена.", self.main_menu(chat_id))
+            self.api.send_message(
+                chat_id, "Оплата не найдена.",
+                inline_keyboard([[(icon("orders", "Мои покупки"), "my_orders")]] + nav_rows()),
+            )
             return
         if not self.db.payment_is_payable(payment_id):
             self.open_draft(chat_id, user_id, payment_id)
@@ -2651,11 +2764,17 @@ class BrandBot:
         description = f"{self.settings.brand_name}: оплата {payment_id}"
         if method == "stars":
             if not self.settings.stars_enabled:
-                self.api.send_message(chat_id, "Звёзды сейчас выключены.")
+                self.api.send_message(
+                    chat_id, "Звёзды сейчас выключены — выбери другой способ.",
+                    self.pay_fallback_keyboard(payment_id),
+                )
                 return
             stars = int(payment["amount_stars"] or 0)
             if stars <= 0:
-                self.api.send_message(chat_id, "Для этой покупки оплата звёздами недоступна — выбери другой способ.")
+                self.api.send_message(
+                    chat_id, "Для этой покупки оплата звёздами недоступна — выбери другой способ.",
+                    self.pay_fallback_keyboard(payment_id),
+                )
                 return
             try:
                 self.api.send_invoice(
@@ -2670,12 +2789,18 @@ class BrandBot:
                 )
             except Exception:
                 LOG.exception("sendInvoice stars failed")
-                self.api.send_message(chat_id, "Не получилось выставить счёт в звёздах. Попробуй ещё раз.")
+                self.api.send_message(
+                    chat_id, "Не получилось выставить счёт в звёздах. Попробуй ещё раз или выбери другой способ.",
+                    self.pay_fallback_keyboard(payment_id),
+                )
             return
         methods = self.build_pay_methods(payment_id, amount, description)
         found = next((item for item in methods if item["id"] == method and item.get("url")), None)
         if not found:
-            self.api.send_message(chat_id, "Этот способ сейчас недоступен. Выбери другой или напиши менеджеру.")
+            self.api.send_message(
+                chat_id, "Этот способ сейчас недоступен. Выбери другой или напиши менеджеру.",
+                self.pay_fallback_keyboard(payment_id),
+            )
             return
         self.api.send_message(
             chat_id,
@@ -2771,7 +2896,7 @@ class BrandBot:
         self.api.send_message(
             chat_id,
             self.consent_text(),
-            inline_keyboard([[("Согласен", "consent:yes")], [("Не сейчас", "consent:no")]]),
+            consent_keyboard(),
         )
 
     def accept_consent(self, chat_id: int, user_id: int) -> None:
@@ -2811,7 +2936,10 @@ class BrandBot:
         else:
             self.api.send_message(
                 chat_id,
-                "Хорошо, номер не сохраняем. Новые вещи всё равно выходят в канале — там ничего не пропустишь."
+                "Хорошо, номер не сохраняем."
+                + (" Новые вещи всё равно выходят в канале — там ничего не пропустишь."
+                   if self.channel_link() else
+                   " Новые вещи появятся в витрине — заходи, когда будет интересно.")
                 + self.cta("channel"),
                 self.main_menu(chat_id),
             )
@@ -2832,7 +2960,7 @@ class BrandBot:
             self.api.send_message(
                 chat_id,
                 "Сначала подтверди согласие — без него номер сохранить нельзя.\n\n" + self.consent_text(),
-                inline_keyboard([[("Согласен", "consent:yes")], [("Не сейчас", "consent:no")]]),
+                consent_keyboard(),
             )
             return
         self.db.set_phone(user_id, phone)
@@ -2884,12 +3012,10 @@ class BrandBot:
         if not shots:
             self.api.send_message(
                 chat_id,
-                "<b>ОБРАЗЫ</b>\n\nПервые кадры снимаются. Они выйдут в канале раньше открытого выпуска."
-                + self.cta("channel"),
-                inline_keyboard(
-                    [[(icon("channel", "Канал"), self.settings.channel_url)]]
-                    + nav_rows(("Главное меню", "menu"))
-                ),
+                "<b>ОБРАЗЫ</b>\n\nПервые кадры снимаются. "
+                + ("Они выйдут в канале раньше открытого выпуска." if self.channel_link()
+                   else "Как только появятся — выложим их здесь."),
+                inline_keyboard(self.channel_rows() + nav_rows(("Главное меню", "menu"))),
             )
             return
         try:
@@ -2903,8 +3029,10 @@ class BrandBot:
             LOG.exception("Failed to send lookbook album")
             self.api.send_message(
                 chat_id,
-                "Не получилось отправить альбом. Загляни в канал — там всё выложим.",
-                inline_keyboard([[(icon("channel", "Канал"), self.settings.channel_url)]] + nav_rows()),
+                "Не получилось отправить альбом.\n"
+                + ("Загляни в канал — там всё выложим." if self.channel_link()
+                   else "Попробуй открыть образы ещё раз чуть позже."),
+                inline_keyboard(self.channel_rows() + nav_rows()),
             )
             return
         self.api.send_message(
@@ -3103,13 +3231,22 @@ class BrandBot:
             f"• {esc(row['product_name'])} · {esc(row['size'])} · {int(row['quantity'] or 1)} шт."
             for row in self.db.orders_for_payment(payment_id)
         ]
-        text = (
-            f"<b>ОПЛАТА · {esc(format_rub(amount))}</b>\n\n"
-            + ("\n".join(lines) if lines else "")
-            + "\n\nВыбери способ. Ссылка откроется отдельным сообщением, "
-            "статус покупки обновится сам."
-        )
-        self.api.send_message(chat_id, text, self.pay_keyboard(payment_id, chat_id))
+        keyboard = self.pay_keyboard(payment_id, chat_id)
+        head = f"<b>ОПЛАТА · {esc(format_rub(amount))}</b>\n\n" + ("\n".join(lines) if lines else "")
+        if keyboard is None:
+            # Способов нет совсем (свежий .env без платёжек): не зовём выбирать
+            # из пустого списка и не оставляем человека без единой кнопки.
+            text = (
+                head + "\n\nОплата в боте пока не подключена — счёт выставить нельзя.\n"
+                "Напиши менеджеру: оформим вручную и сохраним место в очереди."
+            )
+            keyboard = self.pay_fallback_keyboard()
+        else:
+            text = (
+                head + "\n\nВыбери способ. Ссылка откроется отдельным сообщением, "
+                "статус покупки обновится сам."
+            )
+        self.api.send_message(chat_id, text, keyboard)
 
     def cancel_own_order(self, chat_id: int, user_id: int, order_id: int) -> None:
         order = self.db.get_order(order_id)
@@ -3476,11 +3613,7 @@ class BrandBot:
                 self.api.send_message(chat_id, "Использование: <code>/broadcast текст рассылки</code>")
             else:
                 self.db.set_state(user_id, "broadcast_pending", {"text": argument})
-                self.api.send_message(
-                    chat_id,
-                    f"<b>КОМУ ПИШЕМ?</b>\n\n{esc(argument)}",
-                    self.segment_keyboard(),
-                )
+                self.ask_broadcast_segment(chat_id, argument)
         elif command == "/restock":
             parts = argument.split()
             if len(parts) != 2:
@@ -3708,12 +3841,20 @@ class BrandBot:
         data["preview"] = product
         data["step"] = "confirm"
         self.db.set_state(user_id, "admin_add", data)
+        self.show_add_confirm(chat_id, product)
+        return True
+
+    def show_add_confirm(self, chat_id: int, product: dict[str, Any]) -> None:
+        """Последний шаг мастера: та же карточка, что увидит покупатель.
+
+        Расхождений между черновиком и витриной не остаётся, а правки не
+        приходится держать в уме. Экран показывается и повторно — если владелец
+        вместо кнопки написал текст.
+        """
         category = next(
-            (str(item["name"]) for item in self.catalog.categories if item["id"] == product["category"]),
+            (str(item["name"]) for item in self.catalog.categories if item["id"] == product.get("category")),
             "Каталог",
         )
-        # Показываем ту же карточку, что увидит покупатель: расхождений между
-        # черновиком и витриной не остаётся, правки не приходится держать в уме.
         self.api.send_message(
             chat_id,
             add_step_text(ADD_TOTAL, "Проверь — так карточку увидит покупатель.")
@@ -3724,7 +3865,6 @@ class BrandBot:
                  [(icon("cancel", "Отмена"), "admin:cancel")]]
             ),
         )
-        return True
 
     def publish_product(self, chat_id: int, user_id: int) -> None:
         state = self.db.get_state(user_id)
@@ -3756,6 +3896,14 @@ class BrandBot:
         rows = option_rows(options)
         rows.append([(icon("cancel", "Отмена"), "admin:cancel")])
         return inline_keyboard(rows)
+
+    def ask_broadcast_segment(self, chat_id: int, text: str) -> None:
+        """Кому пишем: экран показывается и повторно, если ответили текстом."""
+        self.api.send_message(
+            chat_id,
+            f"<b>КОМУ ПИШЕМ?</b>\n\n{esc(text)}",
+            self.segment_keyboard(),
+        )
 
     def preview_broadcast(self, chat_id: int, user_id: int, segment: str) -> None:
         state = self.db.get_state(user_id)
@@ -4201,10 +4349,7 @@ class BrandBot:
                 "Малые тиражи, городская форма, выпуски без повторов."
                 + (f"\n\n{ICON['support']} Вопросы: @{esc(self.settings.support_username)}" if self.settings.support_username else "")
                 + self.cta("channel"),
-                inline_keyboard(
-                    [[(icon("channel", "Канал"), self.settings.channel_url)]]
-                    + nav_rows(("Кабинет", "account"))
-                ),
+                inline_keyboard(self.channel_rows() + nav_rows(("Кабинет", "account"))),
             )
         elif data == "size_guide" or data.startswith("size_guide:"):
             self.show_size_guide(chat_id, user_id, data.split(":", 1)[1] if ":" in data else "")
@@ -4296,23 +4441,71 @@ class BrandBot:
             self.api.send_message(chat_id, "Отменили.", remove_keyboard())
             self.send_menu(chat_id)
             return
+        state = self.db.get_state(user_id)
         phone: str | None = None
         contact = message.get("contact")
         if contact and int(contact.get("user_id", user_id)) == user_id:
             phone = normalize_phone(str(contact.get("phone_number", "")))
-        elif self.db.get_state(user_id):
+        elif state and state[0] in PHONE_STATES:
             phone = normalize_phone(text)
         if phone:
             self.save_phone_and_continue(chat_id, user_id, phone)
             return
-        if self.db.get_state(user_id):
-            self.api.send_message(chat_id, "Номер не распознан. Формат: +79991234567")
+        if state and state[0] == "awaiting_consent":
+            # Здесь ждут не номер, а решение кнопкой: ответ без кнопок был тупиком.
+            self.api.send_message(
+                chat_id,
+                "Сначала согласие — оно выбирается кнопкой ниже.\n"
+                "Номер пришли следом: сохраним сразу после «Согласен».",
+                consent_keyboard(),
+            )
+            return
+        if state and state[0] in PHONE_STATES:
+            self.api.send_message(
+                chat_id,
+                "Номер не распознан. Формат: +79991234567\n"
+                "Или нажми «Отправить номер» ниже — так без опечаток.",
+                contact_keyboard(),
+            )
+            return
+        if state:
+            self.answer_button_state(chat_id, user_id, state)
             return
         self.api.send_message(
             chat_id,
             "Нажми кнопки ниже — так быстрее. Каталог, покупки и поддержка там." + self.cta("drop"),
             self.main_menu(chat_id),
         )
+
+    def answer_button_state(self, chat_id: int, user_id: int, state: tuple[str, dict[str, Any]]) -> None:
+        """Текст пришёл там, где ждут кнопку: показываем тот же экран заново.
+
+        Раньше любое неизвестное состояние считалось ожиданием номера, поэтому
+        владелец посреди мастера или рассылки на каждое сообщение получал
+        «Номер не распознан» и не мог понять, где он застрял.
+        """
+        name = str(state[0])
+        data = dict(state[1] or {})
+        if name == "admin_add":
+            step = str(data.get("step", ""))
+            if step == "new_category":
+                self.api.send_message(
+                    chat_id,
+                    "<b>НОВЫЙ РАЗДЕЛ</b>\n\nНазвание вводится текстом. Например: Верхняя одежда",
+                )
+            elif step == "confirm" and isinstance(data.get("preview"), dict):
+                self.show_add_confirm(chat_id, data["preview"])
+            else:
+                self.start_add_product(chat_id, user_id)
+            return
+        if name == "broadcast_pending":
+            text = str(data.get("text", "")).strip()
+            if text:
+                self.ask_broadcast_segment(chat_id, text)
+                return
+        # Состояние неизвестное или пустое: не держим человека в подвешенном.
+        self.db.clear_state(user_id)
+        self.stale(chat_id, "Не понял, на каком шаге мы остановились.")
 
     def user_command(self, chat_id: int, user_id: int, text: str) -> bool:
         """Команды покупателя: их показывает системная кнопка «Меню».

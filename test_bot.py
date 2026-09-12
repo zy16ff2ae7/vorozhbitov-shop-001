@@ -30,6 +30,7 @@ from bot import (
     ADD_TOTAL,
     audience_label,
     buyer_commands,
+    channel_target,
     ensure_catalog_exists,
     inline_keyboard,
     nav_rows,
@@ -1882,6 +1883,215 @@ class NativeMenuTests(unittest.TestCase):
                 action()
                 markup = api.last(500)[2]
                 self.assertIn("menu", button_targets(markup), f"нет возврата домой: {name}")
+
+    def test_user_without_a_name_does_not_break_the_upsert(self):
+        """first_name/last_name в базе NOT NULL: явный null не должен ронять запрос."""
+        with tempfile.TemporaryDirectory() as directory:
+            bot, db = self._bot(directory)
+            is_new, referrer = db.upsert_user({"id": 500, "username": None,
+                                               "first_name": None, "last_name": None})
+            self.assertTrue(is_new)
+            row = db.get_user(500)
+            self.assertEqual(row["first_name"], "")
+            self.assertEqual(row["last_name"], "")
+            # Повторный апсерт с null так же не падает и не затирает ник.
+            db.upsert_user({"id": 500, "username": "buyer", "first_name": None})
+            row = db.get_user(500)
+            self.assertEqual(row["username"], "buyer")
+            self.assertEqual(row["first_name"], "")
+            # Имя из подписанного initData веб-приложения тоже может прийти пустым.
+            db.upsert_user({"id": 600, "first_name": None}, "ref500")
+            self.assertEqual(db.get_user(600)["first_name"], "")
+            self.assertEqual(db.get_user(500)["invited_count"], 1)
+
+    def test_channel_button_exists_only_when_the_channel_exists(self):
+        """Пустой CHANNEL_URL и голый https://t.me/ не должны давать битую кнопку.
+
+        С нерабочей ссылкой Telegram отклоняет сообщение целиком: покупатель не
+        получил бы ни экрана, ни кнопок. Поэтому кнопки нет и обещаний канала в
+        тексте тоже нет — пустой экран ведёт внутрь бота.
+        """
+        for url in ("", "https://t.me/", "https://t.me", "tg://resolve"):
+            with tempfile.TemporaryDirectory() as directory:
+                api = MenuAPI()
+                bot, db = self._bot(directory, api, channel_url=url)
+                db.upsert_user(self.USER)
+                with bot.catalog.lock:
+                    bot.catalog.data["products"] = []
+                    bot.catalog.data["lookbook"] = []
+                    bot.catalog.save()
+                    bot.catalog.reload()
+                for target in ("account", "about", "catalog", "lookbook"):
+                    api.sent.clear()
+                    self.assertTrue(bot.route_callback("cb", 500, 500, target), target)
+                    text, markup = api.last(500)[1], api.last(500)[2]
+                    urls = [button.get("url") for row in (markup or {}).get("inline_keyboard", [])
+                            for button in row if button.get("url")]
+                    self.assertEqual(urls, [], f"{target} при {url!r}")
+                    self.assertNotIn("канале", text.lower(), f"{target} при {url!r}")
+                    self.assertIn("menu", button_targets(markup), f"{target} остался без возврата")
+
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api, channel_url="https://t.me/brand")
+            db.upsert_user(self.USER)
+            bot.route_callback("cb", 500, 500, "account")
+            urls = [button.get("url") for row in api.last(500)[2]["inline_keyboard"]
+                    for button in row if button.get("url")]
+            self.assertEqual(urls, ["https://t.me/brand"])
+            self.assertEqual(channel_target("https://vk.com/brand"), "https://vk.com/brand")
+            self.assertEqual(channel_target("tg://resolve?domain=brand"), "tg://resolve?domain=brand")
+            self.assertEqual(channel_target(None), "")
+
+    def test_payment_screen_never_promises_methods_that_do_not_exist(self):
+        """Без подключённых платёжек экран оплаты честен и не оставляет в тупике."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api, stars_enabled=False)
+            db.upsert_user(self.USER)
+            receipt = self._purchase(db)
+            payment_id = receipt["payment_id"]
+
+            bot.open_draft(500, 500, payment_id)
+            text, markup = api.last(500)[1], api.last(500)[2]
+            self.assertNotIn("Выбери способ", text)
+            self.assertIn("не подключена", text)
+            self.assertIn("support", button_targets(markup))
+            self.assertIn("menu", button_targets(markup))
+
+            api.sent.clear()
+            bot.offer_payment(500, payment_id, receipt["amount_rub"], ["• СИЛА И ЧЕСТЬ · L · 1 шт."])
+            text, markup = api.last(500)[1], api.last(500)[2]
+            self.assertNotIn("карта", text.lower())
+            self.assertIn("support", button_targets(markup))
+
+            # Отказ конкретного способа тоже с кнопками, а не пустым сообщением.
+            api.sent.clear()
+            bot.route_callback("cb", 500, 500, f"pay:{payment_id}:stars")
+            self.assertIn(f"draft:{payment_id}", button_targets(api.last(500)[2]))
+            self.assertIn("support", button_targets(api.last(500)[2]))
+
+        # Один подключённый способ — обещаем только его.
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            receipt = self._purchase(db)
+            bot.offer_payment(500, receipt["payment_id"], receipt["amount_rub"], ["• вещь"])
+            text = api.last(500)[1]
+            self.assertIn("звёзды Telegram", text)
+            self.assertNotIn("крипта", text)
+            self.assertNotIn("СБП", text)
+
+    def test_unpayable_price_is_refused_before_consent_and_phone(self):
+        """Цена, из которой нельзя посчитать счёт, не должна собирать согласие и номер."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            with bot.catalog.lock:
+                broken = dict(bot.catalog.get("tee-sila-i-chest"))
+                broken["id"] = "bad-price"
+                broken["price"] = "1 200 - 1 500"
+                bot.catalog.data["products"].append(broken)
+                bot.catalog.save()
+                bot.catalog.reload()
+
+            bot.show_product(500, 500, "bad-price")
+            text, markup = api.last(500)[1], api.last(500)[2]
+            self.assertIn("не посчитать", text)
+            self.assertNotIn("want:bad-price", button_targets(markup))
+            self.assertEqual(button_rows(markup)[0], ["💬 Написать менеджеру →"])
+
+            api.sent.clear()
+            bot.route_callback("cb", 500, 500, "size:bad-price:L")
+            text, markup = api.last(500)[1], api.last(500)[2]
+            self.assertIn("ЦЕНА НЕДСТУПНА", text)
+            self.assertIn("support", button_targets(markup))
+            self.assertIn("menu", button_targets(markup))
+            # Главное: согласие и телефон не спрашивали, состояние не выставлено.
+            self.assertNotIn("СОГЛАСИЕ", text)
+            state = db.get_state(500)
+            self.assertFalse(state and state[0] == "awaiting_order_phone", state)
+            self.assertFalse(db.get_user(500)["phone"])
+
+            # Обычная вещь с нормальной ценой идёт прежним путём.
+            api.sent.clear()
+            bot.route_callback("cb", 500, 500, "size:tee-sila-i-chest:L")
+            self.assertIn("СОГЛАСИЕ", api.sent[-1][1] + "".join(item[2] or "" for item in api.photos))
+
+    def test_text_where_a_button_is_expected_returns_to_that_screen(self):
+        """Текст вместо кнопки не уводит в чужой сценарий и не оставляет без кнопок."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+
+            def say(user_id, text):
+                api.sent.clear()
+                bot.handle_update({
+                    "update_id": 1,
+                    "message": {"message_id": 1, "date": 0, "chat": {"id": user_id, "type": "private"},
+                                "from": {"id": user_id, "username": "b", "first_name": "B"}, "text": text},
+                })
+                return api.last(user_id)[1], api.last(user_id)[2]
+
+            def press(user_id, data):
+                bot.handle_update({
+                    "update_id": 2,
+                    "callback_query": {"id": "cb", "chat_instance": "x", "data": data,
+                                       "from": {"id": user_id, "username": "b", "first_name": "B"},
+                                       "message": {"message_id": 1, "chat": {"id": user_id, "type": "private"}}},
+                })
+
+            # Шаг согласия: ждём кнопку, а не номер.
+            press(500, "size:tee-sila-i-chest:L")
+            self.assertEqual(db.get_state(500)[0], "awaiting_consent")
+            text, markup = say(500, "а можно без номера")
+            self.assertNotIn("Номер не распознан", text)
+            self.assertIn("consent:yes", button_targets(markup))
+
+            # Шаг номера: ошибка распознавания возвращает кнопку «Отправить номер».
+            press(500, "consent:yes")
+            self.assertEqual(db.get_state(500)[0], "awaiting_order_phone")
+            text, markup = say(500, "щас скину")
+            self.assertIn("Номер не распознан", text)
+            self.assertTrue((markup or {}).get("keyboard"), "пропала клавиатура с кнопкой номера")
+            self.assertEqual(db.get_state(500)[0], "awaiting_order_phone")
+
+            # Мастер: текст на шаге выбора раздела возвращает этот же шаг.
+            say(1, "/add")
+            self.assertEqual(db.get_state(1)[1]["step"], "category")
+            text, markup = say(1, "кепка")
+            self.assertIn("ШАГ 1/", text)
+            self.assertNotIn("Номер не распознан", text)
+            self.assertIn("addcat:new", button_targets(markup))
+            self.assertEqual(db.get_state(1)[1]["step"], "category")
+
+            # Мастер: текст на шаге проверки показывает карточку заново.
+            press(1, "addcat:access")
+            for answer in ("CAP", "3 900 ₽", "ONE SIZE", "Кепка второго выпуска.", "/skip"):
+                say(1, answer)
+            self.assertEqual(db.get_state(1)[1]["step"], "confirm")
+            text, markup = say(1, "что дальше")
+            self.assertIn("ШАГ 7/", text)
+            self.assertIn("add:publish", button_targets(markup))
+
+            # Рассылка: текст вместо выбора аудитории возвращает сегменты.
+            db.clear_state(1)
+            say(1, "/broadcast ВЫПУСК В 19:00")
+            text, markup = say(1, "всем")
+            self.assertIn("КОМУ ПИШЕМ", text)
+            self.assertIn("seg:all", button_targets(markup))
+
+            # Неизвестное состояние не держит человека в подвешенном.
+            db.set_state(500, "что-то-старое", {"x": 1})
+            text, markup = say(500, "привет")
+            self.assertIsNone(db.get_state(500))
+            # Главное меню — оно и есть точка возврата, кнопки «menu» в нём нет.
+            self.assertIn("остановились", text)
+            self.assertIn("catalog", button_targets(markup))
 
     def test_staff_reference_screens_are_not_dead_ends(self):
         """Справочные экраны команды ведут обратно в пульт — и пустые, и с данными."""
