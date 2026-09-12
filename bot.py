@@ -208,6 +208,7 @@ class Settings:
     stars_enabled: bool = True
     stars_rub_per_star: float = 2.0
     trusted_proxy_ips: frozenset[str] = frozenset()
+    digest_hour: int | None = 9
 
     def public_origin(self) -> str:
         parsed = urllib.parse.urlparse(self.webapp_url)
@@ -246,6 +247,7 @@ class Settings:
             manager_chat_id=int(manager_raw) if manager_raw.lstrip("-").isdigit() else None,
             brand_name=os.getenv("BRAND_NAME", "ВОРОЖБИТОВ").strip() or "ВОРОЖБИТОВ",
             support_username=os.getenv("SUPPORT_USERNAME", "").strip().lstrip("@"),
+            digest_hour=_digest_hour(os.getenv("DIGEST_HOUR", "9")),
             database_path=BASE_DIR / os.getenv("DATABASE_PATH", "data/bot.sqlite3"),
             catalog_path=BASE_DIR / os.getenv("CATALOG_PATH", "data/catalog.json"),
             health_port=int(os.getenv("PORT", "8080")),
@@ -405,6 +407,22 @@ class Catalog:
             product.setdefault("photo_url", "")
             self._commit({**self.data, "products": [*self.data["products"], product]})
             return product
+
+    def update_product(self, product_id: str, **changes: Any) -> bool:
+        """Точечная правка вещи: валидация та же, что при публикации."""
+        with self.lock:
+            products = []
+            found = False
+            for product in self.data["products"]:
+                item = dict(product)
+                if str(item.get("id")) == product_id:
+                    item.update(changes)
+                    found = True
+                products.append(item)
+            if not found:
+                return False
+            self._commit({**self.data, "products": products})
+            return True
 
     def set_active(self, product_id: str, active: bool) -> bool:
         with self.lock:
@@ -2089,6 +2107,19 @@ def buyer_commands() -> list[dict[str, str]]:
     ]
 
 
+def _digest_hour(raw: str | None) -> int | None:
+    """Час утреннего дайджеста из env; пустая строка выключает его совсем."""
+    value = str(raw or "").strip()
+    if not value:
+        return None
+    try:
+        hour = int(value)
+    except ValueError:
+        LOG.warning("DIGEST_HOUR не число (%r) — беру 9 утра", value)
+        return 9
+    return min(23, max(0, hour))
+
+
 def staff_commands() -> list[dict[str, str]]:
     """Команды команды. Вешаются отдельным scope — покупатель их не видит."""
     return [
@@ -2848,14 +2879,16 @@ class BrandBot:
             if self.price_is_payable(product)
             else [(icon("support", "Написать менеджеру →"), "support")]
         )
+        rows = [
+            # Главное действие — отдельной широкой строкой, остальное ниже.
+            primary,
+            [(icon("wait", "Ждать размер"), f"wait:{product_id}"),
+             (icon("size", "Замеры"), f"size_guide:product:{product_id}")],
+        ]
+        if self.is_admin(user_id):
+            rows.append([(icon("tools", "Править вещь"), f"eedit:{product_id}")])
         keyboard = inline_keyboard(
-            [
-                # Главное действие — отдельной широкой строкой, остальное ниже.
-                primary,
-                [(icon("wait", "Ждать размер"), f"wait:{product_id}"),
-                 (icon("size", "Замеры"), f"size_guide:product:{product_id}")],
-            ]
-            + nav_rows((category_title, f"cat:{product['category']}"))
+            rows + nav_rows((category_title, f"cat:{product['category']}"))
         )
         # Вещь показываем со всех сторон: альбом с честными подписями кадров,
         # затем карточка с кнопками — текст в альбоме читается хуже.
@@ -4162,10 +4195,17 @@ class BrandBot:
             lines.append(f"{ICON['notice']} Возвраты: {stats['refunds']} — посмотрите")
         else:
             lines.append("Возвратов нет.")
+        state = "включён" if self.auto_digest_on() else "выключен"
+        hour = self.settings.digest_hour
+        when = f", каждый день в {hour}:00" if hour is not None else ""
+        lines.append(f"{ICON['channel']} Автодайджест утром: {state}{when}.")
+        toggle = ("adigest:off" if self.auto_digest_on() else "adigest:on")
+        toggle_label = ("Не присылать" if self.auto_digest_on() else "Присылать утром")
         self.api.send_message(
             chat_id, "\n".join(lines),
             inline_keyboard([[(icon("stats", "Сводка"), "adm:summary")],
-                             [(icon("pay", "Ждут оплаты →"), "unpaid")]]
+                             [(icon("pay", "Ждут оплаты →"), "unpaid")],
+                             [(icon("channel", toggle_label), toggle)]]
                             + staff_nav_rows()))
 
     def admin_orders(self, chat_id: int) -> None:
@@ -4244,6 +4284,92 @@ class BrandBot:
                       "callback_data": f"aclient:{int(user_id)}"}])
         return {"inline_keyboard": rows}
 
+    EDIT_FIELDS = {
+        "price": ("Цену", "Цену? Формат как при добавлении: 4 900 или 4 900 - 5 200."),
+        "sizes": ("Остатки", "Размеры в наличии через запятую? Например: S, M, L."),
+        "desc": ("Описание", "Новое описание? Покупатель видит его в карточке целиком."),
+    }
+
+    def admin_edit_product(self, chat_id: int, product_id: str, saved: str = "") -> None:
+        product = self.catalog.get(product_id) or next(
+            (p for p in self.catalog.data.get("products", [])
+             if str(p.get("id")) == product_id), None)
+        if not product:
+            self.api.send_message(chat_id, "Вещь не найдена — править нечего.")
+            return
+        sizes = ", ".join(str(size) for size in product.get("sizes") or [])
+        description = " ".join(str(product.get("description") or "").split())
+        self.api.send_message(
+            chat_id,
+            f"<b>ПРАВКА ВЕЩИ</b>\n\n{esc(str(product.get('name')))}\n"
+            + (f"{ICON['ok']} {esc(saved)}\n" if saved else "")
+            + f"\n{ICON['pay']} Цена: {esc(str(product.get('price')))}"
+            + f"\n{ICON['size']} Размеры: {esc(sizes)}"
+            + f"\n{ICON['receipt']} Описание: {esc(description[:120])}"
+            + ("…" if len(description) > 120 else ""),
+            inline_keyboard(
+                [[(icon("pay", "Цена"), f"ped:{product_id}:price"),
+                  (icon("size", "Остатки"), f"ped:{product_id}:sizes")],
+                 [(icon("receipt", "Описание"), f"ped:{product_id}:desc")],
+                 [(icon("catalog", "← Вещь"), f"product:{product_id}"),
+                  (icon("stock", "Витрина"), "adm:shelf")]]
+            ),
+        )
+
+    def handle_product_edit_text(self, chat_id: int, user_id: int, text: str) -> bool:
+        """Один текстовый шаг правки: значение проверяем до записи в каталог."""
+        state = self.db.get_state(user_id)
+        if not state or state[0] != "prod_edit":
+            return False
+        pid = str(state[1].get("pid") or "")
+        field = str(state[1].get("field") or "")
+        if text.lower() in ("отмена", "cancel"):
+            self.db.clear_state(user_id)
+            self.api.send_message(chat_id, "Отменили.", remove_keyboard())
+            self.admin_edit_product(chat_id, pid)
+            return True
+        value = " ".join(text.split())
+        if field == "sizes":
+            sizes = [part.strip() for part in value.split(",") if part.strip()]
+            if not sizes or len(sizes) > 8 or any(len(part) > 12 for part in sizes):
+                self.api.send_message(
+                    chat_id,
+                    "Размеры — список через запятую, до 8 штук, каждый не длиннее 12 знаков.\n"
+                    "Например: S, M, L, XL.",
+                )
+                return True
+            change: dict[str, Any] = {"sizes": sizes}
+            label = f"Размеры: {', '.join(sizes)}"
+        elif field == "price":
+            if not value or len(value) > 40:
+                self.api.send_message(chat_id, "Цена — короткая строка: 4 900 или 4 900 - 5 200.")
+                return True
+            change = {"price": value}
+            label = f"Цена: {value}"
+        elif field == "desc":
+            if not value or len(value) > 600:
+                self.api.send_message(chat_id, "Описание — до 600 знаков: оно целиком в карточке.")
+                return True
+            change = {"description": value}
+            label = "Описание обновлено"
+        else:
+            self.db.clear_state(user_id)
+            return True
+        try:
+            ok = self.catalog.update_product(pid, **change)
+        except (ValueError, OSError) as exc:
+            self.catalog_refused(chat_id, "ПРАВКА НЕ СОХРАНИЛАСЬ", exc,
+                                  "Файл каталога цел, витрина работает. Значение не записано.")
+            return True
+        if not ok:
+            self.db.clear_state(user_id)
+            self.api.send_message(chat_id, "Вещь не найдена — правка не сохранилась.")
+            return True
+        self.db.clear_state(user_id)
+        self.db.event(user_id, "product_edited", {"product_id": pid, "field": field})
+        self.admin_edit_product(chat_id, pid, label)
+        return True
+
     def admin_unpaid(self, chat_id: int) -> None:
         """Брошенные оплаты: кого позвать доплатить, не листая покупки."""
         rows = self.db.payments_pending()
@@ -4279,6 +4405,27 @@ class BrandBot:
             return f"{hours} {plural(hours, 'час', 'часа', 'часов')}"
         days = hours // 24
         return f"{days} {plural(days, 'день', 'дня', 'дней')}"
+
+    def auto_digest_on(self) -> bool:
+        return self.db.kv_get("auto_digest") != "off" and self.settings.digest_hour is not None
+
+    def toggle_auto_digest(self, on: bool) -> None:
+        self.db.kv_set("auto_digest", "on" if on else "off")
+
+    def maybe_daily_digest(self, now: datetime) -> bool:
+        """Утренний дайджест владельцу: раз в день, выключается одной кнопкой."""
+        if not self.auto_digest_on():
+            return False
+        hour = int(self.settings.digest_hour or 0)
+        if now.hour != hour:
+            return False
+        today = now.date().isoformat()
+        if self.db.kv_get("auto_digest_last") == today:
+            return False
+        self.db.kv_set("auto_digest_last", today)
+        for owner_id in sorted(self.settings.admin_ids):
+            self.admin_digest(owner_id)
+        return True
 
     def nudge_payment(self, chat_id: int, user_id: int, payment_id: str) -> None:
         stamp = self.db.kv_get(f"nudge_at:{payment_id}")
@@ -5587,8 +5734,21 @@ class BrandBot:
             self.save_faq_items(items)
             self.admin_faqs(chat_id)
             return True
+        elif data.startswith("eedit:") and self.is_admin(user_id):
+            self.admin_edit_product(chat_id, data.split(":", 1)[1])
+            return True
+        elif data.startswith("ped:") and self.is_admin(user_id):
+            _, pid, field = (data.split(":") + ["", "", ""])[:3]
+            if field in self.EDIT_FIELDS:
+                self.db.set_state(user_id, "prod_edit", {"pid": pid, "field": field})
+                self.api.send_message(chat_id, self.EDIT_FIELDS[field][1])
+            return True
         elif data == "unpaid" and self.is_admin(user_id):
             self.admin_unpaid(chat_id)
+            return True
+        elif data.startswith("adigest:") and self.is_owner(user_id):
+            self.toggle_auto_digest(data.endswith(":on"))
+            self.admin_digest(chat_id)
             return True
         elif data.startswith("nudge:") and self.is_admin(user_id):
             self.nudge_payment(chat_id, user_id, data.split(":", 1)[1])
@@ -5682,6 +5842,8 @@ class BrandBot:
         if self.db.get_state(user_id) and self.handle_add_product_text(chat_id, user_id, text):
             return
         if self.handle_faq_text(chat_id, user_id, text):
+            return
+        if self.handle_product_edit_text(chat_id, user_id, text):
             return
         if text.startswith("/") and self.admin_command(chat_id, user_id, text):
             return
@@ -6437,6 +6599,13 @@ def polling_loop(api: TelegramAPI, bot: BrandBot) -> None:
                 # обновления нельзя: цикл спотыкался бы об одно и то же вечно.
                 LOG.warning("getUpdates вернул %s вместо списка", type(updates).__name__)
                 updates = []
+            try:
+                if bot.maybe_daily_digest(datetime.now(timezone.utc)):
+                    LOG.info("Утренний дайджест отправлен владельцу")
+            except Exception:
+                # Дайджест не должен останавливать опрос: без страховки сбой
+                # вокруг него морозил бы очередь обновлений до перезапуска.
+                LOG.exception("Автодайджест сбоил — цикл продолжает опрос")
             for update in updates:
                 if not isinstance(update, dict):
                     LOG.warning("Пропущено обновление не-словарь: %.120r", update)

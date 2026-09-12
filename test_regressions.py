@@ -914,6 +914,50 @@ class OwnerAccessRegressionTests(unittest.TestCase):
 
 
 
+    def test_edit_product_buttons_update_catalog(self):
+        import shutil
+        from bot import Catalog
+        catalog_copy = Path(self.temp.name) / 'catalog.json'
+        shutil.copy(Path(__file__).with_name('catalog.json'), catalog_copy)
+        self.bot.catalog = Catalog(catalog_copy)
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, 'product:tee-sila-i-chest'))
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        self.assertIn('eedit:tee-sila-i-chest',
+                      [b['callback_data'] for row in markup for b in row])
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'eedit:tee-sila-i-chest'))
+        self.assertTrue(self.bot.route_callback('cb3', 1, 1, 'ped:tee-sila-i-chest:price'))
+        self.assertTrue(self.bot.handle_product_edit_text(1, 1, '5 200'))
+        self.assertEqual(self.bot.catalog.get('tee-sila-i-chest')['price'], '5 200')
+        self.assertTrue(self.bot.route_callback('cb4', 1, 1, 'ped:tee-sila-i-chest:sizes'))
+        self.assertTrue(self.bot.handle_product_edit_text(1, 1, ','.join(f's{i}' for i in range(9))))
+        self.assertEqual(len(self.bot.catalog.get('tee-sila-i-chest')['sizes']),
+                         len(Catalog(catalog_copy).get('tee-sila-i-chest')['sizes']))
+        self.assertTrue(self.bot.handle_product_edit_text(1, 1, 'S, M, XXL'))
+        self.assertEqual(self.bot.catalog.get('tee-sila-i-chest')['sizes'], ['S', 'M', 'XXL'])
+        self.assertTrue(self.bot.route_callback('cb5', 1, 1, 'ped:tee-sila-i-chest:desc'))
+        self.assertTrue(self.bot.handle_product_edit_text(1, 1, 'Плотный хлопок.'))
+        self.assertEqual(self.bot.catalog.get('tee-sila-i-chest')['description'],
+                         'Плотный хлопок.')
+
+    def test_auto_digest_sends_once_and_switches_off(self):
+        from datetime import datetime, timezone
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        morning = datetime(2026, 9, 12, 9, 30, tzinfo=timezone.utc)
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.maybe_daily_digest(morning))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('ЧТО СЕГОДНЯ', text)
+        self.assertFalse(self.bot.maybe_daily_digest(morning))
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, 'adigest:off'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Автодайджест утром: выключен', text)
+        self.assertFalse(self.bot.maybe_daily_digest(morning))
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'adigest:on'))
+        self.assertTrue(self.bot.auto_digest_on())
+        self.assertFalse(self.bot.route_callback('cb3', 1, 7, 'adigest:off'))
+
 
 if __name__ == '__main__':
     unittest.main()
