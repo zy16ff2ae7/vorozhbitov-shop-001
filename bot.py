@@ -2033,6 +2033,7 @@ def staff_commands() -> list[dict[str, str]]:
         {"command": "reports", "description": "Журнал рассылок"},
         {"command": "money", "description": "Деньги: выручка и чек"},
         {"command": "digest", "description": "Дайджест: что сегодня"},
+        {"command": "shelf", "description": "Витрина: скрыть и показать"},
         {"command": "grant", "description": "Назначить админа: /grant id"},
         {"command": "help", "description": "Как это работает"},
     ]
@@ -3975,6 +3976,64 @@ class BrandBot:
             ),
         )
 
+    def giveaway_threshold(self) -> int:
+        """Порог приоритета: владелец меняет его из бота, kv переживает перезапуск."""
+        raw = self.db.kv_get("giveaway_min_invites")
+        return int(raw) if raw.strip().isdigit() else self.settings.giveaway_min_invites
+
+    def admin_customer(self, chat_id: int, user_id: int) -> None:
+        """Клиент целиком: контакт, согласие, деньги и привод — из карточки покупки."""
+        user = self.db.get_user(user_id)
+        if not user:
+            self.api.send_message(chat_id, "Клиент не найден в базе.",
+                                  inline_keyboard(staff_nav_rows()))
+            return
+        who = self._who(user_id)
+        row = self.db.connection().execute(
+            "SELECT COUNT(*) AS c, COALESCE(SUM(amount_rub), 0) AS s FROM orders "
+            "WHERE user_id=? AND status IN ('paid', 'confirmed', 'completed')",
+            (user_id,)).fetchone()
+        waits = self.db.connection().execute(
+            "SELECT COUNT(*) FROM waitlist WHERE user_id=? AND notified_at IS NULL",
+            (user_id,)).fetchone()[0]
+        lines = [
+            "<b>КЛИЕНТ</b>", "",
+            f"{ICON['account']} {esc(who)} · id {user_id}",
+            f"{ICON['support']} {esc(str(user['phone'] or 'номера нет'))}",
+            f"{ICON['ok']} Согласие: {esc(str(user['consent_at'] or 'нет')[:10])}",
+            f"{ICON['pay']} Оплаченных покупок: {int(row['c'])} · на {esc(format_rub(int(row['s'])))}",
+            f"{ICON['trophy']} Привёл приглашённых: {int(user['invited_count'] or 0)}",
+        ]
+        if waits:
+            lines.append(f"{ICON['wait']} Ждёт размеры: {int(waits)}")
+        self.api.send_message(
+            chat_id, "\n".join(lines),
+            inline_keyboard([[(icon("orders", "Покупки"), "adm:orders")]] + staff_nav_rows()))
+
+    def admin_shelf(self, chat_id: int) -> None:
+        """Витрина кнопками: скрыть и показать вещь без команд /hide и /show."""
+        lines = ["<b>ВИТРИНА</b>", ""]
+        buttons: list[list[tuple[str, str]]] = []
+        for category in self.catalog.categories:
+            for product in self.catalog.data.get("products", []):
+                if str(product.get("category")) != str(category.get("id")):
+                    continue
+                pid = str(product.get("id"))
+                name = str(product.get("name", pid))[:16]
+                active = bool(product.get("active", True))
+                lines.append(f"{'🛍' if active else ICON['cancel']} {esc(name)} — "
+                             f"{'в витрине' if active else 'скрыта'}")
+                if len(buttons) < 6:
+                    label = f"Скрыть {name}" if active else f"Показать {name}"
+                    buttons.append([(icon("stock", label), f"shelf:{pid}")])
+        if not buttons:
+            lines.append("В каталоге пусто: добавьте вещь через /add.")
+        else:
+            lines.append("")
+            lines.append("Кнопка меняет вещь местами: витрина и скрытие.")
+        self.api.send_message(chat_id, "\n".join(lines),
+                              inline_keyboard(buttons + staff_nav_rows()))
+
     def admin_money(self, chat_id: int) -> None:
         """Экран денег: владелец смотрит выручку без сводки-простыни."""
         money = self.db.money_stats()
@@ -4077,11 +4136,14 @@ class BrandBot:
                 inline_keyboard([[(icon("orders", "Покупки"), "adm:orders")]]),
             )
             return
-        self.api.send_message(
-            chat_id,
-            self.admin_order_card_text(row),
-            self.order_status_keyboard(order_id, str(row["status"])),
-        )
+        markup = self.order_status_keyboard(order_id, str(row["status"]))
+        rows = [list(r) for r in markup.get("inline_keyboard", [])]
+        client_row = [{"text": icon("account", "Клиент →"),
+                       "callback_data": f"aclient:{int(row['user_id'])}"}]
+        # Нав-ряд остаётся последним: клиент встаёт перед ним, а не поверх выхода.
+        rows.insert(max(0, len(rows) - 1), client_row)
+        self.api.send_message(chat_id, self.admin_order_card_text(row),
+                              {"inline_keyboard": rows})
 
     def admin_command(self, chat_id: int, user_id: int, text: str) -> bool:
         if not self.is_admin(user_id):
@@ -4149,7 +4211,7 @@ class BrandBot:
                     inline_keyboard(staff_nav_rows()),
                 )
             else:
-                threshold = max(1, self.settings.giveaway_min_invites)
+                threshold = max(1, self.giveaway_threshold())
                 lines = ["<b>ТОП ПРИГЛАШЕНИЙ</b>", "", f"Приоритет дают с {threshold} "
                          + plural(threshold, "приглашённого", "приглашённых", "приглашённых"), ""]
                 for index, row in enumerate(rows, start=1):
@@ -4159,7 +4221,7 @@ class BrandBot:
                 self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(staff_nav_rows()))
         elif command == "/giveaway":
             count = int(argument) if argument.isdigit() else 1
-            pool = self.db.giveaway_pool(self.settings.giveaway_min_invites)
+            pool = self.db.giveaway_pool(max(1, self.giveaway_threshold()))
             if not pool:
                 self.api.send_message(
                     chat_id,
@@ -4231,6 +4293,8 @@ class BrandBot:
             self.admin_money(chat_id)
         elif command == "/digest":
             self.admin_digest(chat_id)
+        elif command == "/shelf":
+            self.admin_shelf(chat_id)
         elif command == "/grant":
             self.grant_admin(chat_id, user_id, argument)
         elif command == "/revoke":
@@ -4604,13 +4668,17 @@ class BrandBot:
                          "<code>/giveaway N</code> выберет победителей из топа приглашений.",
                 inline_keyboard(staff_nav_rows()))
             return
+        threshold = self.giveaway_threshold()
         lines = ["<b>РОЗЫГРЫШИ</b>", ""]
         for row in draws:
             payload = json.loads(row["payload"] or "{}")
             winners = payload.get("winners") or []
             names = ", ".join(esc(self._who(int(w))) for w in winners) or "—"
             lines.append(f"{esc(str(row['created_at'])[:16])} · из {payload.get('pool', 0)}: {names}")
-        self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(staff_nav_rows()))
+        lines.append(f"\nПорог приоритета: {threshold} приглашённых.")
+        rows = [[(icon("cancel", "Порог −"), "draw:down"), (icon("ok", "Порог +"), "draw:up")]]
+        self.api.send_message(chat_id, "\n".join(lines),
+                              inline_keyboard(rows + staff_nav_rows()))
 
     def ask_broadcast_segment(self, chat_id: int, text: str) -> None:
         """Кому пишем: экран показывается и повторно, если ответили текстом."""
@@ -5137,6 +5205,25 @@ class BrandBot:
                 self.revoke_admin(chat_id, user_id, int(data.split(":")[2]))
             except (IndexError, ValueError):
                 return False
+        elif data.startswith("aclient:") and self.is_admin(user_id):
+            try:
+                self.admin_customer(chat_id, int(data.split(":", 1)[1]))
+            except (IndexError, ValueError):
+                return False
+        elif data.startswith("shelf:") and self.is_admin(user_id):
+            pid = data.split(":", 1)[1]
+            product = next(
+                (pr for pr in self.catalog.data.get("products", []) if str(pr.get("id")) == pid), None)
+            if product is None:
+                self.stale(chat_id, "Такой вещи нет в каталоге.")
+            else:
+                self.catalog.set_active(pid, not bool(product.get("active", True)))
+                self.admin_shelf(chat_id)
+        elif data in {"draw:up", "draw:down"} and self.is_owner(user_id):
+            step = 1 if data == "draw:up" else -1
+            new = min(10, max(1, self.giveaway_threshold() + step))
+            self.db.kv_set("giveaway_min_invites", str(new))
+            self.admin_draws(chat_id)
         elif data.startswith("wnotify:") and self.is_admin(user_id):
             parts = data.split(":", 2)
             if len(parts) != 3 or not parts[1] or not parts[2]:

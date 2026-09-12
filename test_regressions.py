@@ -720,3 +720,54 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.assertIn('РАЗМЕР ВЕРНУЛСЯ', texts)
         self.assertIn('Уведомлено по листу ожидания: 1', texts)
         self.assertEqual(self.db.waitlist_unnotified(), [])
+
+    def test_order_card_links_customer_screen_with_money(self):
+        import sqlite3 as _sql
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 5, 'username': 'client', 'first_name': 'Кира'})
+        self.db.set_phone(5, '+79995556677')
+        from bot import utc_now
+        self.db.connection().execute(
+            "INSERT INTO orders(user_id, product_id, product_name, size, quantity, "
+            "amount_rub, status, created_at) VALUES (5, 'tee', 'Футболка', 'L', 1, 4900, 'paid', ?)",
+            (utc_now(),))
+        order_id = self.db.connection().execute("SELECT id FROM orders ORDER BY id DESC").fetchone()[0]
+        self.bot.admin_order_card(1, order_id)
+        markup = self.api.send_message.call_args_list[-1].args[2]['inline_keyboard']
+        targets = [b['callback_data'] for row in markup for b in row]
+        self.assertIn('aclient:5', targets)
+        self.assertEqual(targets[-1], 'menu')
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.route_callback('cb', 1, 1, 'aclient:5'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('КЛИЕНТ', text)
+        self.assertIn('+79995556677', text)
+        self.assertIn('4 900', text)
+
+    def test_shelf_button_hides_and_shows_product(self):
+        import shutil
+        from bot import Catalog
+        catalog_copy = Path(self.temp.name) / 'catalog.json'
+        shutil.copy(Path(__file__).with_name('catalog.json'), catalog_copy)
+        self.bot.catalog = Catalog(catalog_copy)
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.assertTrue(self.bot.admin_command(1, 1, '/shelf'))
+        self.assertIsNotNone(self.bot.catalog.get('tee-sila-i-chest'))
+        self.assertTrue(self.bot.route_callback('cb1', 1, 1, 'shelf:tee-sila-i-chest'))
+        self.assertIsNone(self.bot.catalog.get('tee-sila-i-chest'))
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'shelf:tee-sila-i-chest'))
+        self.assertIsNotNone(self.bot.catalog.get('tee-sila-i-chest'))
+
+    def test_draw_threshold_buttons_are_owner_only(self):
+        self.db.upsert_user({'id': 1, 'username': 'owner', 'first_name': 'Owner'})
+        self.db.upsert_user({'id': 7, 'username': 'member', 'first_name': 'Мира'})
+        self.db.add_admin(7, 1)
+        self.db.event(1, 'giveaway_drawn', {'winners': [1], 'pool': 1, 'count': 1})
+        self.assertFalse(self.bot.route_callback('cb1', 1, 7, 'draw:up'))
+        self.assertEqual(self.bot.giveaway_threshold(), 3)
+        self.assertTrue(self.bot.route_callback('cb2', 1, 1, 'draw:up'))
+        self.assertEqual(self.bot.giveaway_threshold(), 4)
+        self.api.send_message.reset_mock()
+        self.assertTrue(self.bot.admin_command(1, 7, '/top'))
+        text = " ".join(str(c.args[1]) for c in self.api.send_message.call_args_list)
+        self.assertIn('Приоритет дают с 4', text)
