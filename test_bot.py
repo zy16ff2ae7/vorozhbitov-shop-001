@@ -14,21 +14,33 @@ import urllib.request
 from unittest.mock import patch
 from pathlib import Path
 
+from dataclasses import replace
+
 from bot import (
     BASE_DIR,
     BrandBot,
     Catalog,
+    CHAT_MENU_BUTTON,
     Database,
+    ICON,
     RateLimiter,
     REF_RE,
     Settings,
     TelegramAPI,
+    audience_label,
+    buyer_commands,
     ensure_catalog_exists,
+    inline_keyboard,
+    nav_rows,
     normalize_phone,
+    order_state_lines,
     person_label,
+    plural,
     sanitize_personalization,
     slugify,
+    staff_commands,
     start_health_server,
+    things_word,
     webapp_user_from_init_data,
 )
 from payments import (
@@ -374,8 +386,8 @@ class BotTests(unittest.TestCase):
                 self.albums = []
                 self.photos = []
 
-            def send_media_group(self, chat_id, photos, caption=""):
-                self.albums.append(photos)
+            def send_media_group(self, chat_id, photos, caption="", labels=None):
+                self.albums.append((photos, labels or []))
                 return {"message_id": 1}
 
             def send_photo(self, chat_id, photo, caption, reply_markup=None):
@@ -383,17 +395,27 @@ class BotTests(unittest.TestCase):
                 return {"message_id": 1}
 
             def send_message(self, chat_id, text, reply_markup=None):
-                return {"message_id": 1}
+                self.messages.append((text, reply_markup))
+                return {"message_id": len(self.messages)}
 
         with tempfile.TemporaryDirectory() as directory:
             api = FakeAPI()
+            api.messages = []
             bot, _ = self._teaser_bot(directory, api)
             bot.show_product(1, 1, "tag-sila-i-chest")
             self.assertEqual(len(api.albums), 1, "карточка ушла без альбома")
-            self.assertGreaterEqual(len(api.albums[0]), 2)
+            photos, labels = api.albums[0]
+            self.assertGreaterEqual(len(photos), 2)
             self.assertEqual(api.photos, [], "альбом отправлен, одиночное фото лишнее")
-            for url in api.albums[0]:
+            for url in photos:
                 self.assertTrue(url.startswith("https://"), f"нелокальный адрес обязателен: {url}")
+            # Подписи кадров — из каталога: у жетона их нет, значит и выдумывать нечего.
+            self.assertEqual([label for label in labels if label], [])
+            # Карточка вещи уходит отдельным сообщением вместе с кнопками.
+            card, keyboard = api.messages[-1]
+            self.assertIn("ЖЕТОН", card)
+            self.assertIn("1 900 ₽", card)
+            self.assertTrue(keyboard["inline_keyboard"][-1][-1]["callback_data"] == "menu")
 
     def test_webapp_order_is_validated_against_catalog_and_stored(self):
         class FakeAPI(TelegramAPI):
@@ -687,7 +709,7 @@ class BotTests(unittest.TestCase):
             self.assertEqual(stored["address"], "ул. Ленина, 1")
             self.assertEqual(stored["pref_size"], "L")
             self.assertTrue(db.has_consent(44))
-            self.assertIn("Профиль", api.sent[-1][1])
+            self.assertIn("ПРОФИЛЬ СОХРАНЁН", api.sent[-1][1])
 
     def test_start_sends_welcome_photo(self):
         class FakeAPI(TelegramAPI):
@@ -1565,6 +1587,533 @@ class BotTests(unittest.TestCase):
             self.assertEqual(db.get_payment("aa11bb22cc33")["status"], "paid")
             self.assertEqual(db.orders_for_payment("aa11bb22cc33")[0]["status"], "paid")
             self.assertIn("Оплата прошла", api.sent[-1][1])
+
+
+class MenuAPI(TelegramAPI):
+    """Пишет всё, что бот «отправил»: меню проверяем как текст и как кнопки."""
+
+    def __init__(self):
+        super().__init__("test-token")
+        self.sent = []
+        self.albums = []
+        self.photos = []
+        self.videos = []
+        self.invoices = []
+        self.documents = []
+        self.pre_checkout = []
+        self.calls = []
+
+    def send_message(self, chat_id, text, reply_markup=None):
+        self.sent.append((chat_id, text, reply_markup))
+        return {"message_id": len(self.sent)}
+
+    def send_photo(self, chat_id, photo, caption, reply_markup=None):
+        self.photos.append((chat_id, photo, caption, reply_markup))
+        return {"message_id": len(self.photos), "photo": [{"file_id": "URL-COPY"}]}
+
+    def send_photo_file(self, chat_id, path, caption="", reply_markup=None):
+        self.photos.append((chat_id, path, caption, reply_markup))
+        return {"message_id": len(self.photos), "photo": [{"file_id": f"FILE-{len(self.photos)}"}]}
+
+    def send_video(self, chat_id, video, caption="", reply_markup=None, **kwargs):
+        self.videos.append(video)
+        return {"video": {"file_id": "VIDEO-COPY"}}
+
+    def send_video_file(self, chat_id, path, caption="", reply_markup=None, **kwargs):
+        """Локальный ролик: без заглушки тест ушёл бы в настоящий Telegram."""
+        self.videos.append(Path(path).name)
+        return {"video": {"file_id": "VIDEO-FILE"}}
+
+    def send_media_group(self, chat_id, photos, caption="", labels=None):
+        self.albums.append((chat_id, photos, caption, labels or []))
+        return {"message_id": len(self.albums)}
+
+    def send_invoice(self, chat_id, payload):
+        self.invoices.append(payload)
+        return {"message_id": 1}
+
+    def create_invoice_link(self, payload):
+        return "https://t.me/invoice/test"
+
+    def send_document(self, chat_id, filename, content, caption=""):
+        self.documents.append((chat_id, filename, len(content), caption))
+        return {"message_id": len(self.sent)}
+
+    def answer_pre_checkout(self, query_id, ok=True, error_message=""):
+        self.pre_checkout.append((query_id, ok, error_message))
+        return True
+
+    def answer_callback(self, callback_id, text=""):
+        return None
+
+    def call(self, method, payload=None, timeout=70):
+        """Никакой сети в тестах меню: запоминаем вызов и отдаём пустой ответ."""
+        self.calls.append((method, payload))
+        return {}
+
+    def last(self, chat_id=None):
+        rows = [item for item in self.sent if chat_id is None or item[0] == chat_id]
+        return rows[-1] if rows else (None, "", None)
+
+    def markups(self):
+        """Все показанные клавиатуры: из текстовых сообщений и из фото-сообщений."""
+        return [item[2] for item in self.sent] + [item[3] for item in self.photos]
+
+
+def button_rows(markup):
+    return [[button["text"] for button in row] for row in (markup or {}).get("inline_keyboard", [])]
+
+
+def button_targets(markup):
+    targets = []
+    for row in (markup or {}).get("inline_keyboard", []):
+        for button in row:
+            targets.append(
+                button.get("callback_data")
+                or button.get("url")
+                or (button.get("web_app") or {}).get("url")
+                or ""
+            )
+    return targets
+
+
+def flat_buttons(markup):
+    return [text for row in button_rows(markup) for text in row]
+
+
+class NativeMenuTests(unittest.TestCase):
+    """Native-меню Telegram: шесть разделов, единые карточки, понятная навигация."""
+
+    USER = {"id": 500, "username": "buyer", "first_name": "Никита"}
+
+    def _bot(self, directory, api=None, **overrides):
+        root = Path(directory)
+        catalog_path = root / "catalog.json"
+        shutil.copy(Path(__file__).with_name("catalog.json"), catalog_path)
+        settings = Settings(
+            token="fake",
+            admin_ids=frozenset({1}),
+            channel_url="https://t.me/channel",
+            webapp_url="https://shop.example/app",
+            manager_chat_id=900,
+            brand_name="ВОРОЖБИТОВ",
+            support_username="manager",
+            database_path=root / "bot.sqlite3",
+            catalog_path=catalog_path,
+            health_port=8080,
+            giveaway_min_invites=3,
+            privacy_url="",
+        )
+        settings = replace(settings, **overrides)
+        db = make_db(directory)
+        return BrandBot(settings, api or MenuAPI(), db, Catalog(catalog_path)), db
+
+    def _purchase(self, db, user_id=500, product_id="tee-sila-i-chest", size="L", quantity=1):
+        product = Catalog(Path(__file__).with_name("catalog.json")).get(product_id)
+        amount = parse_price_strict(product["price"]) * quantity
+        receipt, _ = db.create_checkout(
+            user_id, f"req-{user_id}-{product_id}-{size}", "fp",
+            [{"product_id": product["id"], "name": product["name"], "size": size,
+              "phone": "+79991234567", "quantity": quantity, "note": "",
+              "amount_rub": amount, "person": "", "person_label": ""}],
+            0,
+        )
+        return receipt
+
+    def test_main_menu_is_six_sections_in_two_columns(self):
+        """Шесть разделов по два в строке: не стена из двадцати кнопок."""
+        with tempfile.TemporaryDirectory() as directory:
+            bot, _ = self._bot(directory)
+            markup = bot.main_menu(500)
+            rows = button_rows(markup)
+            sections = rows[:3]
+            self.assertTrue(all(len(row) == 2 for row in sections), rows)
+            self.assertEqual(
+                [text for row in sections for text in row],
+                ["🛍 Каталог", "📦 Мои покупки", "📷 Образы", "🎬 Ролик", "👤 Кабинет", "💬 Поддержка"],
+            )
+            # Витрина остаётся входом, но не занимает системную кнопку «Меню».
+            self.assertEqual(rows[-1], ["Открыть витрину ↗"])
+            for label in flat_buttons(markup):
+                self.assertLessEqual(len(label), 26, f"длинная подпись кнопки: {label}")
+
+    def test_menu_button_shows_commands_not_the_miniapp(self):
+        """Системная кнопка «Меню» открывает команды, а не уводит из чата."""
+        self.assertEqual(CHAT_MENU_BUTTON, {"type": "commands"})
+        buyer = {item["command"] for item in buyer_commands()}
+        staff = {item["command"] for item in staff_commands()}
+        self.assertEqual(buyer, {"start", "catalog", "orders", "support", "help"})
+        # Служебные команды покупатель не видит: их вешаем отдельным scope.
+        self.assertFalse(buyer & {"admin", "stats", "add", "broadcast"})
+        self.assertTrue({"admin", "stats", "add", "broadcast"} <= staff)
+        for item in buyer_commands() + staff_commands():
+            self.assertTrue(item["description"], item)
+            self.assertLessEqual(len(item["description"]), 30, item)
+
+    def test_unpaid_purchase_lifts_continue_button_to_the_top(self):
+        """Незакрытая оплата — одна широкая кнопка сверху, и она исчезает после оплаты."""
+        with tempfile.TemporaryDirectory() as directory:
+            bot, db = self._bot(directory)
+            db.upsert_user(self.USER)
+            self.assertIsNone(db.pending_payment(500))
+            self.assertNotIn("Продолжить оплату", flat_buttons(bot.main_menu(500)))
+            receipt = self._purchase(db)
+            payment_id = receipt["payment_id"]
+            rows = button_rows(bot.main_menu(500))
+            self.assertEqual(len(rows[0]), 1, "главное действие обязано быть отдельной строкой")
+            self.assertIn("Продолжить оплату", rows[0][0])
+            self.assertEqual(button_targets(bot.main_menu(500))[0], f"draft:{payment_id}")
+            db.mark_payment_paid(payment_id, "stars", "charge")
+            self.assertNotIn("Продолжить оплату", flat_buttons(bot.main_menu(500)))
+
+    def test_continue_payment_reuses_the_same_invoice(self):
+        """Продолжение оплаты не создаёт новый счёт и проверяет актуальность."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            receipt = self._purchase(db)
+            payment_id = receipt["payment_id"]
+            before = db.connection().execute("SELECT COUNT(*) FROM payments").fetchone()[0]
+            bot.open_draft(500, 500, payment_id)
+            self.assertEqual(db.connection().execute("SELECT COUNT(*) FROM payments").fetchone()[0], before)
+            _chat, text, markup = api.last(500)
+            self.assertIn("ОПЛАТА", text)
+            self.assertIn("4 900 ₽", text)
+            self.assertTrue(any(target.startswith("pay:") for target in button_targets(markup)))
+            # Отменённая покупка не предлагает оплату, а объясняет состояние.
+            db.set_order_status(receipt["order_ids"][0], "cancelled", customer_id=500)
+            bot.open_draft(500, 500, payment_id)
+            _chat, text, _markup = api.last(500)
+            self.assertIn("НЕАКТУАЛЬНА", text)
+
+    def test_purchase_card_answers_three_questions(self):
+        """Карточка покупки: деньги, сборка, доставка и одно допустимое действие."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            receipt = self._purchase(db)
+            order_id = receipt["order_ids"][0]
+            bot.show_order(500, 500, order_id)
+            _chat, text, markup = api.last(500)
+            self.assertIn(f"ПОКУПКА №{order_id}", text)
+            for line in ("Оплата:", "Сборка:", "Доставка:"):
+                self.assertIn(line, text)
+            self.assertIn("ждёт оплаты", text)
+            targets = button_targets(markup)
+            self.assertEqual(targets[0], f"draft:{receipt['payment_id']}")
+            self.assertIn(f"ucancel:{order_id}", targets)
+            # Оплата доступна, только пока счёт действительно можно оплатить.
+            db.mark_payment_paid(receipt["payment_id"], "stars", "charge")
+            db.set_order_status(order_id, "confirmed")
+            bot.show_order(500, 500, order_id)
+            _chat, text, markup = api.last(500)
+            self.assertIn("оплачена", text)
+            self.assertIn("собираем к отправке", text)
+            self.assertNotIn(f"draft:{receipt['payment_id']}", button_targets(markup))
+            self.assertNotIn(f"ucancel:{order_id}", button_targets(markup))
+
+    def test_state_lines_follow_money_not_the_status_label(self):
+        """Статус «подтверждена» возможен до оплаты — строка денег это не врёт."""
+        # Счёта в боте нет — значит состояние денег уточняется, а не выдумывается.
+        lines = order_state_lines("confirmed", None, 0)
+        self.assertIn("уточняется", lines[0])
+        self.assertIn("собираем к отправке", lines[1])
+
+        paid = {"status": "paid", "method": "stars", "paid_at": "2026-09-12T10:00:00+00:00"}
+        self.assertIn("звёзды Telegram", order_state_lines("confirmed", paid, 4900)[0])
+        self.assertIn("отменена", order_state_lines("cancelled", {"status": "cancelled"}, 4900)[0])
+
+    def test_back_goes_to_the_previous_screen_and_home_is_stable(self):
+        """«Назад» ведёт назад, «Главная» всегда последняя кнопка."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            bot.show_product(500, 500, "tee-sila-i-chest")
+            _chat, _text, product_markup = api.last(500)
+            self.assertEqual(button_targets(product_markup)[-2:], ["cat:drop", "menu"])
+            self.assertIn("← Выпуск", flat_buttons(product_markup)[-2])
+            bot.show_category(500, 500, "drop")
+            self.assertEqual(button_targets(api.last(500)[2])[-2:], ["catalog", "menu"])
+            bot.show_catalog(500, 500)
+            self.assertEqual(button_targets(api.last(500)[2])[-1:], ["menu"])
+            bot.choose_size(500, 500, "tee-sila-i-chest")
+            self.assertEqual(button_targets(api.last(500)[2])[-2:], ["product:tee-sila-i-chest", "menu"])
+
+    def test_size_guide_back_depends_on_where_it_was_opened(self):
+        """Замеры открываются из разных мест — «Назад» ведёт обратно, а не домой."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            bot.route_callback("cb", 500, 500, "size_guide:product:tee-sila-i-chest")
+            self.assertEqual(button_targets(api.last(500)[2])[-2:], ["product:tee-sila-i-chest", "menu"])
+            bot.route_callback("cb", 500, 500, "size_guide:catalog")
+            self.assertEqual(button_targets(api.last(500)[2])[-2:], ["catalog", "menu"])
+            bot.route_callback("cb", 500, 500, "size_guide:account")
+            self.assertEqual(button_targets(api.last(500)[2])[-2:], ["account", "menu"])
+            # Без известного происхождения — честный выход в главное меню.
+            bot.route_callback("cb", 500, 500, "size_guide")
+            targets = button_targets(api.last(500)[2])
+            self.assertIn("catalog", targets)
+            self.assertEqual(targets[-1], "menu")
+
+    def test_every_screen_has_a_way_home(self):
+        """Ни один экран не оставляет покупателя без возврата."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            screens = [
+                ("catalog", lambda: bot.show_catalog(500, 500)),
+                ("category", lambda: bot.show_category(500, 500, "drop")),
+                ("product", lambda: bot.show_product(500, 500, "tee-sila-i-chest")),
+                ("size", lambda: bot.choose_size(500, 500, "tee-sila-i-chest")),
+                ("orders", lambda: bot.show_my_orders(500, 500)),
+                ("account", lambda: bot.route_callback("cb", 500, 500, "account")),
+                ("support", lambda: bot.show_support(500, 500)),
+            ]
+            for name, action in screens:
+                api.sent.clear()
+                action()
+                markup = api.last(500)[2]
+                self.assertIn("menu", button_targets(markup), f"нет возврата домой: {name}")
+
+    def test_support_request_carries_the_purchase_context(self):
+        """Вопрос по покупке уходит менеджеру с номером и статусом."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            receipt = self._purchase(db)
+            order_id = receipt["order_ids"][0]
+            bot.forward_support(500, 500, order_id)
+            manager_messages = [item for item in api.sent if item[0] == 900]
+            self.assertEqual(len(manager_messages), 1)
+            text = manager_messages[0][1]
+            self.assertIn(f"№{order_id}", text)
+            self.assertIn("СИЛА И ЧЕСТЬ", text)
+            self.assertIn("Оплата:", text)
+            _chat, answer, markup = api.last(500)
+            self.assertIn("ВОПРОС ПЕРЕДАН", answer)
+            self.assertIn(f"ord:{order_id}", button_targets(markup))
+
+    def test_support_without_a_manager_still_leads_somewhere(self):
+        """Без manager-чата поддержка не тупик: показываем состояние и контакт."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api, manager_chat_id=None)
+            db.upsert_user(self.USER)
+            order_id = self._purchase(db)["order_ids"][0]
+            bot.forward_support(500, 500, order_id)
+            _chat, text, markup = api.last(500)
+            self.assertIn(f"ПОКУПКА №{order_id}", text)
+            self.assertIn("@manager", text)
+            self.assertIn("menu", button_targets(markup))
+
+    def test_staff_panel_is_compact_and_returns_to_buyer_mode(self):
+        """Пульт владельца: сводка сверху, разделы по два, выход в режим покупателя."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+            bot.admin_panel(1)
+            _chat, text, markup = api.last(1)
+            self.assertIn("УПРАВЛЕНИЕ МАГАЗИНОМ", text)
+            rows = button_rows(markup)
+            self.assertLessEqual(len(rows), 5, rows)
+            self.assertEqual(len(rows[0]), 1, "сводка — отдельное главное действие")
+            self.assertEqual(button_targets(markup)[0], "adm:summary")
+            self.assertEqual(button_targets(markup)[-1], "menu")
+            bot.admin_summary(1)
+            summary = api.last(1)[1]
+            self.assertIn("СВОДКА МАГАЗИНА", summary)
+            self.assertNotIn("interest:", summary)
+
+    def test_unknown_and_stale_buttons_open_the_actual_screen(self):
+        """Старая кнопка не молчит и не пугает: объясняем и открываем актуальное."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            self.assertFalse(bot.route_callback("cb", 500, 500, "legacy:unknown"))
+            bot.handle_update({
+                "update_id": 1,
+                "callback_query": {
+                    "id": "cb1", "data": "legacy:unknown", "from": self.USER,
+                    "message": {"chat": {"id": 500, "type": "private"}},
+                },
+            })
+            _chat, text, markup = api.last(500)
+            self.assertIn("устарела", text)
+            # Актуальный экран — главное меню: разделы на месте, тупика нет.
+            self.assertIn("Выбери вещь", text)
+            self.assertIn("catalog", button_targets(markup))
+            bot.route_callback("cb", 500, 500, "product:honor-hoodie")
+            _chat, text, markup = api.last(500)
+            self.assertIn("ВЕЩЬ НЕ НАЙДЕНА", text)
+            self.assertIn("catalog", button_targets(markup))
+
+    def test_empty_states_lead_to_the_next_step(self):
+        """Пустая корзина покупок ведёт в каталог, пустой раздел — в канал."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            bot.show_my_orders(500, 500)
+            _chat, text, markup = api.last(500)
+            self.assertIn("Покупок пока нет", text)
+            self.assertIn("catalog", button_targets(markup))
+            bot.show_category(500, 500, "hoodie")
+            _chat, text, markup = api.last(500)
+            self.assertIn("пока пусто", text)
+            self.assertIn(bot.settings.channel_url, button_targets(markup))
+            self.assertIn("catalog", button_targets(markup))
+
+    def test_catalog_counts_only_live_products(self):
+        """Счётчики в разделах — по действующему каталогу, пустые разделы скрыты."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            bot.show_catalog(500, 500)
+            _chat, text, markup = api.last(500)
+            self.assertIn("ВИТРИНА</b> · 2 вещи", text)
+            labels = flat_buttons(markup)
+            self.assertIn("Выпуск · 1 вещь", labels)
+            self.assertIn("Аксессуары · 1 вещь", labels)
+            self.assertNotIn("Худи", " ".join(labels))
+            self.assertIn("size_guide:catalog", button_targets(markup))
+
+    def test_album_labels_come_from_the_catalog(self):
+        """Подписи кадров честные: берём их из каталога, а не придумываем."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            bot.show_product(500, 500, "tee-sila-i-chest")
+            self.assertEqual(len(api.albums), 1)
+            _chat, photos, _caption, labels = api.albums[0]
+            self.assertEqual(len(photos), len(labels))
+            self.assertEqual(labels[:3], ["Спереди", "Сзади", "Ткань и принт"])
+            card = api.last(500)[1]
+            self.assertIn("СИЛА И ЧЕСТЬ", card)
+            self.assertIn("4 900 ₽", card)
+            self.assertIn("Размеры:", card)
+
+    def test_long_card_is_not_cut_by_the_photo_caption(self):
+        """Подпись фото limitata 1024 знаками — длинную карточку режем по смыслу."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, _ = self._bot(directory, api)
+            long_text = "ЗАГОЛОВОК\n" + ("строка описания вещи\n" * 90)
+            bot.send_card_photo(500, "https://shop.example/app/assets/x.jpg", long_text, {"inline_keyboard": []})
+            self.assertEqual(len(api.photos), 1)
+            self.assertLessEqual(len(api.photos[0][2]), 1024)
+            self.assertEqual(len(api.sent), 1)
+            self.assertIn("строка описания вещи", api.sent[0][1])
+
+    def test_welcome_cover_is_uploaded_once(self):
+        """Обложка бренда тяжёлая: второй /start идёт кешированным file_id."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, _ = self._bot(directory, api)
+            bot.send_welcome(500, "первый", None)
+            bot.send_welcome(500, "второй", None)
+            self.assertIsInstance(api.photos[0][1], Path)
+            self.assertEqual(api.photos[1][1], "FILE-1")
+
+    def test_buyer_commands_open_the_same_screens_as_buttons(self):
+        """Команды из системной кнопки «Меню» ведут на те же экраны."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            for command, marker in (("/catalog", "ВИТРИНА"), ("/orders", "МОИ ПОКУПКИ"),
+                                    ("/support", "ПОДДЕРЖКА"), ("/help", "КАК ЭТО РАБОТАЕТ")):
+                api.sent.clear()
+                self.assertTrue(bot.user_command(500, 500, command))
+                self.assertIn(marker, api.last(500)[1])
+            api.sent.clear()
+            bot.user_command(500, 500, "/menu")
+            self.assertIn("Выбери вещь", api.last(500)[1])
+            self.assertFalse(bot.user_command(500, 500, "/broadcast текст"))
+
+    def test_account_screen_shows_real_contact_and_priority(self):
+        """Кабинет показывает то, что действительно хранится."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            bot.route_callback("cb", 500, 500, "account")
+            _chat, text, markup = api.last(500)
+            self.assertIn("не указан", text)
+            self.assertIn("Приглашено: 0", text)
+            self.assertIn("profile", button_targets(markup))
+            db.set_phone(500, "+79991234567")
+            bot.route_callback("cb", 500, 500, "account")
+            self.assertIn("+79991234567", api.last(500)[1])
+
+    def test_every_button_the_bot_shows_is_routable(self):
+        """Мёртвых кнопок нет: любой callback-data бот умеет разобрать."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user(self.USER)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+            receipt = self._purchase(db)
+            order_id = receipt["order_ids"][0]
+            bot.show_catalog(500, 500)
+            bot.show_category(500, 500, "drop")
+            bot.show_category(500, 500, "hoodie")
+            bot.show_product(500, 500, "tee-sila-i-chest")
+            bot.choose_size(500, 500, "tee-sila-i-chest")
+            bot.ask_waitlist_size(500, "tee-sila-i-chest")
+            bot.show_size_guide(500, 500, "size_guide:product:tee-sila-i-chest".split(":", 1)[1])
+            bot.show_my_orders(500, 500)
+            bot.show_order(500, 500, order_id)
+            bot.show_receipt(500, 500, receipt["payment_id"])
+            bot.open_draft(500, 500, receipt["payment_id"])
+            bot.show_referral(500, 500)
+            bot.show_lookbook(500, 500)
+            bot.route_callback("cb", 500, 500, "account")
+            bot.show_support(500, 500)
+            bot.support_orders(500, 500)
+            bot.admin_panel(1)
+            bot.admin_summary(1)
+            targets = {
+                target
+                for markup in api.markups()
+                for target in button_targets(markup)
+                if target and not target.startswith(("http://", "https://", "tg://"))
+            }
+            self.assertTrue(targets)
+            dead = []
+            for target in sorted(targets):
+                admin_only = target.split(":", 1)[0] in {"adm", "reload", "add", "broadcast", "export", "stats"}
+                user_id = 1 if admin_only else 500
+                if not bot.route_callback("cb", user_id, user_id, target):
+                    dead.append(target)
+            self.assertEqual(dead, [], "кнопки, которые бот не разбирает")
+
+    def test_navigation_rows_never_duplicate_home(self):
+        """Если назад — это и есть главное меню, второй такой кнопки не появляется."""
+        self.assertEqual(button_rows(inline_keyboard(nav_rows(("Главное меню", "menu")))),
+                         [["← Главное меню"]])
+        rows = button_rows(inline_keyboard(nav_rows(("Витрина", "catalog"))))
+        self.assertEqual(rows, [["← Витрина", "🏠 Главная"]])
+
+    def test_plural_and_segment_labels_are_readable(self):
+        self.assertEqual([things_word(count) for count in (1, 2, 5, 11, 21)],
+                         ["вещь", "вещи", "вещей", "вещей", "вещь"])
+        self.assertEqual(plural(1, "получатель", "получателя", "получателей"), "получатель")
+        categories = [{"id": "hoodie", "name": "Худи"}]
+        self.assertEqual(audience_label("interest:hoodie", categories), "Интерес: Худи")
+        self.assertEqual(audience_label("contacts", categories), "С номером")
+        self.assertNotIn("interest:", audience_label("interest:gone", categories))
+
 
 
 if __name__ == "__main__":

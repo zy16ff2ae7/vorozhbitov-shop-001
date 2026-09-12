@@ -125,9 +125,21 @@ def run_scenarios(workdir: Path) -> int:
         ("Реферальная механика", callback(500, "referral")),
         ("Лист ожидания", callback(500, "wsize:tee-sila-i-chest:XXL")),
         ("Lookbook", callback(500, "lookbook")),
+        # native-меню: главный экран, покупки, карточка покупки, кабинет и поддержка.
+        ("Главное меню покупателя", message(500, "/menu")),
+        ("Мои покупки", callback(500, "my_orders")),
+        ("Карточка покупки", callback(500, "ord:1")),
+        ("Продолжить оплату", lambda: callback(500, f"draft:{db.pending_payment(500)[0]}")),
+        ("Способ оплаты", lambda: callback(500, f"pay:{db.pending_payment(500)[0]}:stars")),
+        ("Мой кабинет", callback(500, "account")),
+        ("Поддержка", callback(500, "support")),
+        ("Вопрос по покупке", callback(500, "ask")),
+        ("Вопрос ушёл менеджеру", callback(500, "ask:1")),
+        ("Старая кнопка на снятую вещь", callback(500, "product:honor-hoodie")),
+        ("Неизвестная кнопка", callback(500, "legacy:unknown")),
         ("Панель администратора", message(1, "/admin")),
-        ("Статистика", message(1, "/stats")),
-        ("Заявки", message(1, "/orders")),
+        ("Сводка", message(1, "/stats")),
+        ("Покупки", message(1, "/orders")),
         ("Подтверждение заявки", callback(1, "order:1:confirmed")),
         ("Завершение заявки", callback(1, "order:1:completed")),
         ("Второй пользователь по реф-ссылке", message(600, "/start ref500")),
@@ -149,6 +161,7 @@ def run_scenarios(workdir: Path) -> int:
     for title, update in steps:
         print(f"\n=== {title} ===")
         SENT.clear()
+        update = update() if callable(update) else update
         if title == "Подтверждение заявки":
             order = db.get_order(1)
             assert order and order["status"] == "awaiting_payment", "checkout did not create an unpaid order"

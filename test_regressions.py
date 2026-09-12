@@ -213,7 +213,7 @@ class CheckoutRegressionTests(unittest.TestCase):
                              'M', '+79990000000', status='awaiting_payment', payment_id='legacy', amount_rub=4900)
         response = self.checkout()
         self.assertFalse(response['ok'])
-        self.assertIn('Мои заявки', response['error'])
+        self.assertIn('Мои покупки', response['error'])
         self.assertEqual(self.db.stats()['orders'], 1)
 
     def test_legacy_chat_callback_does_not_duplicate_order(self):

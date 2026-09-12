@@ -515,6 +515,7 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
             CREATE INDEX IF NOT EXISTS idx_events_event ON events(event);
             CREATE INDEX IF NOT EXISTS idx_users_interest ON users(interest);
+            CREATE INDEX IF NOT EXISTS idx_payments_user_status ON payments(user_id, status);
             """
         )
         order_columns = {row[1] for row in conn.execute("PRAGMA table_info(orders)")}
@@ -786,7 +787,7 @@ class Database:
         if not row:
             return None
         if row["fingerprint"] != fingerprint:
-            raise ValueError("Эта заявка уже принята с другим составом. Создай новую заявку.")
+            raise ValueError("Эта покупка уже принята с другим составом. Собери новую.")
         return json.loads(row["receipt"])
 
     def create_checkout(
@@ -847,6 +848,23 @@ class Database:
         ).fetchone()
         return bool(row and row["status"] == "pending" and row["items"]
                     and not row["invalid"] and row["amount_rub"] == row["total"])
+
+    def pending_payment(self, user_id: int, limit: int = 5) -> tuple[str, int] | None:
+        """Незакрытая оплата пользователя — для кнопки «Продолжить оплату».
+
+        Возвращает ``(payment_id, amount_rub)`` только если счёт ещё можно
+        оплатить: отменённые и уже оплаченные покупки в меню не поднимаются.
+        """
+        rows = self.connection().execute(
+            """SELECT payment_id, amount_rub FROM payments
+               WHERE user_id=? AND status='pending'
+               ORDER BY created_at DESC, payment_id DESC LIMIT ?""",
+            (user_id, max(1, int(limit))),
+        ).fetchall()
+        for row in rows:
+            if self.payment_is_payable(str(row["payment_id"])):
+                return str(row["payment_id"]), int(row["amount_rub"] or 0)
+        return None
 
     def enqueue_message(self, key: str, chat_id: int, text: str, markup: dict[str, Any] | None = None) -> None:
         self.connection().execute(
@@ -1002,6 +1020,17 @@ class Database:
             "referrals": conn.execute("SELECT COALESCE(SUM(invited_count), 0) FROM users").fetchone()[0],
             "waitlist": conn.execute("SELECT COUNT(*) FROM waitlist").fetchone()[0],
             "consents": conn.execute("SELECT COUNT(*) FROM users WHERE consent_at IS NOT NULL").fetchone()[0],
+            # Сводка владельца различает деньги и работу, поэтому считаем отдельно.
+            "awaiting_payment": conn.execute(
+                "SELECT COUNT(*) FROM payments WHERE status='pending'"
+            ).fetchone()[0],
+            "paid": conn.execute("SELECT COUNT(*) FROM payments WHERE status='paid'").fetchone()[0],
+            "paid_amount": conn.execute(
+                "SELECT COALESCE(SUM(amount_rub), 0) FROM payments WHERE status='paid'"
+            ).fetchone()[0],
+            "refunds": conn.execute(
+                "SELECT COUNT(*) FROM payments WHERE status='refund_required'"
+            ).fetchone()[0],
         }
 
     def recent_orders(self, limit: int = 10) -> list[sqlite3.Row]:
@@ -1056,7 +1085,7 @@ class Database:
             current = str(row["status"])
             if customer_id is not None:
                 if int(row["user_id"]) != customer_id or status != "cancelled":
-                    raise ValueError("Заявка не найдена.")
+                    raise ValueError("Покупка не найдена.")
                 if current not in {"new", "awaiting_payment", "cancelled"}:
                     raise ValueError("После оплаты отмена возможна только через менеджера.")
             if current == status:
@@ -1379,11 +1408,16 @@ class TelegramAPI:
             raise RuntimeError(f"Telegram API error: {result}")
         return result.get("result")
 
-    def send_media_group(self, chat_id: int, photos: list[str], caption: str = "") -> Any:
+    def send_media_group(self, chat_id: int, photos: list[str], caption: str = "", labels: list[str] | None = None) -> Any:
+        """Альбом. ``labels`` — честные подписи кадров, если они есть в каталоге."""
         media = []
         for index, photo in enumerate(photos[:10]):
             item: dict[str, Any] = {"type": "photo", "media": photo}
-            if index == 0 and caption:
+            label = str(labels[index]).strip() if labels and index < len(labels) else ""
+            if label:
+                item["caption"] = esc(label)
+                item["parse_mode"] = "HTML"
+            elif index == 0 and caption:
                 item["caption"] = caption
                 item["parse_mode"] = "HTML"
             media.append(item)
@@ -1467,13 +1501,104 @@ def remove_keyboard() -> dict[str, Any]:
     return {"remove_keyboard": True}
 
 
+# ---------------------------------------------------------------------------
+# Native-меню Telegram: словарь знаков, каркас экрана, карточка покупки.
+#
+# Правило простое: один смысл — один знак. «📦» всегда про покупки, «📐» —
+# про размер, «←» — назад, «↗» — уходим из чата. Цвет и форму кнопок рисует
+# сам Telegram, поэтому красота здесь — из структуры и коротких подписей,
+# а не из оформления.
+# ---------------------------------------------------------------------------
+
+ICON = {
+    "catalog": "🛍",
+    "looks": "📷",
+    "film": "🎬",
+    "orders": "📦",
+    "account": "👤",
+    "support": "💬",
+    "pay": "💳",
+    "size": "📐",
+    "wait": "⏳",
+    "channel": "📣",
+    "fabric": "🧵",
+    "cut": "✂️",
+    "ruler": "📏",
+    "stock": "🏷",
+    "delivery": "🚚",
+    "receipt": "🧾",
+    "question": "❓",
+    "notice": "🔔",
+    "link": "🔗",
+    "info": "ℹ️",
+    "stats": "📊",
+    "trophy": "🏆",
+    "export": "📤",
+    "reload": "🔄",
+    "tools": "🛠",
+    "home": "🏠",
+    "back": "←",
+    "outside": "↗",
+    "cancel": "✖",
+}
+
+
+def icon(kind: str, label: str) -> str:
+    """Подпись кнопки: знак из общего словаря + короткий текст."""
+    return f"{ICON[kind]} {label}"
+
+
+def nav_rows(back: tuple[str, str] | None = None) -> list[list[tuple[str, str]]]:
+    """Нижняя строка экрана: «Назад» и «Главная».
+
+    «Назад» ведёт туда, откуда человек действительно пришёл, а «Главная»
+    всегда последняя кнопка последней строки — её не приходится искать.
+    Если назад и есть главное меню, вторая кнопка не добавляется.
+    """
+    if not back:
+        return [[(icon("home", "Главное меню"), "menu")]]
+    label, target = back
+    if target == "menu":
+        return [[(f"{ICON['back']} {label}", target)]]
+    return [[(f"{ICON['back']} {label}", target), (icon("home", "Главная"), "menu")]]
+
+
+def plural(count: int, one: str, few: str, many: str) -> str:
+    """Русская считалка: 1 вещь, 2 вещи, 5 вещей."""
+    if 11 <= count % 100 <= 14:
+        return many
+    tail = count % 10
+    if tail == 1:
+        return one
+    if 2 <= tail <= 4:
+        return few
+    return many
+
+
+def things_word(count: int) -> str:
+    """«1 вещь · 2 вещи · 5 вещей» — для подписей разделов витрины."""
+    return plural(count, "вещь", "вещи", "вещей")
+
+
 SEGMENT_LABELS = {
     "consent": "Дали согласие",
     "contacts": "С номером",
-    "buyers": "Уже оставляли заявку",
+    "buyers": "Уже покупали",
     "fresh": "Новые без номера",
     "all": "Вся база",
 }
+
+
+def audience_label(segment: str, categories: Iterable[dict[str, str]]) -> str:
+    """Название сегмента для владельца: без служебных кодов вида interest:hoodie."""
+    if segment in SEGMENT_LABELS:
+        return SEGMENT_LABELS[segment]
+    if segment.startswith("interest:"):
+        wanted = segment.split(":", 1)[1]
+        name = next((str(item["name"]) for item in categories if item["id"] == wanted), "")
+        return f"Интерес: {name}" if name else "Интерес: раздел удалён"
+    return "Сегмент не распознан"
+
 
 ORDER_STATUS_LABELS = {
     "new": "новая",
@@ -1487,9 +1612,101 @@ ORDER_STATUS_LABELS = {
 ORDER_STATUS_MESSAGES = {
     "paid": "Оплата прошла. Менеджер подтвердит наличие и доставку.",
     "confirmed": "Наличие подтверждено. Собираем к отправке.",
-    "completed": "Заявка закрыта. Спасибо, что выбрал этот выпуск.",
-    "cancelled": "Заявка отменена. Если это ошибка — собери новую из карточки вещи.",
+    "completed": "Покупка закрыта. Спасибо, что выбрал этот выпуск.",
+    "cancelled": "Покупка отменена. Если это ошибка — собери новую из карточки вещи.",
 }
+
+PAYMENT_METHOD_LABELS = {
+    "lava": "карта / СБП",
+    "crypto": "крипта",
+    "stars": "звёзды Telegram",
+    "manual": "подтверждена менеджером",
+}
+
+# Карточка покупки отвечает на три вопроса отдельными строками: деньги,
+# работа, отправка. Сборка и доставка описывают реальный этап, а не
+# выдуманный номер накладной: источника трекинга у нас нет.
+ORDER_WORK_LINES = {
+    "new": "не начата",
+    "awaiting_payment": "не начата",
+    "paid": "проверяем наличие",
+    "confirmed": "собираем к отправке",
+    "completed": "собрана",
+    "cancelled": "не собираем",
+}
+
+ORDER_DELIVERY_LINES = {
+    "new": "согласуем после оплаты",
+    "awaiting_payment": "согласуем после оплаты",
+    "paid": "условия согласует менеджер",
+    "confirmed": "готовим к отправке",
+    "completed": "покупка закрыта",
+    "cancelled": "не отправляем",
+}
+
+
+def payment_state_line(status: str, payment: Any, amount_rub: int) -> str:
+    """Строка «Оплата» для карточки покупки — только по платёжной записи.
+
+    Статус покупки здесь не источник правды: «подтверждена» возможна и до
+    оплаты, поэтому деньги смотрим в payments.
+    """
+    amount = format_rub(amount_rub) if amount_rub > 0 else ""
+    if payment is None:
+        # Счёта в боте нет: состояние денег неизвестно, придумывать его нельзя.
+        return "отменена" if status == "cancelled" else "уточняется"
+    state = str(payment["status"])
+    if state == "paid":
+        method = PAYMENT_METHOD_LABELS.get(str(payment["method"] or ""), "")
+        paid = f", {method}" if method else ""
+        return f"оплачена · {amount}{paid}" if amount else f"оплачена{paid}"
+    if state == "refund_required":
+        return "требует возврата — менеджер свяжется"
+    if state == "cancelled":
+        return "отменена"
+    if status in {"new", "awaiting_payment"}:
+        return f"ждёт оплаты · {amount}" if amount else "ждёт оплаты"
+    if status in {"paid", "confirmed", "completed"}:
+        return f"оплачена · {amount}" if amount else "оплачена"
+    return "отменена"
+
+
+def order_state_lines(status: str, payment: Any, amount_rub: int) -> list[str]:
+    """Три строки состояния покупки: деньги, сборка, доставка."""
+    return [
+        f"{ICON['pay']} Оплата: {esc(payment_state_line(status, payment, amount_rub))}",
+        f"{ICON['fabric']} Сборка: {esc(ORDER_WORK_LINES.get(status, status))}",
+        f"{ICON['delivery']} Доставка: {esc(ORDER_DELIVERY_LINES.get(status, status))}",
+    ]
+
+
+def buyer_commands() -> list[dict[str, str]]:
+    """Команды покупателя — их открывает системная кнопка «Меню»."""
+    return [
+        {"command": "start", "description": "Главное меню"},
+        {"command": "catalog", "description": "Каталог вещей"},
+        {"command": "orders", "description": "Мои покупки"},
+        {"command": "support", "description": "Поддержка"},
+        {"command": "help", "description": "Как это работает"},
+    ]
+
+
+def staff_commands() -> list[dict[str, str]]:
+    """Команды команды. Вешаются отдельным scope — покупатель их не видит."""
+    return [
+        {"command": "start", "description": "Главное меню"},
+        {"command": "admin", "description": "Управление магазином"},
+        {"command": "stats", "description": "Сводка"},
+        {"command": "orders", "description": "Все покупки"},
+        {"command": "add", "description": "Добавить вещь"},
+        {"command": "broadcast", "description": "Рассылка: /broadcast текст"},
+        {"command": "help", "description": "Как это работает"},
+    ]
+
+
+# Кнопка «Меню» в шапке чата показывает команды бота. Витрина остаётся
+# отдельной кнопкой внутри чата — системная кнопка не обязана уводить из диалога.
+CHAT_MENU_BUTTON: dict[str, Any] = {"type": "commands"}
 
 # Витрину открывают и оформляют заказ за один заход. Сутки — запас на «свернул
 # и вернулся»; двое суток давали слишком длинное окно для перехваченного initData.
@@ -1662,13 +1879,18 @@ class BrandBot:
         return ""
 
     def send_welcome(self, chat_id: int, caption: str, keyboard: dict[str, Any] | None) -> None:
-        """Send the catalog's current greeting image, with a text fallback."""
+        """Send the catalog's current greeting image, with a text fallback.
+
+        Обложка уходит на каждый /start, поэтому после первой загрузки
+        переиспользуем file_id Telegram: повтор стоит один лёгкий запрос,
+        а не мегабайты аплоада.
+        """
         asset = self.catalog.data.get("brand", {}).get("welcome_image") or "assets/welcome.jpg"
         photo = self.local_asset_path(asset)
         photo_url = self.public_asset_url(asset) if photo or str(asset).startswith("https://") else ""
         try:
             if photo and photo.is_file():
-                self.api.send_photo_file(chat_id, photo, caption, keyboard)
+                self._send_welcome_file(chat_id, photo, caption, keyboard)
                 return
             if photo_url:
                 self.api.send_photo(chat_id, photo_url, caption, keyboard)
@@ -1682,6 +1904,27 @@ class BrandBot:
                 except Exception:
                     LOG.exception("Welcome photo URL fallback failed")
         self.api.send_message(chat_id, caption, keyboard)
+
+    def _send_welcome_file(self, chat_id: int, photo: Path, caption: str, keyboard: dict[str, Any] | None) -> None:
+        stat = photo.stat()
+        cache_key = "welcome_file_id:" + hashlib.sha256(
+            compact_json([str(photo), str(stat.st_mtime_ns), str(stat.st_size)]).encode()
+        ).hexdigest()
+        cached = self.db.kv_get(cache_key)
+        if cached:
+            try:
+                self.api.send_photo(chat_id, cached, caption, keyboard)
+                return
+            except Exception:
+                # Telegram забыл копию — убираем её и загружаем заново.
+                LOG.info("Cached welcome file_id rejected, re-uploading")
+                self.db.kv_delete(cache_key)
+        result = self.api.send_photo_file(chat_id, photo, caption, keyboard)
+        if isinstance(result, dict):
+            sizes = result.get("photo") or []
+            file_id = next((item.get("file_id") for item in reversed(sizes) if item.get("file_id")), "")
+            if file_id:
+                self.db.kv_set(cache_key, str(file_id))
 
     @staticmethod
     def local_asset_path(value: Any) -> Path | None:
@@ -1763,23 +2006,95 @@ class BrandBot:
 
     # ------------------------------------------------------------------ menus
 
-    def main_menu(self) -> dict[str, Any]:
-        rows: list[list[tuple[str, str]]] = [
-            [("Смотреть выпуск", "catalog"), ("Образы", "lookbook")],
-            [("Ролик выпуска", "teaser")],
-            [("Подобрать размер", "size_guide"), ("О бренде", "about")],
-            [("Канал", self.settings.channel_url)],
-            [("Узнать первым", "profile"), ("Привести друга", "referral")],
-            [("Мои заявки", "my_orders")],
-        ]
+    def main_menu(self, chat_id: int | None = None) -> dict[str, Any]:
+        """Главное меню покупателя: шесть разделов в две колонки.
+
+        ``chat_id`` в личке совпадает с ``user_id``, поэтому по нему же
+        поднимаем незавершённую оплату — отдельный параметр не нужен.
+        Незакрытый счёт — единственная причина показать кнопку вне сетки:
+        главное действие всегда широкое и всегда сверху.
+        """
+        rows: list[list[tuple[str, str]]] = []
+        draft = self.db.pending_payment(chat_id) if chat_id else None
+        if draft:
+            payment_id, amount = draft
+            label = f"Продолжить оплату · {format_rub(amount)}" if amount else "Продолжить оплату"
+            rows.append([(f"{ICON['pay']} {label} →", f"draft:{payment_id}")])
+        rows.extend(
+            [
+                [(icon("catalog", "Каталог"), "catalog"), (icon("orders", "Мои покупки"), "my_orders")],
+                [(icon("looks", "Образы"), "lookbook"), (icon("film", "Ролик"), "teaser")],
+                [(icon("account", "Кабинет"), "account"), (icon("support", "Поддержка"), "support")],
+            ]
+        )
         if self.settings.webapp_url.startswith("https://"):
-            rows.insert(0, [("Открыть витрину", f"webapp:{self.settings.webapp_url}")])
+            rows.append([(f"Открыть витрину {ICON['outside']}", f"webapp:{self.settings.webapp_url}")])
         return inline_keyboard(rows)
 
+    def menu_text(self, hint: str = "") -> str:
+        """Заголовок главного меню: один на весь экран, без повторов бренда."""
+        text = (
+            f"<b>{esc(self.settings.brand_name)}</b>\n"
+            "Выбери вещь или открой свою покупку."
+        )
+        return f"{text}\n\n{hint}" if hint else text
+
+    def send_menu(self, chat_id: int, hint: str = "") -> None:
+        """Главное меню отдельным сообщением — стабильная точка возврата."""
+        self.api.send_message(chat_id, self.menu_text(hint), self.main_menu(chat_id))
+
+    def stale(self, chat_id: int, reason: str) -> None:
+        """Старая или несуществующая кнопка: объясняем и открываем актуальное меню."""
+        self.send_menu(chat_id, f"{reason}\nОткрыл актуальное меню.")
+
     def interest_menu(self) -> dict[str, Any]:
-        rows = [[(category["name"], f"intr:{category['id']}")] for category in self.catalog.categories[:6]]
+        """Первый вопрос новому покупателю: те же две колонки, что и в главном меню."""
+        options = [(category["name"], f"intr:{category['id']}") for category in self.catalog.categories[:6]]
+        rows = [options[index:index + 2] for index in range(0, len(options), 2)]
         rows.append([("Пока не знаю", "intr:skip")])
         return inline_keyboard(rows)
+
+    def account_menu(self) -> dict[str, Any]:
+        """Кабинет покупателя: свои данные, приоритет, бренд и канал."""
+        rows = [
+            [(icon("notice", "Узнать первым"), "profile"), (icon("link", "Привести друга"), "referral")],
+            [(icon("size", "Подобрать размер"), "size_guide:account"), (icon("info", "О бренде"), "about")],
+            [(icon("channel", "Канал"), self.settings.channel_url)],
+        ]
+        rows.extend(nav_rows(("Главное меню", "menu")))
+        return inline_keyboard(rows)
+
+    def account_text(self, user_id: int) -> str:
+        user = self.db.get_user(user_id)
+        phone = str(user["phone"]) if user and user["phone"] else ""
+        invited = int(user["invited_count"]) if user else 0
+        threshold = max(1, self.settings.giveaway_min_invites)
+        lines = ["<b>МОЙ КАБИНЕТ</b>", ""]
+        lines.append(f"{ICON['notice']} Номер: {esc(phone) if phone else 'не указан'}")
+        lines.append(f"{ICON['link']} Приглашено: {invited} · до приоритета: {max(0, threshold - invited)}")
+        size = str(user["pref_size"]) if user and user["pref_size"] else ""
+        if size:
+            lines.append(f"{ICON['size']} Твой размер: {esc(size)}")
+        lines.append("")
+        lines.append("Данные нужны только для покупки и связи по ней.")
+        return "\n".join(lines)
+
+    def support_menu(self) -> dict[str, Any]:
+        rows: list[list[tuple[str, str]]] = [
+            [(icon("orders", "Вопрос по покупке"), "ask")],
+            [(icon("question", "Как это работает"), "help")],
+        ]
+        if self.settings.support_username:
+            rows.append([(f"Написать менеджеру {ICON['outside']}", f"https://t.me/{self.settings.support_username}")])
+        rows.extend(nav_rows(("Главное меню", "menu")))
+        return inline_keyboard(rows)
+
+    def support_text(self) -> str:
+        lines = ["<b>ПОДДЕРЖКА</b>", "", "Отвечаем в этом чате."]
+        lines.append("Номер покупки называть не нужно — выбери её кнопкой, контекст уйдёт вместе с вопросом.")
+        if self.settings.support_username:
+            lines.append(f"\nСрочное: @{esc(self.settings.support_username)}")
+        return "\n".join(lines)
 
     # ------------------------------------------------------------------ flows
 
@@ -1816,7 +2131,7 @@ class BrandBot:
                 f"{name}, ты уже в базе. Новые вещи видишь раньше остальных."
                 + self.cta("drop")
             )
-            self.send_welcome(chat_id, text, self.main_menu())
+            self.send_welcome(chat_id, text, self.main_menu(chat_id))
 
     def save_interest(self, chat_id: int, user_id: int, interest: str) -> None:
         if interest != "skip":
@@ -1827,87 +2142,210 @@ class BrandBot:
             "Вещи разбирают быстро — смотри, что осталось, и бери размер, пока он есть."
             + self.cta("drop")
         )
-        self.api.send_message(chat_id, text, self.main_menu())
+        self.api.send_message(chat_id, text, self.main_menu(chat_id))
 
     def show_catalog(self, chat_id: int, user_id: int) -> None:
         self.db.event(user_id, "catalog_open")
-        rows = [[(category["name"], f"cat:{category['id']}")] for category in self.catalog.categories]
-        rows.append([("Главное меню", "menu")])
+        sections = [
+            (category, len(self.catalog.products_for_category(category["id"])))
+            for category in self.catalog.categories
+        ]
+        sections = [item for item in sections if item[1]]
+        if not sections:
+            # Пустое состояние ведёт к следующему шагу, а не оставляет в тупике.
+            self.api.send_message(
+                chat_id,
+                "<b>ВИТРИНА</b>\n\n"
+                "Вещи готовятся — в каталоге пока пусто.\n"
+                "Канал пишет о выпуске первым, до открытия продаж." + self.cta("channel"),
+                inline_keyboard(
+                    [[(icon("channel", "Канал"), self.settings.channel_url)]]
+                    + nav_rows(("Главное меню", "menu"))
+                ),
+            )
+            return
+        total = sum(count for _, count in sections)
+        rows = [
+            [(f"{category['name']} · {count} {things_word(count)}", f"cat:{category['id']}")]
+            for category, count in sections
+        ]
+        # Замеры держим рядом с выбором вещи, а не в общей помощи.
+        rows.append([(icon("size", "Подобрать размер"), "size_guide:catalog")])
+        rows.extend(nav_rows(("Главное меню", "menu")))
         self.api.send_message(
-            chat_id, "<b>Витрина</b>\n\nВыбирай, что смотреть. Остатки честные.", inline_keyboard(rows)
+            chat_id,
+            f"<b>ВИТРИНА</b> · {total} {things_word(total)}\n\n"
+            "Разделы и остатки честные: что видно, то и есть.",
+            inline_keyboard(rows),
         )
 
     def show_category(self, chat_id: int, user_id: int, category_id: str) -> None:
         products = self.catalog.products_for_category(category_id)
         self.db.event(user_id, "category_open", {"category": category_id})
+        title = next(
+            (str(item["name"]) for item in self.catalog.categories if item["id"] == category_id),
+            "Раздел",
+        )
         if not products:
             self.api.send_message(
                 chat_id,
-                "Здесь пока пусто. Выпуск готовится.\n"
-                "Подпишись на канал — узнаешь первым, а не когда всё разберут."
-                + self.cta("channel"),
-                inline_keyboard([[("Канал", self.settings.channel_url)], [("Назад", "catalog")]]),
+                f"<b>{esc(title.upper())}</b>\n\n"
+                "Здесь пока пусто — выпуск готовится.\n"
+                "Канал пишет первым, а не когда всё разберут." + self.cta("channel"),
+                inline_keyboard(
+                    [[(icon("channel", "Канал"), self.settings.channel_url)]]
+                    + nav_rows(("Витрина", "catalog"))
+                ),
             )
             return
-        rows = [[(f"{p['name']} — {p['price']}", f"product:{p['id']}")] for p in products]
-        rows.append([("Назад к витрине", "catalog")])
-        self.api.send_message(chat_id, "<b>В наличии</b> — бери, пока есть:", inline_keyboard(rows))
+        rows = [[(f"{p['name']} · {p['price']}", f"product:{p['id']}")] for p in products]
+        rows.extend(nav_rows(("Витрина", "catalog")))
+        self.api.send_message(
+            chat_id,
+            f"<b>{esc(title.upper())}</b> · {len(products)} {things_word(len(products))}\n\n"
+            "Нажми на вещь — покажем цену, состав и размеры.",
+            inline_keyboard(rows),
+        )
+
+    def product_card_text(self, product: dict[str, Any]) -> str:
+        """Карточка вещи: название → цена → сведения → варианты.
+
+        Структура одинаковая у всех вещей, поэтому покупатель читает карточку,
+        а не разбирается в ней заново на каждом товаре.
+        """
+        lines = [f"<b>{esc(str(product['name']).upper())}</b>"]
+        price = f"<b>{esc(str(product['price']))}</b>"
+        badge = str(product.get("badge") or "").strip()
+        if badge:
+            price += f" · {esc(badge)}"
+        lines.append(price)
+        description = str(product.get("description") or "").strip()
+        if description:
+            lines.extend(["", esc(description)])
+        facts: list[str] = []
+        for key, kind in (("material", "fabric"), ("fit", "cut")):
+            value = str(product.get(key) or "").strip()
+            if value:
+                facts.append(f"{ICON[kind]} {esc(value)}")
+        sizes = " · ".join(str(size) for size in product.get("sizes") or [])
+        if sizes:
+            facts.append(f"{ICON['ruler']} Размеры: {esc(sizes)}")
+        stock = str(product.get("stock_label") or "").strip()
+        if stock:
+            facts.append(f"{ICON['stock']} {esc(stock)}")
+        if facts:
+            lines.extend([""] + facts)
+        details = [str(item).strip() for item in (product.get("details") or []) if str(item).strip()][:3]
+        if details:
+            lines.extend([""] + [f"• {esc(item)}" for item in details])
+        signature = str(product.get("signature") or "").strip()
+        if signature:
+            lines.extend(["", esc(signature)])
+        return "\n".join(lines)
+
+    def product_missing(self, chat_id: int, reason: str) -> None:
+        """Старая кнопка на снятую вещь: объясняем и ведём в живую витрину."""
+        self.api.send_message(
+            chat_id,
+            f"<b>ВЕЩЬ НЕ НАЙДЕНА</b>\n\n{reason}\nПоказал, что есть сейчас.",
+            inline_keyboard([[(icon("catalog", "Каталог"), "catalog")]] + nav_rows()),
+        )
+
+    def product_shots(self, product: dict[str, Any]) -> list[tuple[str, str]]:
+        """Кадры вещи с подписями из каталога — без выдуманных «вид сзади»."""
+        labels = [str(item or "").strip() for item in (product.get("image_labels") or [])]
+        shots: list[tuple[str, str]] = []
+        for index, shot in enumerate(list(product.get("images") or [])[:6]):
+            url = self.public_asset_url(shot)
+            if not url:
+                continue
+            shots.append((url, labels[index] if index < len(labels) else ""))
+        return shots
+
+    def send_card_photo(self, chat_id: int, photo: str, text: str, keyboard: dict[str, Any]) -> None:
+        """Карточка с фото. Подпись Telegram режет на 1024 знаках — не теряем текст."""
+        if len(text) <= 1000:
+            self.api.send_photo(chat_id, photo, text, keyboard)
+            return
+        self.api.send_photo(chat_id, photo, text[:1000].rsplit("\n", 1)[0])
+        self.api.send_message(chat_id, text, keyboard)
 
     def show_product(self, chat_id: int, user_id: int, product_id: str) -> None:
         product = self.catalog.get(product_id)
         if not product:
-            self.api.send_message(chat_id, "Вещь снята с продажи или уже разобрана.", self.main_menu())
+            self.product_missing(chat_id, "Её сняли с продажи или уже разобрали.")
             return
         self.db.event(user_id, "product_open", {"product_id": product_id})
-        sizes = " · ".join(esc(str(size)) for size in product["sizes"])
-        caption = (
-            f"<b>{esc(product['name'])}</b>\n"
-            f"<b>{esc(str(product['price']))}</b>\n\n"
-            f"{esc(product['description'])}\n\n"
-            f"Размеры: {sizes}"
-            + self.cta("size")
+        category_title = next(
+            (str(item["name"]) for item in self.catalog.categories if item["id"] == product["category"]),
+            "Каталог",
         )
+        text = self.product_card_text(product)
         keyboard = inline_keyboard(
             [
-                [("Выбрать размер", f"want:{product_id}")],
-                [("Ждать размер", f"wait:{product_id}")],
-                [("Назад", f"cat:{product['category']}")],
+                # Главное действие — отдельной широкой строкой, остальное ниже.
+                [("Выбрать размер →", f"want:{product_id}")],
+                [(icon("wait", "Ждать размер"), f"wait:{product_id}"),
+                 (icon("size", "Замеры"), f"size_guide:product:{product_id}")],
             ]
+            + nav_rows((category_title, f"cat:{product['category']}"))
         )
-        # Вещь показываем со всех сторон: в витрине для этого есть обзор,
-        # в чате ближайший аналог — альбом из тех же кадров.
-        gallery = [
-            url
-            for shot in list(product.get("images") or [])[:6]
-            if (url := self.public_asset_url(shot))
-        ]
-        if len(gallery) > 1:
+        # Вещь показываем со всех сторон: альбом с честными подписями кадров,
+        # затем карточка с кнопками — текст в альбоме читается хуже.
+        shots = self.product_shots(product)
+        if len(shots) > 1:
             try:
-                self.api.send_media_group(chat_id, gallery, caption)
-                self.api.send_message(chat_id, "Что делаем?", keyboard)
+                self.api.send_media_group(
+                    chat_id,
+                    [url for url, _ in shots],
+                    "",
+                    [label for _, label in shots],
+                )
+                self.api.send_message(chat_id, text, keyboard)
                 return
             except Exception:
                 LOG.exception("Failed to send product album, falling back to a single photo")
-        photo = self.public_asset_url(product.get("photo_url") or product.get("image"))
+        photo = shots[0][0] if shots else self.public_asset_url(product.get("photo_url") or product.get("image"))
         if photo:
-            self.api.send_photo(chat_id, photo, caption, keyboard)
+            self.send_card_photo(chat_id, photo, text, keyboard)
         else:
-            self.api.send_message(chat_id, caption, keyboard)
+            self.api.send_message(chat_id, text, keyboard)
 
     def choose_size(self, chat_id: int, user_id: int, product_id: str) -> None:
         product = self.catalog.get(product_id)
         if not product:
-            self.api.send_message(chat_id, "Вещь больше недоступна.", self.main_menu())
+            self.product_missing(chat_id, "Её сняли с продажи или уже разобрали.")
             return
         sizes = [str(size) for size in product["sizes"]]
         rows = [[(size, f"size:{product_id}:{size}") for size in sizes[index:index + 4]] for index in range(0, len(sizes), 4)]
-        rows.append([("Назад", f"product:{product_id}")])
-        self.api.send_message(chat_id, "Какой размер берёшь?", inline_keyboard(rows))
+        rows.append([(icon("size", "Подобрать размер"), f"size_guide:want:{product_id}")])
+        rows.extend(nav_rows((str(product["name"]), f"product:{product_id}")))
+        self.api.send_message(
+            chat_id,
+            f"<b>РАЗМЕР</b>\n\n{esc(str(product['name']))} · {esc(str(product['price']))}\n"
+            "Какой размер берёшь?",
+            inline_keyboard(rows),
+        )
+
+    def ask_waitlist_size(self, chat_id: int, product_id: str) -> None:
+        product = self.catalog.get(product_id)
+        if not product:
+            self.product_missing(chat_id, "Её сняли с продажи или уже разобрали.")
+            return
+        sizes = [str(size) for size in product["sizes"]]
+        rows = [[(size, f"wsize:{product_id}:{size}") for size in sizes[index:index + 4]] for index in range(0, len(sizes), 4)]
+        rows.extend(nav_rows((str(product["name"]), f"product:{product_id}")))
+        self.api.send_message(
+            chat_id,
+            f"<b>ЖДЁМ РАЗМЕР</b>\n\n{esc(str(product['name']))}\n"
+            "Какой размер ждёшь? Вернётся — напишем первыми, раньше канала.",
+            inline_keyboard(rows),
+        )
 
     def select_size(self, chat_id: int, user_id: int, product_id: str, size: str, request_id: str) -> None:
         product = self.catalog.get(product_id)
         if not product or size not in [str(item) for item in product["sizes"]]:
-            self.api.send_message(chat_id, "Этот вариант уже разобрали.", self.main_menu())
+            self.product_missing(chat_id, "Этот вариант уже разобрали.")
             return
         user = self.db.get_user(user_id)
         if user and user["phone"]:
@@ -1920,24 +2358,10 @@ class BrandBot:
             {"product_id": product_id, "size": size, "request_id": request_id},
         )
 
-    def ask_waitlist_size(self, chat_id: int, product_id: str) -> None:
-        product = self.catalog.get(product_id)
-        if not product:
-            self.api.send_message(chat_id, "Вещь больше недоступна.", self.main_menu())
-            return
-        sizes = [str(size) for size in product["sizes"]]
-        rows = [[(size, f"wsize:{product_id}:{size}") for size in sizes[index:index + 4]] for index in range(0, len(sizes), 4)]
-        rows.append([("Назад", f"product:{product_id}")])
-        self.api.send_message(
-            chat_id,
-            "Какой размер ждёшь?\nВернётся — напишем первыми, раньше канала.",
-            inline_keyboard(rows),
-        )
-
     def confirm_waitlist(self, chat_id: int, user_id: int, product_id: str, size: str) -> None:
         product = self.catalog.get(product_id)
         if not product:
-            self.api.send_message(chat_id, "Вещь больше недоступна.", self.main_menu())
+            self.product_missing(chat_id, "Вещь больше недоступна.")
             return
         added = self.db.add_to_waitlist(user_id, product, size)
         self.db.event(user_id, "waitlist_add", {"product_id": product_id, "size": size})
@@ -1948,7 +2372,7 @@ class BrandBot:
             )
         else:
             text = f"Этот размер уже в листе: <b>{esc(product['name'])}</b> · {esc(size)}."
-        self.api.send_message(chat_id, text + self.cta("channel"), self.main_menu())
+        self.api.send_message(chat_id, text + self.cta("channel"), self.main_menu(chat_id))
 
     def line_amount(self, product: dict[str, Any], quantity: int) -> int:
         amount = parse_price_strict(product.get("price"))
@@ -2066,17 +2490,19 @@ class BrandBot:
             )
         return methods
 
-    def pay_keyboard(self, payment_id: str) -> dict[str, Any] | None:
-        rows: list[list[tuple[str, str]]] = []
+    def pay_keyboard(self, payment_id: str, chat_id: int | None = None) -> dict[str, Any] | None:
+        """Способы оплаты в две колонки и возврат к покупке на стабильном месте."""
+        methods: list[tuple[str, str]] = []
         if self.settings.lava_ready():
-            rows.append([("Карта / СБП", f"pay:{payment_id}:lava")])
+            methods.append((icon("pay", "Карта / СБП"), f"pay:{payment_id}:lava"))
         if self.settings.crypto_ready():
-            rows.append([("Крипта", f"pay:{payment_id}:crypto")])
+            methods.append((icon("pay", "Крипта"), f"pay:{payment_id}:crypto"))
         if self.settings.stars_enabled:
-            rows.append([("Звёзды Telegram", f"pay:{payment_id}:stars")])
-        if not rows:
+            methods.append((icon("pay", "Звёзды"), f"pay:{payment_id}:stars"))
+        if not methods:
             return None
-        rows.append([("Мои заявки", "my_orders")])
+        rows = [methods[index:index + 2] for index in range(0, len(methods), 2)]
+        rows.extend(nav_rows(("Мои покупки", "my_orders")))
         return inline_keyboard(rows)
 
     def offer_payment(
@@ -2088,12 +2514,12 @@ class BrandBot:
         source: str = "витрины",
         *, queue_only: bool = False,
     ) -> None:
-        keyboard = self.pay_keyboard(payment_id) or self.main_menu()
+        keyboard = self.pay_keyboard(payment_id, chat_id) or self.main_menu(chat_id)
         text = (
-            f"<b>Заявка из {esc(source)} принята</b>\n\n"
+            f"<b>ПОКУПКА ПРИНЯТА · {esc(format_rub(amount_rub))}</b>\n\n"
+            "Собрано из " + esc(source) + ":\n"
             + "\n".join(order_lines)
-            + f"\n\nК оплате: <b>{esc(format_rub(amount_rub))}</b>\n"
-            "Оплати сейчас — карта, СБП, крипта или звёзды Telegram. "
+            + "\n\nОплати сейчас — карта, СБП, крипта или звёзды Telegram. "
             "Деньги списываются сразу. Если размера нет — возврат через менеджера."
         )
         self.deliver_message(f"offer:{payment_id}:{chat_id}", chat_id, text, keyboard, queue_only=queue_only)
@@ -2110,13 +2536,23 @@ class BrandBot:
             for row in orders
         ]
         text = (
-            "<b>Оплата прошла</b>\n\n"
-            + ("\n".join(lines) if lines else "Заявка оплачена.")
+            "<b>ОПЛАТА ПРОШЛА</b>\n\n"
+            + ("\n".join(lines) if lines else "Покупка оплачена.")
             + f"\n\n{esc(ORDER_STATUS_MESSAGES['paid'])}"
         )
         if payment["status"] == "refund_required":
-            text = "<b>Оплата требует возврата</b>\n\nЗаявка отменена или её состав изменился. Менеджер проверит поступление и свяжется по возврату."
-        self.deliver_message(f"paid:{payment_id}:{payment['status']}:{target}", target, text, self.main_menu(), queue_only=True)
+            text = ("<b>ОПЛАТА ТРЕБУЕТ ВОЗВРАТА</b>\n\n"
+                    "Покупка отменена или её состав изменился. Деньги не пропадают: "
+                    "менеджер проверит поступление и свяжется по поводу возврата.")
+        # После денег следующий шаг один — открыть карточку покупки.
+        if orders and payment["status"] == "paid":
+            keyboard = inline_keyboard(
+                [[(f"{ICON['orders']} Открыть покупку №{int(orders[0]['id'])} →", f"ord:{int(orders[0]['id'])}")]]
+                + nav_rows()
+            )
+        else:
+            keyboard = self.main_menu(target)
+        self.deliver_message(f"paid:{payment_id}:{payment['status']}:{target}", target, text, keyboard, queue_only=True)
         if self.settings.manager_chat_id:
             label = "ТРЕБУЕТСЯ ВОЗВРАТ" if payment["status"] == "refund_required" else "ПОЛУЧЕНА"
             self.deliver_message(
@@ -2164,7 +2600,7 @@ class BrandBot:
         payload = str(info.get("invoice_payload", ""))
         charge = str(info.get("telegram_payment_charge_id") or info.get("provider_payment_charge_id") or "")
         if not payload:
-            self.api.send_message(chat_id, "Оплата пришла, но заявка не найдена. Напиши менеджеру.", self.main_menu())
+            self.api.send_message(chat_id, "Оплата пришла, но покупка не найдена. Напиши менеджеру.", self.main_menu(chat_id))
             return
         if self.db.mark_payment_paid(payload, "stars", charge,
                                      queue_notifications=lambda payment_id: self.notify_paid(payment_id, queue_only=True)):
@@ -2174,10 +2610,10 @@ class BrandBot:
     def start_method_pay(self, chat_id: int, user_id: int, payment_id: str, method: str) -> None:
         payment = self.db.get_payment(payment_id)
         if not payment or int(payment["user_id"]) != user_id:
-            self.api.send_message(chat_id, "Оплата не найдена.", self.main_menu())
+            self.api.send_message(chat_id, "Оплата не найдена.", self.main_menu(chat_id))
             return
         if not self.db.payment_is_payable(payment_id):
-            self.api.send_message(chat_id, "Эта оплата уже неактуальна. Проверь мои заявки.", self.main_menu())
+            self.open_draft(chat_id, user_id, payment_id)
             return
         amount = int(payment["amount_rub"] or 0)
         description = f"{self.settings.brand_name}: оплата {payment_id}"
@@ -2187,7 +2623,7 @@ class BrandBot:
                 return
             stars = int(payment["amount_stars"] or 0)
             if stars <= 0:
-                self.api.send_message(chat_id, "Для этой заявки оплата звёздами недоступна.")
+                self.api.send_message(chat_id, "Для этой покупки оплата звёздами недоступна — выбери другой способ.")
                 return
             try:
                 self.api.send_invoice(
@@ -2211,8 +2647,12 @@ class BrandBot:
             return
         self.api.send_message(
             chat_id,
-            "Ссылка на оплату. После перевода статус в «Мои заявки» станет «оплачена».",
-            inline_keyboard([[("Оплатить", found["url"])]]),
+            f"<b>{esc(found['title'])}</b>\n\nСсылка на оплату ниже. "
+            "После перевода статус в «Мои покупки» станет «оплачена».",
+            inline_keyboard(
+                [[(f"Оплатить {ICON['outside']}", found["url"])]]
+                + nav_rows(("Мои покупки", "my_orders"))
+            ),
         )
 
     def finish_order(
@@ -2228,13 +2668,19 @@ class BrandBot:
             "SELECT id FROM orders WHERE user_id=? AND request_id=?", (user_id, request_id),
         ).fetchone()
         if legacy:
-            self.api.send_message(chat_id, f"Заявка №{legacy['id']} уже принята. Открой мои заявки для оплаты.", self.main_menu())
+            self.api.send_message(
+                chat_id,
+                f"Покупка №{legacy['id']} уже принята — новую не создаём.",
+                inline_keyboard([[(f"{ICON['orders']} Открыть покупку №{legacy['id']} →", f"ord:{legacy['id']}")]]
+                                + nav_rows(("Мои покупки", "my_orders"))),
+            )
             return
         try:
             amount = self.line_amount(product, 1)
         except PriceError:
-            self.api.send_message(chat_id, "Цена вещи недоступна. Напиши менеджеру.", self.main_menu())
+            self.api.send_message(chat_id, "Цена вещи недоступна. Напиши менеджеру.", self.main_menu(chat_id))
             return
+        self.api.send_message(chat_id, "Покупка собрана. Осталось оплатить.", remove_keyboard())
         fingerprint = hashlib.sha256(compact_json([product["id"], size, phone]).encode()).hexdigest()
         receipt, created = self.db.create_checkout(
             user_id, f"bot:{request_id}", fingerprint,
@@ -2248,10 +2694,15 @@ class BrandBot:
         payment_id = receipt["payment_id"]
         amount = receipt["amount_rub"]
         if not created:
-            self.api.send_message(chat_id, f"Заявка №{order_id} уже принята. Открой мои заявки для оплаты.", self.main_menu())
+            self.api.send_message(
+                chat_id,
+                f"Покупка №{order_id} уже принята — новую не создаём.",
+                inline_keyboard([[(f"{ICON['orders']} Открыть покупку №{order_id} →", f"ord:{order_id}")]]
+                                + nav_rows(("Мои покупки", "my_orders"))),
+            )
             return
+        self.db.event(user_id, "checkout_step", {"step": "payment", "payment_id": payment_id})
         line = f"• {esc(product['name'])} · {esc(size)} · 1 шт."
-        self.api.send_message(chat_id, "Заявка собрана.", remove_keyboard())
         self.offer_payment(chat_id, payment_id, amount, [line], source="бота")
 
     def request_profile(self, chat_id: int, user_id: int) -> None:
@@ -2259,10 +2710,10 @@ class BrandBot:
 
     def consent_text(self) -> str:
         text = (
-            "<b>Перед номером — одно согласие</b>\n\n"
-            "Чтобы принять заявку и писать про выпуск, нужен номер и согласие "
+            "<b>ШАГ 1 ИЗ 2 · СОГЛАСИЕ</b>\n\n"
+            "Чтобы принять покупку и писать про выпуск, нужен номер и согласие "
             "на обработку данных и сообщения от бренда.\n\n"
-            "Данные только для заявки и связи по ней. Отписаться можно в любой момент."
+            "Данные только для покупки и связи по ней. Отписаться можно в любой момент."
         )
         if self.settings.privacy_url:
             text += f"\n\nПолитика: {esc(self.settings.privacy_url)}"
@@ -2274,7 +2725,8 @@ class BrandBot:
             self.db.set_state(user_id, next_state, next_data)
             self.api.send_message(
                 chat_id,
-                "Оставь номер — подтвердим наличие и доставку. Оплата сразу после заявки.\n\n"
+                "<b>ШАГ 2 ИЗ 2 · НОМЕР</b>\n\n"
+                "Оставь номер — подтвердим наличие и доставку. Оплата сразу после оформления.\n\n"
                 "Можно кнопкой или цифрами, например +79991234567.",
                 contact_keyboard(),
             )
@@ -2293,7 +2745,7 @@ class BrandBot:
     def accept_consent(self, chat_id: int, user_id: int) -> None:
         state = self.db.get_state(user_id)
         if not state or state[0] != "awaiting_consent":
-            self.api.send_message(chat_id, "Не нашёл, к чему это относилось. Зайди заново.", self.main_menu())
+            self.stale(chat_id, "Не нашёл, к чему относилось это согласие.")
             return
         next_state = str(state[1].get("next_state", "awaiting_profile_phone"))
         next_data = dict(state[1].get("next_data") or {})
@@ -2306,9 +2758,9 @@ class BrandBot:
             return
         self.db.set_state(user_id, next_state, next_data)
         hint = (
-            "Принято. Теперь нужен номер."
+            "<b>ШАГ 2 ИЗ 2 · НОМЕР</b>\n\nПринято. Теперь нужен номер."
             if next_state == "awaiting_order_phone"
-            else "Принято. Напишем про выпуск и про твой размер."
+            else "<b>ШАГ 2 ИЗ 2 · НОМЕР</b>\n\nПринято. Напишем про выпуск и про твой размер."
         )
         self.api.send_message(chat_id, hint, contact_keyboard())
 
@@ -2320,16 +2772,16 @@ class BrandBot:
         if was_order:
             self.api.send_message(
                 chat_id,
-                "Без согласия заявку принять нельзя — номер хранить не имеем права.\n\n"
+                "Без согласия покупку принять нельзя — номер хранить не имеем права.\n\n"
                 "Витрина открыта. Если передумаешь — кнопка ниже." + self.cta("channel"),
-                self.main_menu(),
+                self.main_menu(chat_id),
             )
         else:
             self.api.send_message(
                 chat_id,
                 "Хорошо, номер не сохраняем. Новые вещи всё равно выходят в канале — там ничего не пропустишь."
                 + self.cta("channel"),
-                self.main_menu(),
+                self.main_menu(chat_id),
             )
 
     def save_phone_and_continue(self, chat_id: int, user_id: int, phone: str) -> None:
@@ -2367,7 +2819,7 @@ class BrandBot:
             "Номер в базе. Теперь ты в списке тех, кто узнаёт первым." + self.cta("channel"),
             remove_keyboard(),
         )
-        self.api.send_message(chat_id, "Главное меню:", self.main_menu())
+        self.send_menu(chat_id)
 
     def show_referral(self, chat_id: int, user_id: int) -> None:
         user = self.db.get_user(user_id)
@@ -2375,47 +2827,59 @@ class BrandBot:
         threshold = max(1, self.settings.giveaway_min_invites)
         link = self.ref_link(user_id)
         text = (
-            "<b>Приведи друга — забери выпуск первым</b>\n\n"
-            f"Приглашено: <b>{invited}</b>\n"
-            f"До приоритета: <b>{max(0, threshold - invited)}</b>\n\n"
+            "<b>ПРИВЕДИ ДРУГА</b>\n\n"
+            f"{ICON['link']} Приглашено: <b>{invited}</b>\n"
+            f"{ICON['notice']} До приоритета: <b>{max(0, threshold - invited)}</b>\n\n"
             "Кидаешь ссылку другу — он заходит в бота — ты поднимаешься в списке. "
             f"Набрал {threshold} — приоритет на следующий выпуск и участие в розыгрыше."
         )
         if link:
             text += f"\n\nТвоя ссылка:\n<code>{esc(link)}</code>"
-        self.api.send_message(
-            chat_id,
-            text,
-            inline_keyboard(
-                [
-                    [("Отправить другу", f"https://t.me/share/url?url={urllib.parse.quote(link or '', safe='')}")],
-                    [("Главное меню", "menu")],
-                ]
-            ),
-        )
+        rows: list[list[tuple[str, str]]] = []
+        if link:
+            rows.append([(f"Отправить другу {ICON['outside']}",
+                          f"https://t.me/share/url?url={urllib.parse.quote(link, safe='')}")])
+        rows.extend(nav_rows(("Кабинет", "account")))
+        self.api.send_message(chat_id, text, inline_keyboard(rows))
 
     def show_lookbook(self, chat_id: int, user_id: int) -> None:
         self.db.event(user_id, "lookbook_open")
-        photos = [
-            photo
-            for item in self.catalog.data.get("lookbook", [])
-            if (photo := self.public_asset_url(item.get("photo_url") or item.get("image")))
-        ]
-        if not photos:
+        shots: list[tuple[str, str]] = []
+        for item in self.catalog.data.get("lookbook", []):
+            photo = self.public_asset_url(item.get("photo_url") or item.get("image"))
+            if photo:
+                shots.append((photo, str(item.get("caption") or "").strip()))
+        if not shots:
             self.api.send_message(
                 chat_id,
-                "<b>Образы</b>\n\nПервые кадры снимаются. Они выйдут в канале раньше открытого выпуска."
+                "<b>ОБРАЗЫ</b>\n\nПервые кадры снимаются. Они выйдут в канале раньше открытого выпуска."
                 + self.cta("channel"),
-                inline_keyboard([[("Канал", self.settings.channel_url)], [("Главное меню", "menu")]]),
+                inline_keyboard(
+                    [[(icon("channel", "Канал"), self.settings.channel_url)]]
+                    + nav_rows(("Главное меню", "menu"))
+                ),
             )
             return
         try:
-            self.api.send_media_group(chat_id, photos, "<b>Образы</b>")
+            self.api.send_media_group(
+                chat_id,
+                [photo for photo, _ in shots[:10]],
+                "<b>ОБРАЗЫ</b>",
+                [label for _, label in shots[:10]],
+            )
         except Exception:
             LOG.exception("Failed to send lookbook album")
-            self.api.send_message(chat_id, "Не получилось отправить альбом. Загляни в канал — там всё выложим.", self.main_menu())
+            self.api.send_message(
+                chat_id,
+                "Не получилось отправить альбом. Загляни в канал — там всё выложим.",
+                inline_keyboard([[(icon("channel", "Канал"), self.settings.channel_url)]] + nav_rows()),
+            )
             return
-        self.api.send_message(chat_id, "Понравилось? Тогда не жди — размеры разбирают." + self.cta("drop"), self.main_menu())
+        self.api.send_message(
+            chat_id,
+            "Понравилось? Тогда не жди — размеры разбирают." + self.cta("drop"),
+            inline_keyboard([[(icon("catalog", "Каталог"), "catalog")]] + nav_rows()),
+        )
 
     def notify_waitlist(self, product_id: str, size: str) -> int:
         """Admin-triggered ping for a restocked size. Returns number of notified users."""
@@ -2427,9 +2891,9 @@ class BrandBot:
             try:
                 self.api.send_message(
                     recipient,
-                    f"<b>Размер вернулся</b>\n\n{esc(product['name'])} — размер {esc(size)} снова в наличии.\n"
+                    f"<b>РАЗМЕР ВЕРНУЛСЯ</b>\n\n{esc(product['name'])} — размер {esc(size)} снова в наличии.\n"
                     "Бери сейчас: размер могут разобрать быстро.",
-                    inline_keyboard([[("Забрать", f"want:{product_id}")]]),
+                    inline_keyboard([[("Забрать размер →", f"want:{product_id}")]]),
                 )
                 delivered += 1
                 time.sleep(0.04)
@@ -2437,61 +2901,221 @@ class BrandBot:
                 LOG.warning("Waitlist notify failed for %s: %s", recipient, exc)
         return delivered
 
+    # Группы списка покупок: один порядок и одни названия на всех экранах.
+    ORDER_GROUPS = (
+        ("Ждут оплаты", ("new", "awaiting_payment")),
+        ("В работе", ("paid", "confirmed")),
+        ("Завершены", ("completed",)),
+        ("Отменены", ("cancelled",)),
+    )
+
     def show_my_orders(self, chat_id: int, user_id: int) -> None:
-        rows = self.db.orders_for_user(user_id)
-        if not rows:
+        """Список покупок одним сообщением: чат не тонет в десятке карточек."""
+        orders = self.db.orders_for_user(user_id)
+        if not orders:
             self.api.send_message(
                 chat_id,
-                "Заявок пока нет. Выбери вещь в витрине — здесь появится статус.",
-                self.main_menu(),
+                "<b>МОИ ПОКУПКИ</b>\n\n"
+                "Покупок пока нет. Выбери вещь в каталоге — статус появится здесь.",
+                inline_keyboard([[(icon("catalog", "Каталог"), "catalog")]] + nav_rows()),
             )
             return
-        self.api.send_message(chat_id, "<b>Твои заявки</b>")
-        for row in rows:
-            status = str(row["status"])
-            label = ORDER_STATUS_LABELS.get(status, status)
-            body = (
-                f"<b>№{row['id']} · {esc(label)}</b>\n"
-                f"{esc(row['product_name'])} · размер {esc(row['size'])} · {int(row['quantity'] or 1)} шт."
+        lines = ["<b>МОИ ПОКУПКИ</b>"]
+        for title, statuses in self.ORDER_GROUPS:
+            group = [row for row in orders if str(row["status"]) in statuses]
+            if not group:
+                continue
+            lines.append("")
+            lines.append(f"<b>{title}</b>")
+            for row in group:
+                amount = int(row["amount_rub"] or 0)
+                tail = f" · {format_rub(amount)}" if amount else ""
+                lines.append(
+                    f"№{int(row['id'])} · {esc(row['product_name'])} · {esc(row['size'])}"
+                    f" · {int(row['quantity'] or 1)} шт.{tail}"
+                )
+        rows: list[list[tuple[str, str]]] = []
+        # Главное действие — самое срочное: сначала то, что ждёт денег.
+        urgent = next((row for row in orders if str(row["status"]) in {"new", "awaiting_payment"}), orders[0])
+        rows.append([(f"{ICON['orders']} Открыть покупку №{int(urgent['id'])} →", f"ord:{int(urgent['id'])}")])
+        # Одна покупка — одна кнопка: дублировать её номером не нужно.
+        if len(orders) > 1:
+            for index in range(0, len(orders), 3):
+                rows.append([(f"№{int(row['id'])}", f"ord:{int(row['id'])}") for row in orders[index:index + 3]])
+        rows.extend(nav_rows(("Главное меню", "menu")))
+        self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(rows))
+
+    def order_card_text(self, row: Any, payment: Any) -> str:
+        """Карточка покупки: номер → состав → три состояния → дата."""
+        amount = int(row["amount_rub"] or 0)
+        lines = [
+            f"<b>ПОКУПКА №{int(row['id'])}</b>",
+            f"{esc(row['product_name'])} · размер {esc(row['size'])} · {int(row['quantity'] or 1)} шт.",
+            "",
+        ]
+        lines.extend(order_state_lines(str(row["status"]), payment, amount))
+        note = str(row["note"] or "").strip()
+        if note:
+            lines.append("")
+            lines.append(f"{ICON['receipt']} {esc(note[:200])}")
+        lines.append("")
+        lines.append(f"Оформлена {esc(self.format_date(row['created_at']))}")
+        if payment is not None and payment["paid_at"]:
+            lines.append(f"Оплачена {esc(self.format_date(payment['paid_at']))}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_date(value: Any) -> str:
+        """Дата из базы (она в UTC) в коротком виде: 12.09.2026 14:05."""
+        raw = str(value or "")
+        try:
+            stamp = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return raw[:16] or "—"
+        return stamp.strftime("%d.%m.%Y %H:%M")
+
+    def order_keyboard(self, row: Any, *, payable: bool) -> dict[str, Any]:
+        """Кнопки покупки: одно главное действие и только допустимые остальные."""
+        status = str(row["status"])
+        order_id = int(row["id"])
+        payment_id = str(row["payment_id"] or "")
+        rows: list[list[tuple[str, str]]] = []
+        if payable and payment_id:
+            amount = int(row["amount_rub"] or 0)
+            label = f"Оплатить {format_rub(amount)}" if amount else "Оплатить"
+            rows.append([(f"{ICON['pay']} {label} →", f"draft:{payment_id}")])
+        secondary: list[tuple[str, str]] = []
+        if payment_id and len(self.db.orders_for_payment(payment_id)) > 1:
+            secondary.append((icon("receipt", "Состав покупки"), f"receipt:{payment_id}"))
+        secondary.append((icon("support", "Вопрос"), f"ask:{order_id}"))
+        rows.append(secondary)
+        if status in {"new", "awaiting_payment"}:
+            rows.append([(icon("cancel", "Отменить покупку"), f"ucancel:{order_id}")])
+        rows.extend(nav_rows(("Мои покупки", "my_orders")))
+        return inline_keyboard(rows)
+
+    def show_order(self, chat_id: int, user_id: int, order_id: int) -> None:
+        row = self.db.get_order(order_id)
+        if not row or int(row["user_id"]) != user_id:
+            self.api.send_message(
+                chat_id,
+                "<b>ПОКУПКА НЕ НАЙДЕНА</b>\n\nНомер неверный или это чужая покупка.\nПоказал твой список.",
+                inline_keyboard([[(icon("orders", "Мои покупки"), "my_orders")]] + nav_rows()),
             )
-            keyboard = None
-            if status in {"new", "awaiting_payment"}:
-                rows = []
-                if status == "awaiting_payment" and str(row["payment_id"] or ""):
-                    pay_id = str(row["payment_id"])
-                    if self.settings.lava_ready():
-                        rows.append([("Карта / СБП", f"pay:{pay_id}:lava")])
-                    if self.settings.crypto_ready():
-                        rows.append([("Крипта", f"pay:{pay_id}:crypto")])
-                    if self.settings.stars_enabled:
-                        rows.append([("Звёзды Telegram", f"pay:{pay_id}:stars")])
-                rows.append([("Отменить всю заявку", f"ucancel:{row['id']}")])
-                keyboard = inline_keyboard(rows)
-            self.api.send_message(chat_id, body, keyboard)
+            return
+        payment_id = str(row["payment_id"] or "")
+        payment = self.db.get_payment(payment_id) if payment_id else None
+        payable = bool(payment_id) and self.db.payment_is_payable(payment_id)
+        self.api.send_message(
+            chat_id,
+            self.order_card_text(row, payment),
+            self.order_keyboard(row, payable=payable),
+        )
+
+    def show_receipt(self, chat_id: int, user_id: int, payment_id: str) -> None:
+        """Состав общей оплаты: все позиции и одна сумма."""
+        payment = self.db.get_payment(payment_id)
+        if not payment or int(payment["user_id"]) != user_id:
+            self.api.send_message(
+                chat_id,
+                "<b>СОСТАВ НЕ НАЙДЕН</b>\n\nЭта оплата не твоя или уже не существует.",
+                inline_keyboard([[(icon("orders", "Мои покупки"), "my_orders")]] + nav_rows()),
+            )
+            return
+        orders = self.db.orders_for_payment(payment_id)
+        lines = ["<b>СОСТАВ ПОКУПКИ</b>", ""]
+        total = 0
+        for row in orders:
+            amount = int(row["amount_rub"] or 0)
+            total += amount
+            lines.append(
+                f"• {esc(row['product_name'])} · {esc(row['size'])} · {int(row['quantity'] or 1)} шт."
+                + (f" · {format_rub(amount)}" if amount else "")
+            )
+        lines.extend(["", f"Итого: <b>{esc(format_rub(total))}</b>"])
+        first = orders[0] if orders else None
+        keyboard = (
+            self.order_keyboard(first, payable=self.db.payment_is_payable(payment_id))
+            if first is not None
+            else inline_keyboard(nav_rows(("Мои покупки", "my_orders")))
+        )
+        self.api.send_message(chat_id, "\n".join(lines), keyboard)
+
+    def open_draft(self, chat_id: int, user_id: int, payment_id: str) -> None:
+        """Продолжить оплату: тот же счёт, без нового, и с проверкой актуальности."""
+        payment = self.db.get_payment(payment_id)
+        if not payment or int(payment["user_id"]) != user_id:
+            self.api.send_message(
+                chat_id,
+                "<b>ОПЛАТА НЕ НАЙДЕНА</b>\n\nСчёт не твой или уже удалён.\nПоказал актуальный список.",
+                inline_keyboard([[(icon("orders", "Мои покупки"), "my_orders")]] + nav_rows()),
+            )
+            return
+        if not self.db.payment_is_payable(payment_id):
+            state = str(payment["status"])
+            reason = {
+                "paid": "Эта покупка уже оплачена.",
+                "cancelled": "Эта покупка отменена — деньги не списываем.",
+                "refund_required": "По этой покупке нужен возврат: менеджер свяжется.",
+            }.get(state, "Данные изменились: состав или сумма больше не совпадают.")
+            self.api.send_message(
+                chat_id,
+                f"<b>ОПЛАТА НЕАКТУАЛЬНА</b>\n\n{reason}\nОткрыл актуальную карточку.",
+                self.order_keyboard(self.db.orders_for_payment(payment_id)[0], payable=False)
+                if self.db.orders_for_payment(payment_id)
+                else inline_keyboard([[(icon("orders", "Мои покупки"), "my_orders")]] + nav_rows()),
+            )
+            return
+        amount = int(payment["amount_rub"] or 0)
+        lines = [
+            f"• {esc(row['product_name'])} · {esc(row['size'])} · {int(row['quantity'] or 1)} шт."
+            for row in self.db.orders_for_payment(payment_id)
+        ]
+        text = (
+            f"<b>ОПЛАТА · {esc(format_rub(amount))}</b>\n\n"
+            + ("\n".join(lines) if lines else "")
+            + "\n\nВыбери способ. Ссылка откроется отдельным сообщением, "
+            "статус покупки обновится сам."
+        )
+        self.api.send_message(chat_id, text, self.pay_keyboard(payment_id, chat_id))
 
     def cancel_own_order(self, chat_id: int, user_id: int, order_id: int) -> None:
         order = self.db.get_order(order_id)
         if not order or int(order["user_id"]) != user_id:
-            self.api.send_message(chat_id, "Заявка не найдена.", self.main_menu())
+            self.api.send_message(
+                chat_id,
+                "<b>ПОКУПКА НЕ НАЙДЕНА</b>\n\nНомер неверный или это чужая покупка.",
+                inline_keyboard([[(icon("orders", "Мои покупки"), "my_orders")]] + nav_rows()),
+            )
             return
         try:
             updated, changed = self.db.set_order_status(order_id, "cancelled", customer_id=user_id)
         except ValueError:
-            self.api.send_message(chat_id, "Эту заявку уже нельзя отменить — напиши менеджеру.", self.main_menu())
+            self.api.send_message(
+                chat_id,
+                "Эту покупку уже нельзя отменить здесь — напиши менеджеру, решим вручную.",
+                self.order_keyboard(order, payable=False)
+                if order["payment_id"] else inline_keyboard(nav_rows(("Мои покупки", "my_orders"))),
+            )
             return
         if not changed:
-            self.api.send_message(chat_id, "Заявка уже отменена.", self.main_menu())
+            self.api.send_message(chat_id, "Покупка уже отменена.", inline_keyboard(nav_rows(("Мои покупки", "my_orders"))))
             return
         self.api.send_message(
             chat_id,
-            f"Заявка №{order_id} и все позиции общей оплаты отменены. Новую можно собрать из витрины.",
-            self.main_menu(),
+            f"<b>ПОКУПКА №{order_id} ОТМЕНЕНА</b>\n\n"
+            "Все позиции общей оплаты отменены, деньги не списываем.\n"
+            "Новую можно собрать из каталога.",
+            inline_keyboard(
+                [[(icon("catalog", "Каталог"), "catalog"), (icon("orders", "Мои покупки"), "my_orders")]]
+                + nav_rows()
+            ),
         )
         if self.settings.manager_chat_id:
             try:
                 self.api.send_message(
                     self.settings.manager_chat_id,
-                    f"Клиент отменил заявку №{order_id}: {esc(updated['product_name'] if updated else '')}.",
+                    f"Клиент отменил покупку №{order_id}: {esc(updated['product_name'] if updated else '')}.",
                 )
             except Exception as exc:
                 LOG.warning("Could not notify manager about cancel %s: %s", order_id, exc)
@@ -2500,31 +3124,156 @@ class BrandBot:
         brand = esc(self.settings.brand_name)
         extra = ""
         if self.settings.support_username:
-            extra = f"\nВопросы: @{esc(self.settings.support_username)}"
+            extra = f"\n\nВопросы: @{esc(self.settings.support_username)}"
         return (
-            f"<b>{brand}</b>\n\n"
-            "Как это работает:\n"
-            "1. Смотри витрину или выпуск в боте.\n"
-            "2. Выбери размер и оплати заявку.\n"
-            "3. Карта / СБП, крипта или звёзды Telegram.\n\n"
-            "Нет размера — «Ждать размер»: напишем, когда вернётся.\n"
-            "Деньги списываются сразу. Если размера нет — возврат через менеджера."
+            f"<b>КАК ЭТО РАБОТАЕТ</b>\n\n"
+            f"{brand}\n"
+            "1. Выбираешь вещь в каталоге.\n"
+            "2. Берёшь размер и оставляешь номер.\n"
+            "3. Оплачиваешь: карта / СБП, крипта или звёзды Telegram.\n\n"
+            f"{ICON['wait']} Нет размера — «Ждать размер»: напишем, когда вернётся.\n"
+            f"{ICON['orders']} Статус покупки — в «Мои покупки»: оплата, сборка, доставка.\n"
+            f"{ICON['pay']} Деньги списываются сразу. Если размера нет — возврат через менеджера."
             f"{extra}"
+        )
+
+    def show_size_guide(self, chat_id: int, user_id: int, origin: str = "") -> None:
+        """Сетка размеров. «Назад» ведёт туда, откуда экран открыли."""
+        self.db.event(user_id, "size_guide_open", {"origin": origin[:40]})
+        text = (
+            "<b>КАК ВЗЯТЬ СВОЙ РАЗМЕР</b>\n\n"
+            f"{ICON['ruler']} S — рост 164–172, грудь 112\n"
+            f"{ICON['ruler']} M — рост 172–178, грудь 118\n"
+            f"{ICON['ruler']} L — рост 178–186, грудь 124\n"
+            f"{ICON['ruler']} XL — рост 186–194, грудь 130\n\n"
+            "Посадка свободная. Между двумя — бери больший, если хочешь объём.\n"
+            "Не уверен — выбери «Вопрос по покупке» в поддержке, подскажем."
+            + self.cta("size")
+        )
+        back: tuple[str, str] | None = None
+        if origin.startswith("product:"):
+            product = self.catalog.get_any(origin.split(":", 1)[1])
+            if product:
+                back = (str(product["name"]), origin)
+        elif origin == "catalog":
+            back = ("Витрина", "catalog")
+        elif origin == "account":
+            back = ("Кабинет", "account")
+        elif origin.startswith("want:"):
+            product = self.catalog.get_any(origin.split(":", 1)[1])
+            if product:
+                back = ("Размер", f"want:{product['id']}")
+        elif origin.startswith("size:"):
+            product = self.catalog.get_any(origin.split(":", 1)[1])
+            if product:
+                back = ("Размер", f"want:{product['id']}")
+        rows: list[list[tuple[str, str]]] = []
+        if back is None:
+            rows.append([(icon("catalog", "Каталог"), "catalog"), (icon("support", "Поддержка"), "support")])
+        self.api.send_message(chat_id, text, inline_keyboard(rows + nav_rows(back)))
+
+    def show_support(self, chat_id: int, user_id: int) -> None:
+        self.db.event(user_id, "support_open")
+        self.api.send_message(chat_id, self.support_text(), self.support_menu())
+
+    def support_orders(self, chat_id: int, user_id: int) -> None:
+        """Вопрос по конкретной покупке: номер и состав не спрашиваем заново."""
+        orders = self.db.orders_for_user(user_id)
+        if not orders:
+            self.api.send_message(
+                chat_id,
+                "<b>ВОПРОС ПО ПОКУПКЕ</b>\n\n"
+                "Покупок пока нет, поэтому передавать нечего.\n"
+                "Общий вопрос можно задать прямо здесь — ответим в этом чате.",
+                inline_keyboard(
+                    [[(icon("catalog", "Каталог"), "catalog"), (icon("question", "Как это работает"), "help")]]
+                    + nav_rows(("Поддержка", "support"))
+                ),
+            )
+            return
+        rows = [
+            [(f"№{int(row['id'])} · {esc(row['product_name'])}", f"ask:{int(row['id'])}")]
+            for row in orders[:8]
+        ]
+        rows.extend(nav_rows(("Поддержка", "support")))
+        self.api.send_message(
+            chat_id,
+            "<b>ПО КАКОЙ ПОКУПКЕ ВОПРОС?</b>\n\n"
+            "Выбери покупку — менеджер увидит номер, состав и статус, переспрашивать не придётся.",
+            inline_keyboard(rows),
+        )
+
+    def forward_support(self, chat_id: int, user_id: int, order_id: int) -> None:
+        order = self.db.get_order(order_id)
+        if not order or int(order["user_id"]) != user_id:
+            self.api.send_message(
+                chat_id,
+                "Покупку не нашёл. Открой «Мои покупки» и выбери её из списка.",
+                inline_keyboard([[(icon("orders", "Мои покупки"), "my_orders")]] + nav_rows(("Поддержка", "support"))),
+            )
+            return
+        self.db.event(user_id, "support_request", {"order_id": order_id})
+        payment = self.db.get_payment(str(order["payment_id"] or "")) if order["payment_id"] else None
+        if not self.settings.manager_chat_id:
+            contact = f"@{self.settings.support_username}" if self.settings.support_username else "менеджеру"
+            self.api.send_message(
+                chat_id,
+                f"<b>ПОКУПКА №{order_id}</b>\n\n"
+                + "\n".join(order_state_lines(str(order["status"]), payment, int(order["amount_rub"] or 0)))
+                + f"\n\nОтдельного канала поддержки сейчас нет — напиши {esc(contact)}, "
+                "номер покупки уже перед тобой.",
+                inline_keyboard(nav_rows(("Поддержка", "support"))),
+            )
+            return
+        try:
+            self.api.send_message(
+                self.settings.manager_chat_id,
+                f"<b>ВОПРОС ПО ПОКУПКЕ №{order_id}</b>\n"
+                f"Клиент: {user_id}\n"
+                f"{esc(order['product_name'])} · размер {esc(order['size'])} · {int(order['quantity'] or 1)} шт.\n"
+                + "\n".join(order_state_lines(str(order["status"]), payment, int(order["amount_rub"] or 0)))
+                + "\n\nОтветь клиенту в его чат — контекст он уже выбрал.",
+            )
+        except Exception as exc:
+            LOG.warning("Could not forward support request for %s: %s", order_id, exc)
+            self.api.send_message(
+                chat_id,
+                "Не получилось передать вопрос менеджеру. Попробуй ещё раз чуть позже.",
+                inline_keyboard([[(icon("support", "Повторить"), f"ask:{order_id}")]]
+                                + nav_rows(("Поддержка", "support"))),
+            )
+            return
+        self.api.send_message(
+            chat_id,
+            f"<b>ВОПРОС ПЕРЕДАН</b>\n\n"
+            f"Покупка №{order_id} у менеджера вместе с составом и статусом.\n"
+            "Ответ придёт в этот чат.",
+            inline_keyboard(
+                [[(f"{ICON['orders']} Открыть покупку №{order_id}", f"ord:{order_id}")]]
+                + nav_rows(("Поддержка", "support"))
+            ),
         )
 
     # ------------------------------------------------------------------ admin
 
     def order_status_keyboard(self, order_id: int, status: str) -> dict[str, Any] | None:
+        """Карточка покупки у команды: одно главное действие и отмена рядом.
+
+        Главное действие — следующий реальный этап, поэтому кнопки меняются
+        вместе со статусом, а не висят все сразу.
+        """
         rows: list[list[tuple[str, str]]] = []
-        if status in {"new", "paid"}:
-            rows.append([("Подтвердить", f"order:{order_id}:confirmed")])
-            rows.append([("Отменить", f"order:{order_id}:cancelled")])
-        elif status == "awaiting_payment":
-            rows.append([("Отметить оплату", f"order:{order_id}:paid")])
-            rows.append([("Отменить", f"order:{order_id}:cancelled")])
-        elif status == "confirmed":
-            rows.append([("Завершить", f"order:{order_id}:completed")])
-            rows.append([("Отменить", f"order:{order_id}:cancelled")])
+        primary = {
+            "new": ("Подтвердить наличие", "confirmed"),
+            "awaiting_payment": ("Отметить оплату", "paid"),
+            "paid": ("Подтвердить наличие", "confirmed"),
+            "confirmed": ("Собрана, завершить", "completed"),
+        }.get(status)
+        if primary:
+            rows.append([(f"{primary[0]} →", f"order:{order_id}:{primary[1]}")])
+        if status in {"new", "awaiting_payment", "paid", "confirmed"}:
+            rows.append([(icon("cancel", "Отменить покупку"), f"order:{order_id}:cancelled")])
+        rows.append([(icon("tools", "Управление"), "adm:panel")])
         return inline_keyboard(rows) if rows else None
 
     def update_order_status(self, chat_id: int, order_id: int, status: str) -> None:
@@ -2534,38 +3283,83 @@ class BrandBot:
             )
             self.flush_notifications()
         except ValueError as exc:
-            self.api.send_message(chat_id, f"Не могу изменить заявку: {esc(exc)}")
+            self.api.send_message(chat_id, f"Не могу изменить покупку: {esc(exc)}")
             return
         if not order:
-            self.api.send_message(chat_id, "Заявка не найдена.")
+            self.api.send_message(chat_id, "Покупка не найдена.")
             return
         label = ORDER_STATUS_LABELS.get(status, status)
         if not changed:
-            self.api.send_message(chat_id, f"Заявка #{order_id} уже имеет статус «{esc(label)}».")
+            self.api.send_message(chat_id, f"Покупка №{order_id} уже имеет статус «{esc(label)}».")
             return
         try:
             self.api.send_message(
                 int(order["user_id"]),
-                f"<b>Заявка №{order_id}: {esc(label)}</b>\n\n"
+                f"<b>ПОКУПКА №{order_id} · {esc(label).upper()}</b>\n\n"
                 f"{esc(order['product_name'])} · размер {esc(order['size'])} · {int(order['quantity'] or 1)} шт.\n"
-                f"{esc(ORDER_STATUS_MESSAGES.get(status, 'Статус заявки обновлён.'))}",
-                self.main_menu(),
+                f"{esc(ORDER_STATUS_MESSAGES.get(status, 'Статус покупки обновлён.'))}",
+                inline_keyboard(
+                    [[(f"{ICON['orders']} Открыть покупку №{order_id} →", f"ord:{order_id}")]] + nav_rows()
+                ),
             )
         except Exception as exc:
             LOG.warning("Could not notify user %s about order %s: %s", order["user_id"], order_id, exc)
-        self.api.send_message(chat_id, f"Заявка №{order_id}: статус «{esc(label)}» сохранён.")
-
-    def admin_panel(self, chat_id: int) -> None:
         self.api.send_message(
             chat_id,
-            "<b>Управление</b>\n\nЧто делаем?",
+            f"Покупка №{order_id}: статус «{esc(label)}» сохранён.",
+            self.order_status_keyboard(order_id, status),
+        )
+
+    def admin_panel(self, chat_id: int) -> None:
+        """Пульт владельца: сводка сверху, разделы в две колонки, выход в режим покупателя.
+
+        Список команд шире кнопок: /broadcast, /restock, /giveaway, /hide и /show
+        остаются командами, чтобы не раздувать панель.
+        """
+        stats = self.db.stats()
+        text = (
+            "<b>УПРАВЛЕНИЕ МАГАЗИНОМ</b>\n\n"
+            f"{ICON['orders']} Покупок: {stats['orders']} · сегодня: {stats['orders_today']}\n"
+            f"{ICON['pay']} Ждут оплаты: {stats['awaiting_payment']} · оплачено: {stats['paid']}\n"
+            f"{ICON['wait']} Ждут размер: {stats['waitlist']}\n\n"
+            "Рассылка: <code>/broadcast текст</code> · вернуть размер: <code>/restock id размер</code>"
+        )
+        self.api.send_message(
+            chat_id,
+            text,
             inline_keyboard(
                 [
-                    [("Статистика", "adm:stats"), ("Заявки", "adm:orders")],
-                    [("Добавить вещь", "adm:add"), ("Лист ожидания", "adm:waitlist")],
-                    [("Топ рефералов", "adm:top"), ("Экспорт базы", "adm:export")],
-                    [("Перечитать каталог", "adm:reload")],
+                    [(f"{ICON['stats']} Сводка →", "adm:summary")],
+                    [(icon("orders", "Покупки"), "adm:orders"), (icon("wait", "Лист ожидания"), "adm:waitlist")],
+                    [(icon("catalog", "Добавить вещь"), "adm:add"), (icon("trophy", "Топ рефералов"), "adm:top")],
+                    [(icon("export", "Экспорт базы"), "adm:export"), (icon("reload", "Перечитать каталог"), "adm:reload")],
+                    [(icon("account", "Режим покупателя"), "menu")],
                 ]
+            ),
+        )
+
+    def admin_summary(self, chat_id: int) -> None:
+        """Сводка без смешения показателей: деньги, работа и база отдельно."""
+        stats = self.db.stats()
+        paid_amount = int(stats.get("paid_amount") or 0)
+        text = (
+            "<b>СВОДКА МАГАЗИНА</b>\n\n"
+            f"{ICON['pay']} Оплачено покупок: {stats['paid']}\n"
+            f"{ICON['pay']} Получено: {esc(format_rub(paid_amount))}\n"
+            f"{ICON['pay']} Ждут оплаты: {stats['awaiting_payment']}\n"
+            f"{ICON['cancel']} Требуют возврата: {stats['refunds']}\n\n"
+            f"{ICON['orders']} Покупок всего: {stats['orders']} · сегодня: {stats['orders_today']}\n"
+            f"{ICON['wait']} В листе ожидания: {stats['waitlist']}\n"
+            f"{ICON['trophy']} Приведено друзей: {stats['referrals']}\n\n"
+            f"{ICON['account']} В базе: {stats['users']} · с номером: {stats['contacts']} · "
+            f"с согласием: {stats['consents']}"
+        )
+        self.api.send_message(
+            chat_id,
+            text,
+            inline_keyboard(
+                [[(icon("orders", "Покупки"), "adm:orders")]]
+                + [[(icon("tools", "Управление"), "adm:panel"), (icon("account", "Режим покупателя"), "menu")]]
             ),
         )
 
@@ -2574,35 +3368,33 @@ class BrandBot:
             return False
         command, _, argument = text.partition(" ")
         argument = argument.strip()
-        if command == "/stats":
-            stats = self.db.stats()
-            self.api.send_message(
-                chat_id,
-                "<b>Статистика</b>\n\n"
-                f"В базе: {stats['users']}\n"
-                f"С контактом: {stats['contacts']}\n"
-                f"Заявок всего: {stats['orders']}\n"
-                f"Заявок сегодня: {stats['orders_today']}\n"
-                f"Приведено друзей: {stats['referrals']}\n"
-                f"В листе ожидания: {stats['waitlist']}\n"
-                f"Дали согласие: {stats['consents']}",
-            )
+        if command in {"/stats", "/summary"}:
+            self.admin_summary(chat_id)
         elif command == "/orders":
             orders = self.db.recent_orders()
             if not orders:
-                self.api.send_message(chat_id, "Заявок пока нет.")
+                self.api.send_message(
+                    chat_id,
+                    "<b>ПОКУПОК ПОКА НЕТ</b>\n\nКак только оформят первую — она появится здесь.",
+                    inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]),
+                )
             else:
-                self.api.send_message(chat_id, "<b>Последние заявки</b>")
+                self.api.send_message(
+                    chat_id,
+                    "<b>ПОСЛЕДНИЕ ПОКУПКИ</b>\n\nОдна карточка — одно главное действие по этапу.",
+                    inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]),
+                )
                 for row in orders:
                     username = f"@{row['username']}" if row["username"] else row["first_name"]
                     status = str(row["status"])
                     label = ORDER_STATUS_LABELS.get(status, status)
+                    payment = self.db.get_payment(str(row["payment_id"] or "")) if row["payment_id"] else None
                     text = (
-                        f"<b>№{row['id']} · {esc(label)}</b>\n"
+                        f"<b>ПОКУПКА №{row['id']} · {esc(label).upper()}</b>\n"
                         f"{esc(row['product_name'])} · размер {esc(row['size'])} · {int(row['quantity'] or 1)} шт.\n"
-                        f"Клиент: {esc(username or str(row['user_id']))}\n"
-                        f"Телефон: {esc(row['phone'])}"
-                        + (f"\n{esc(row['note'])}" if str(row["note"] or "").strip() else "")
+                        f"Клиент: {esc(username or str(row['user_id']))} · {esc(row['phone'])}\n"
+                        + "\n".join(order_state_lines(status, payment, int(row["amount_rub"] or 0)))
+                        + (f"\n{ICON['receipt']} {esc(row['note'])}" if str(row["note"] or "").strip() else "")
                     )
                     self.api.send_message(chat_id, text, self.order_status_keyboard(int(row["id"]), status))
         elif command == "/broadcast":
@@ -2612,7 +3404,7 @@ class BrandBot:
                 self.db.set_state(user_id, "broadcast_pending", {"text": argument})
                 self.api.send_message(
                     chat_id,
-                    f"<b>Кому пишем?</b>\n\n{esc(argument)}",
+                    f"<b>КОМУ ПИШЕМ?</b>\n\n{esc(argument)}",
                     self.segment_keyboard(),
                 )
         elif command == "/restock":
@@ -2625,9 +3417,9 @@ class BrandBot:
         elif command == "/waitlist":
             rows = self.db.waitlist_rows()
             if not rows:
-                self.api.send_message(chat_id, "Лист ожидания пуст.")
+                self.api.send_message(chat_id, "<b>ЛИСТ ОЖИДАНИЯ ПУСТ</b>\n\nНикто не ждёт размер — значит, дефицита нет.")
             else:
-                lines = ["<b>Ждут размер</b>", ""]
+                lines = ["<b>ЛИСТ ОЖИДАНИЯ</b>", ""]
                 for row in rows:
                     username = f"@{row['username']}" if row["username"] else row["first_name"]
                     lines.append(f"{esc(row['product_name'])} · {esc(row['size'])} · {esc(username or row['user_id'])}")
@@ -2637,7 +3429,7 @@ class BrandBot:
             if not rows:
                 self.api.send_message(chat_id, "Никто пока никого не привёл.")
             else:
-                lines = ["<b>Топ по приведённым друзьям</b>", ""]
+                lines = ["<b>ТОП ПРИГЛАШЕНИЙ</b>", ""]
                 for index, row in enumerate(rows, start=1):
                     username = f"@{row['username']}" if row["username"] else row["first_name"]
                     lines.append(f"{index}. {esc(username or row['user_id'])} — {row['invited_count']}")
@@ -2686,7 +3478,7 @@ class BrandBot:
             self.api.send_document(chat_id, "users.csv", self.db.export_users_csv(), "Экспорт базы")
         elif command == "/reload":
             self.catalog.reload()
-            self.api.send_message(chat_id, "Каталог перечитан без перезапуска.")
+            self.api.send_message(chat_id, "Каталог перечитан без перезапуска.", inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]))
         elif command in ("/admin", "/panel"):
             self.admin_panel(chat_id)
         else:
@@ -2699,8 +3491,13 @@ class BrandBot:
         self.db.set_state(user_id, "admin_add", {"step": "category"})
         rows = [[(category["name"], f"addcat:{category['id']}")] for category in self.catalog.categories]
         rows.append([("Новая категория", "addcat:new")])
-        rows.append([("Отмена", "admin:cancel")])
-        self.api.send_message(chat_id, "Новая вещь. Куда её положим?", inline_keyboard(rows))
+        rows.append([(icon("cancel", "Отмена"), "admin:cancel")])
+        self.api.send_message(
+            chat_id,
+            "<b>НОВАЯ ВЕЩЬ · ШАГ 1</b>\n\nКуда её положим?\n"
+            "Дальше спросим название, цену, размеры и описание — по одному шагу.",
+            inline_keyboard(rows),
+        )
 
     def pick_add_category(self, chat_id: int, user_id: int, category_id: str) -> None:
         if category_id == "new":
@@ -2708,7 +3505,11 @@ class BrandBot:
             self.api.send_message(chat_id, "Название новой категории? Например: Верхняя одежда")
             return
         if not any(category["id"] == category_id for category in self.catalog.categories):
-            self.api.send_message(chat_id, "Такой категории нет.", self.main_menu())
+            self.api.send_message(
+                chat_id,
+                "Такой категории нет.",
+                inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]),
+            )
             return
         self.db.set_state(user_id, "admin_add", {"step": "name", "category": category_id})
         self.api.send_message(chat_id, ADD_STEPS[0][1])
@@ -2722,7 +3523,11 @@ class BrandBot:
 
         if text.lower() in ("отмена", "cancel"):
             self.db.clear_state(user_id)
-            self.api.send_message(chat_id, "Черновик выброшен.", self.main_menu())
+            self.api.send_message(
+                chat_id,
+                "Черновик выброшен.",
+                inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]] + nav_rows()),
+            )
             return True
         if text.startswith("/") and text.lower() != "/skip":
             # не путаем команды администратора с ответами мастера
@@ -2837,35 +3642,53 @@ class BrandBot:
         rows = [[(label, f"seg:{key}")] for key, label in SEGMENT_LABELS.items()]
         for category in self.catalog.categories[:6]:
             rows.append([(f"Интерес: {category['name']}", f"seg:interest:{category['id']}")])
-        rows.append([("Отмена", "admin:cancel")])
+        rows.append([(icon("cancel", "Отмена"), "admin:cancel")])
         return inline_keyboard(rows)
 
     def preview_broadcast(self, chat_id: int, user_id: int, segment: str) -> None:
         state = self.db.get_state(user_id)
         if not state or state[0] != "broadcast_pending":
-            self.api.send_message(chat_id, "Черновик рассылки не найден.")
+            self.api.send_message(
+                chat_id,
+                "Черновик рассылки не найден — он живёт до первой отправки.\n"
+                "Собери новый: <code>/broadcast текст</code>.",
+                inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]),
+            )
             return
         text = str(state[1].get("text", "")).strip()
         audience = self.db.broadcast_audience(segment)
         self.db.set_state(user_id, "broadcast_pending", {"text": text, "segment": segment})
-        label = SEGMENT_LABELS.get(segment, segment)
+        label = audience_label(segment, self.catalog.categories)
         self.api.send_message(
             chat_id,
-            f"<b>Предпросмотр</b>\n\n{esc(text)}\n\nАудитория: {label}\nПолучателей: {len(audience)}",
-            inline_keyboard([[("Отправить", "admin:broadcast_confirm")], [("Отмена", "admin:cancel")]]),
+            f"<b>ПРЕДПРОСМОТР РАССЫЛКИ</b>\n\n{esc(text)}\n\n"
+            f"{ICON['account']} Аудитория: {esc(label)}\n"
+            f"{ICON['channel']} Получателей: {len(audience)}",
+            inline_keyboard(
+                [[("Отправить →", "admin:broadcast_confirm")],
+                 [(icon("cancel", "Отмена"), "admin:cancel")]]
+            ),
         )
 
     def confirm_broadcast(self, chat_id: int, user_id: int) -> None:
         state = self.db.get_state(user_id)
         if not state or state[0] != "broadcast_pending":
-            self.api.send_message(chat_id, "Черновик рассылки не найден.")
+            self.api.send_message(
+                chat_id,
+                "Черновик рассылки не найден — отправлять нечего.",
+                inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]),
+            )
             return
         text = str(state[1].get("text", "")).strip()
         segment = str(state[1].get("segment", "all"))
         self.db.clear_state(user_id)
         audience = self.db.broadcast_audience(segment)
         if not audience:
-            self.api.send_message(chat_id, "В этом сегменте никого нет.")
+            self.api.send_message(
+                chat_id,
+                "В этом сегменте никого нет — рассылка не ушла.\nВыбери другой сегмент.",
+                self.segment_keyboard(),
+            )
             return
         # Рассылка идёт в отдельном потоке: раньше она выполнялась прямо в
         # цикле опроса и на 10 000 получателей морозила бота примерно на 7 минут.
@@ -2876,9 +3699,10 @@ class BrandBot:
             daemon=True,
         )
         thread.start()
+        people = plural(len(audience), "получатель", "получателя", "получателей")
         self.api.send_message(
             chat_id,
-            f"Рассылка пошла: {len(audience)} получателей.\n"
+            f"Рассылка пошла: {len(audience)} {people}.\n"
             "Бот продолжает отвечать — отчёт придёт сюда, когда закончим.",
         )
 
@@ -2898,7 +3722,7 @@ class BrandBot:
                     LOG.warning("Рассылка прервана остановкой бота: доставлено %s", delivered)
                     break
                 try:
-                    self.api.send_message(recipient, esc(text), self.main_menu())
+                    self.api.send_message(recipient, esc(text), self.main_menu(recipient))
                     delivered += 1
                     time.sleep(0.04)
                 except Exception as exc:
@@ -2912,7 +3736,11 @@ class BrandBot:
                 {"delivered": delivered, "failed": failed, "segment": segment},
             )
             try:
-                self.api.send_message(chat_id, f"Готово. Доставлено: {delivered}. Ошибок: {failed}.")
+                self.api.send_message(
+                    chat_id,
+                    f"<b>РАССЫЛКА ГОТОВА</b>\n\nДоставлено: {delivered}. Ошибок: {failed}.",
+                    inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]),
+                )
             except Exception:
                 LOG.warning("Не удалось отправить отчёт о рассылке", exc_info=True)
         finally:
@@ -2948,10 +3776,10 @@ class BrandBot:
         summary = self.customer_note({**profile, "name": profile.get("name") or user.get("first_name") or ""})
         self.api.send_message(
             chat_id,
-            "<b>Профиль сохранён</b>\n\n"
-            + (esc(summary) if summary else "Контакт записан. Следующая заявка подставит эти данные.")
+            "<b>ПРОФИЛЬ СОХРАНЁН</b>\n\n"
+            + (esc(summary) if summary else "Контакт записан. Следующая покупка подставит эти данные.")
             + "\n\nМожно сразу смотреть выпуск.",
-            self.main_menu(),
+            self.main_menu(chat_id),
         )
 
     def handle_web_waitlist(self, chat_id: int, user: dict[str, Any], payload: dict[str, Any]) -> None:
@@ -2960,7 +3788,7 @@ class BrandBot:
         product = self.catalog.get(str(payload.get("product_id", "")))
         size = str(payload.get("size", ""))
         if not product or size not in {str(item) for item in product.get("sizes", [])}:
-            self.api.send_message(chat_id, "Этот размер уже не ждётся — вещь снята или размер неверный.", self.main_menu())
+            self.api.send_message(chat_id, "Этот размер уже не ждётся — вещь снята или размер неверный.", self.main_menu(chat_id))
             return
         added = self.db.add_to_waitlist(user_id, product, size)
         self.db.event(user_id, "webapp_waitlist", {"product_id": product["id"], "size": size})
@@ -2969,13 +3797,13 @@ class BrandBot:
                 chat_id,
                 f"Записал из витрины: <b>{esc(product['name'])}</b>, размер {esc(size)}.\n"
                 "Вернётся — напишем первыми.",
-                self.main_menu(),
+                self.main_menu(chat_id),
             )
         else:
             self.api.send_message(
                 chat_id,
                 f"Этот размер уже в листе ожидания: <b>{esc(product['name'])}</b> · {esc(size)}.",
-                self.main_menu(),
+                self.main_menu(chat_id),
             )
 
     def queue_checkout_notifications(
@@ -2991,7 +3819,7 @@ class BrandBot:
         if self.settings.manager_chat_id:
             self.db.enqueue_message(
                 f"checkout:{payment_id}:manager", self.settings.manager_chat_id,
-                f"<b>Новая заявка из {esc(source)}</b>\nКлиент: {user_id}\nТелефон: {esc(phone)}\n"
+                f"<b>НОВАЯ ПОКУПКА ИЗ {esc(source).upper()}</b>\nКлиент: {user_id}\nТелефон: {esc(phone)}\n"
                 f"{esc(note or 'Адрес не указан')}\nК оплате: {esc(receipt['amount_label'])}\n"
                 + "\n".join(order_lines),
             )
@@ -3044,7 +3872,7 @@ class BrandBot:
     def checkout_identity(payload: dict[str, Any]) -> tuple[str, str]:
         raw = str(payload.get("request_id") or "")
         if not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", raw):
-            raise ValueError("Некорректный номер заявки. Обнови витрину.")
+            raise ValueError("Некорректный номер покупки. Обнови витрину.")
         body = {key: value for key, value in payload.items() if key != "request_id"}
         fingerprint = hashlib.sha256(json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         return raw, fingerprint
@@ -3093,7 +3921,7 @@ class BrandBot:
                 (int(user["id"]), len(legacy_prefix), legacy_prefix),
             ).fetchone()
             if legacy:
-                return {"ok": False, "error": "Эта заявка уже принята ранее. Открой «Мои заявки» для оплаты или связи с менеджером."}
+                return {"ok": False, "error": "Эта покупка уже принята ранее. Открой «Мои покупки» для оплаты или связи с менеджером."}
             return self._checkout_web_payload(user, payload, notify_user)
         except (ValueError, PriceError) as exc:
             return {"ok": False, "error": str(exc)}
@@ -3144,10 +3972,10 @@ class BrandBot:
         try:
             payload = json.loads(raw_data)
         except (TypeError, ValueError, json.JSONDecodeError):
-            self.api.send_message(chat_id, "Не получилось прочитать заявку из витрины. Открой её ещё раз.", self.main_menu())
+            self.api.send_message(chat_id, "Не получилось прочитать покупку из витрины. Открой её ещё раз.", self.main_menu(chat_id))
             return
         if not isinstance(payload, dict):
-            self.api.send_message(chat_id, "Неизвестный формат заявки. Открой витрину заново.", self.main_menu())
+            self.api.send_message(chat_id, "Неизвестный формат покупки. Открой витрину заново.", self.main_menu(chat_id))
             return
         if payload.get("type") == "waitlist":
             self.handle_web_waitlist(chat_id, user, payload)
@@ -3156,12 +3984,12 @@ class BrandBot:
             self.handle_web_profile(chat_id, user, payload)
             return
         if payload.get("type") != "order":
-            self.api.send_message(chat_id, "Неизвестный формат заявки. Открой витрину заново.", self.main_menu())
+            self.api.send_message(chat_id, "Неизвестный формат покупки. Открой витрину заново.", self.main_menu(chat_id))
             return
         result = self.checkout_web_payload(user, payload, notify_user=chat_id)
         self.flush_notifications()
         if not result.get("ok"):
-            self.api.send_message(chat_id, str(result.get("error") or "Не получилось принять заявку."), self.main_menu())
+            self.api.send_message(chat_id, str(result.get("error") or "Не получилось принять покупку."), self.main_menu(chat_id))
 
     def handle_callback(self, callback: dict[str, Any]) -> None:
         callback_id = callback["id"]
@@ -3175,14 +4003,22 @@ class BrandBot:
             return
         self.db.upsert_user(user)
         self.api.answer_callback(callback_id)
+        if self.route_callback(callback_id, chat_id, user_id, data):
+            return
+        # Кнопка устарела или пришла из старого сообщения: не молчим и не
+        # пугаем ошибкой, а открываем актуальный экран.
+        self.stale(chat_id, "Эта кнопка устарела.")
 
+    def route_callback(self, callback_id: str, chat_id: int, user_id: int, data: str) -> bool:
+        """Разбор нажатия. Возвращает False, если кнопка боту неизвестна."""
         if data.startswith("pay:"):
             parts = data.split(":")
             if len(parts) == 3:
                 self.start_method_pay(chat_id, user_id, parts[1], parts[2])
-            return
+                return True
+            return False
         if data == "menu":
-            self.api.send_message(chat_id, "Главное меню:", self.main_menu())
+            self.send_menu(chat_id)
         elif data == "catalog":
             self.show_catalog(chat_id, user_id)
         elif data.startswith("intr:"):
@@ -3194,13 +4030,32 @@ class BrandBot:
         elif data.startswith("want:"):
             self.choose_size(chat_id, user_id, data.split(":", 1)[1])
         elif data.startswith("size:"):
-            _, product_id, size = data.split(":", 2)
-            self.select_size(chat_id, user_id, product_id, size, f"callback:{callback_id}")
+            parts = data.split(":", 2)
+            if len(parts) < 3:
+                return False
+            self.select_size(chat_id, user_id, parts[1], parts[2], f"callback:{callback_id}")
         elif data.startswith("wait:"):
             self.ask_waitlist_size(chat_id, data.split(":", 1)[1])
         elif data.startswith("wsize:"):
-            _, product_id, size = data.split(":", 2)
-            self.confirm_waitlist(chat_id, user_id, product_id, size)
+            parts = data.split(":", 2)
+            if len(parts) < 3:
+                return False
+            self.confirm_waitlist(chat_id, user_id, parts[1], parts[2])
+        elif data == "account":
+            self.api.send_message(chat_id, self.account_text(user_id), self.account_menu())
+        elif data == "support":
+            self.show_support(chat_id, user_id)
+        elif data == "help":
+            self.api.send_message(
+                chat_id, self.help_text(), inline_keyboard(nav_rows(("Поддержка", "support")))
+            )
+        elif data == "ask":
+            self.support_orders(chat_id, user_id)
+        elif data.startswith("ask:"):
+            try:
+                self.forward_support(chat_id, user_id, int(data.split(":", 1)[1]))
+            except ValueError:
+                return False
         elif data == "profile":
             self.request_profile(chat_id, user_id)
         elif data == "consent:yes":
@@ -3217,52 +4072,60 @@ class BrandBot:
             self.show_lookbook(chat_id, user_id)
         elif data == "teaser":
             self.db.event(user_id, "teaser_open")
-            if not self.send_teaser(chat_id, keyboard=self.main_menu()):
+            keyboard = inline_keyboard([[(icon("catalog", "Каталог"), "catalog")]] + nav_rows())
+            if not self.send_teaser(chat_id, keyboard=keyboard):
                 self.api.send_message(
                     chat_id,
                     "Ролик сейчас не открывается. Загляни в витрину — там он лежит целиком."
                     + self.cta("drop"),
-                    self.main_menu(),
+                    keyboard,
                 )
         elif data == "about":
             self.api.send_message(
                 chat_id,
-                f"<b>{esc(self.settings.brand_name)}</b>\n\n"
+                f"<b>О БРЕНДЕ</b>\n\n"
+                f"{esc(self.settings.brand_name)}\n"
                 "Сила и честь. Одежда для своих: плотная, честная, без лишнего шума. "
                 "Малые тиражи, городская форма, выпуски без повторов."
-                + (f"\n\nВопросы: @{esc(self.settings.support_username)}" if self.settings.support_username else "")
+                + (f"\n\n{ICON['support']} Вопросы: @{esc(self.settings.support_username)}" if self.settings.support_username else "")
                 + self.cta("channel"),
-                self.main_menu(),
+                inline_keyboard(
+                    [[(icon("channel", "Канал"), self.settings.channel_url)]]
+                    + nav_rows(("Кабинет", "account"))
+                ),
             )
-        elif data == "size_guide":
-            self.api.send_message(
-                chat_id,
-                "<b>Как взять свой размер</b>\n\n"
-                "S — рост 164–172, грудь 112\n"
-                "M — рост 172–178, грудь 118\n"
-                "L — рост 178–186, грудь 124\n"
-                "XL — рост 186–194, грудь 130\n\n"
-                "Посадка свободная. Между двумя — бери больший, если хочешь объём. "
-                "Не уверен — оставь заявку, менеджер подскажет." + self.cta("size"),
-                self.main_menu(),
-            )
+        elif data == "size_guide" or data.startswith("size_guide:"):
+            self.show_size_guide(chat_id, user_id, data.split(":", 1)[1] if ":" in data else "")
         elif data == "my_orders":
             self.show_my_orders(chat_id, user_id)
+        elif data.startswith("ord:"):
+            try:
+                self.show_order(chat_id, user_id, int(data.split(":", 1)[1]))
+            except ValueError:
+                return False
+        elif data.startswith("receipt:"):
+            self.show_receipt(chat_id, user_id, data.split(":", 1)[1])
+        elif data.startswith("draft:"):
+            self.open_draft(chat_id, user_id, data.split(":", 1)[1])
         elif data.startswith("ucancel:"):
             try:
                 self.cancel_own_order(chat_id, user_id, int(data.split(":", 1)[1]))
             except ValueError:
-                self.api.send_message(chat_id, "Некорректная заявка.", self.main_menu())
+                self.api.send_message(
+                    chat_id, "Некорректный номер покупки.", self.main_menu(chat_id)
+                )
         elif data.startswith("seg:") and self.is_admin(user_id):
             self.preview_broadcast(chat_id, user_id, data.split(":", 1)[1])
         elif data == "admin:broadcast_confirm" and self.is_admin(user_id):
             self.confirm_broadcast(chat_id, user_id)
         elif data.startswith("order:") and self.is_admin(user_id):
+            parts = data.split(":", 2)
+            if len(parts) < 3:
+                return False
             try:
-                _, order_id, status = data.split(":", 2)
-                self.update_order_status(chat_id, int(order_id), status)
+                self.update_order_status(chat_id, int(parts[1]), parts[2])
             except (TypeError, ValueError):
-                self.api.send_message(chat_id, "Некорректная команда для заявки.")
+                self.api.send_message(chat_id, "Некорректная команда для покупки.")
         elif data == "admin:cancel" and self.is_admin(user_id):
             self.db.clear_state(user_id)
             self.api.send_message(chat_id, "Отменено.")
@@ -3270,20 +4133,15 @@ class BrandBot:
             action = data.split(":", 1)[1]
             if action == "add":
                 self.start_add_product(chat_id, user_id)
-            elif action == "panel":
-                self.admin_panel(chat_id)
-            elif action == "stats":
-                self.admin_command(chat_id, user_id, "/stats")
-            elif action == "orders":
-                self.admin_command(chat_id, user_id, "/orders")
-            elif action == "waitlist":
-                self.admin_command(chat_id, user_id, "/waitlist")
-            elif action == "top":
-                self.admin_command(chat_id, user_id, "/top")
-            elif action == "export":
-                self.admin_command(chat_id, user_id, "/export")
-            elif action == "reload":
-                self.admin_command(chat_id, user_id, "/reload")
+            elif action in {"summary", "stats"}:
+                self.admin_summary(chat_id)
+            elif action in {"panel", "orders", "waitlist", "top", "export", "reload"}:
+                self.admin_command(chat_id, user_id, f"/{action}")
+            else:
+                return False
+        else:
+            return False
+        return True
 
     def handle_message(self, message: dict[str, Any]) -> None:
         if "from" not in message or "chat" not in message:
@@ -3314,16 +4172,12 @@ class BrandBot:
             return
         if text.startswith("/") and self.admin_command(chat_id, user_id, text):
             return
-        if text in ("/menu", "/help"):
-            if text == "/help":
-                self.api.send_message(chat_id, self.help_text(), self.main_menu())
-            else:
-                self.api.send_message(chat_id, "Главное меню:", self.main_menu())
+        if text.startswith("/") and self.user_command(chat_id, user_id, text):
             return
         if text.lower() in ("отмена", "cancel"):
             self.db.clear_state(user_id)
             self.api.send_message(chat_id, "Отменили.", remove_keyboard())
-            self.api.send_message(chat_id, "Главное меню:", self.main_menu())
+            self.send_menu(chat_id)
             return
         phone: str | None = None
         contact = message.get("contact")
@@ -3339,9 +4193,34 @@ class BrandBot:
             return
         self.api.send_message(
             chat_id,
-            "Нажми кнопки ниже — так быстрее. Витрина, размеры и выпуск там." + self.cta("drop"),
-            self.main_menu(),
+            "Нажми кнопки ниже — так быстрее. Каталог, покупки и поддержка там." + self.cta("drop"),
+            self.main_menu(chat_id),
         )
+
+    def user_command(self, chat_id: int, user_id: int, text: str) -> bool:
+        """Команды покупателя: их показывает системная кнопка «Меню».
+
+        Команды — быстрый вход, а не обязательное знание: всё то же самое
+        доступно кнопками главного меню.
+        """
+        command = text.split()[0].lower().split("@")[0] if text.split() else ""
+        if command in {"/menu", "/start"}:
+            self.send_menu(chat_id)
+        elif command == "/catalog":
+            self.show_catalog(chat_id, user_id)
+        elif command in {"/orders", "/purchases"}:
+            self.show_my_orders(chat_id, user_id)
+        elif command == "/account":
+            self.api.send_message(chat_id, self.account_text(user_id), self.account_menu())
+        elif command == "/support":
+            self.show_support(chat_id, user_id)
+        elif command == "/help":
+            self.api.send_message(
+                chat_id, self.help_text(), inline_keyboard(nav_rows(("Поддержка", "support")))
+            )
+        else:
+            return False
+        return True
 
     def handle_update(self, update: dict[str, Any]) -> bool:
         try:
@@ -3522,7 +4401,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             try:
                 self.api.send_message(
                     self.settings.manager_chat_id,
-                    f"Клиент отменил заявку №{order_id}: {esc(updated['product_name'] if updated else '')}.",
+                    f"Клиент отменил покупку №{order_id}: {esc(updated['product_name'] if updated else '')}.",
                 )
             except Exception as exc:
                 LOG.warning("Could not notify manager about miniapp cancel %s: %s", order_id, exc)
@@ -4024,7 +4903,7 @@ def main() -> int:
     if not settings.admin_ids:
         LOG.warning("ADMIN_IDS пуст — админ-панель и /add никому не доступны. Задай ID в .env")
     if settings.manager_chat_id is None:
-        LOG.warning("MANAGER_CHAT_ID не задан — уведомления о заявках никуда не уйдут")
+        LOG.warning("MANAGER_CHAT_ID не задан — уведомления о покупках и вопросы никуда не уйдут")
     try:
         ensure_catalog_exists(settings.catalog_path, BASE_DIR / "catalog.json")
         catalog = Catalog(settings.catalog_path)
@@ -4039,45 +4918,27 @@ def main() -> int:
     bot.bot_username = str(identity.get("username") or "")
     LOG.info("Starting @%s for brand %s", bot.bot_username, settings.brand_name)
     try:
-        user_commands = [
-            {"command": "start", "description": "Открыть витрину"},
-            {"command": "menu", "description": "Главное меню"},
-            {"command": "help", "description": "Как это работает"},
-        ]
-        api.call("setMyCommands", {"commands": user_commands})
+        # Системная кнопка «Меню» открывает команды бота: покупатель видит свой
+        # короткий список, команда — служебный. Витрина остаётся кнопкой в чате.
+        api.call("setMyCommands", {"commands": buyer_commands()})
+        api.call("setChatMenuButton", {"menu_button": CHAT_MENU_BUTTON})
         try:
             api.call("setMyShortDescription", {"short_description": BOT_SHORT_DESCRIPTION})
             api.call("setMyDescription", {"description": BOT_DESCRIPTION})
         except Exception as exc:
             LOG.warning("Could not set bot profile description: %s", exc)
-        admin_commands = user_commands + [
-            {"command": "admin", "description": "Управление"},
-            {"command": "stats", "description": "Статистика"},
-            {"command": "orders", "description": "Заявки"},
-            {"command": "add", "description": "Добавить вещь"},
-        ]
         for admin_id in settings.admin_ids:
             try:
                 api.call(
                     "setMyCommands",
-                    {"commands": admin_commands, "scope": {"type": "chat", "chat_id": admin_id}},
+                    {"commands": staff_commands(), "scope": {"type": "chat", "chat_id": admin_id}},
                 )
-            except Exception as exc:
-                LOG.warning("Could not set admin commands for %s: %s", admin_id, exc)
-        if settings.webapp_url.startswith("https://"):
-            try:
                 api.call(
                     "setChatMenuButton",
-                    {
-                        "menu_button": {
-                            "type": "web_app",
-                            "text": "Витрина",
-                            "web_app": {"url": settings.webapp_url},
-                        }
-                    },
+                    {"chat_id": admin_id, "menu_button": CHAT_MENU_BUTTON},
                 )
             except Exception as exc:
-                LOG.error("Не удалось повесить кнопку витрины: %s", exc)
+                LOG.warning("Could not set staff commands for %s: %s", admin_id, exc)
     except Exception as exc:
         LOG.warning("Could not set Telegram commands or menu button: %s", exc)
     health_server = start_health_server(settings.health_port, catalog, settings, db, api)

@@ -246,7 +246,7 @@
   async function cancelProfileOrder(orderId) {
     const initData = tg && tg.initData;
     if (!initData) {
-      showToast("Отмена — в чате с ботом, «Мои заявки».");
+      showToast("Отмена — в чате с ботом, «Мои покупки».");
       return;
     }
     try {
@@ -994,7 +994,7 @@
   async function resumePayment(paymentId) {
     const initData = tg && tg.initData;
     if (!initData) {
-      showToast("Оплата — в чате с ботом, «Мои заявки».");
+      showToast("Оплата — в чате с ботом, «Мои покупки».");
       return;
     }
     try {
