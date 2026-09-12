@@ -4,6 +4,7 @@ from dataclasses import replace
 import hashlib
 import hmac
 import json
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -14,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from bot import BrandBot, Catalog, Database, RateLimiter, Settings, start_health_server
+from bot import BrandBot, Catalog, Database, RateLimiter, Settings, STOP_EVENT, polling_loop, start_health_server
 
 
 class CheckoutRegressionTests(unittest.TestCase):
@@ -415,3 +416,149 @@ class LimiterRegressionTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class WaitlistRegressionTests(unittest.TestCase):
+    """Лист ожидания под нагрузкой: гонки, сбой отправки и старая схема базы."""
+
+    PRODUCT = 'tee-sila-i-chest'
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.settings = Settings(
+            token='audit-test-token', admin_ids=frozenset({1}), channel_url='https://t.me/test',
+            webapp_url='https://example.com', manager_chat_id=None, brand_name='Test',
+            support_username='', database_path=root / 'test.sqlite',
+            catalog_path=Path(__file__).with_name('catalog.json'), health_port=0,
+            giveaway_min_invites=3, privacy_url='',
+        )
+        self.db = Database(self.settings.database_path)
+        self.addCleanup(self.db.close_current)
+        self.api = Mock()
+        self.api.create_invoice_link.return_value = 'https://t.me/invoice/mock'
+        self.catalog = Catalog(self.settings.catalog_path)
+        self.bot = BrandBot(self.settings, self.api, self.db, self.catalog)
+
+    def waiter(self, user_id, size='M'):
+        self.db.upsert_user({'id': user_id, 'first_name': f'U{user_id}'})
+        self.assertTrue(self.db.add_to_waitlist(user_id, self.catalog.get(self.PRODUCT), size))
+
+    def pings(self, user_id):
+        return sum(1 for call in self.api.send_message.call_args_list
+                   if call.args and call.args[0] == user_id and 'РАЗМЕР ВЕРНУЛСЯ' in str(call.args[1]))
+
+    def test_buying_the_size_removes_the_waitlist_entry(self):
+        self.waiter(420, 'M')
+        self.bot.checkout_web_payload({'id': 420, 'first_name': 'Test'}, {
+            'request_id': 'wait-1', 'consent': True,
+            'customer': {'phone': '+79990000000', 'city': 'Test'},
+            'items': [{'product_id': self.PRODUCT, 'size': 'M', 'quantity': 1}]})
+        self.assertEqual(self.db.waitlist_user_ids(self.PRODUCT, 'M'), [])
+        self.assertEqual(self.db.waitlist_user_ids(self.PRODUCT, 'S'), [])
+
+    def test_repeat_restock_notifies_once(self):
+        self.waiter(421)
+        self.assertEqual(self.bot.notify_waitlist(self.PRODUCT, 'M'), 1)
+        self.assertEqual(self.bot.notify_waitlist(self.PRODUCT, 'M'), 0)
+        self.assertEqual(self.pings(421), 1)
+
+    def test_concurrent_restock_sends_one_message_per_waiter(self):
+        """Шесть одновременных /restock давали 48 одинаковых сообщений восьмерым."""
+        waiters = list(range(430, 438))
+        for uid in waiters:
+            self.waiter(uid, 'S')
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(pool.map(lambda _: self.bot.notify_waitlist(self.PRODUCT, 'S'), range(6)))
+        self.assertEqual(sum(results), len(waiters))
+        for uid in waiters:
+            self.assertEqual(self.pings(uid), 1, f'{uid} получил больше одного сообщения')
+
+    def test_failed_notification_keeps_the_waiter_queued(self):
+        self.waiter(441); self.waiter(442)
+        # Считаем только реально ушедшие сообщения: Mock помнит и неудачные вызовы.
+        delivered = []
+        failing = {441}
+
+        def send(chat_id, text, reply_markup=None):
+            if chat_id in failing:
+                raise RuntimeError('Telegram HTTP 429: too many requests')
+            delivered.append((chat_id, text))
+            return {'ok': True}
+
+        self.api.send_message.side_effect = send
+        self.assertEqual(self.bot.notify_waitlist(self.PRODUCT, 'M'), 1)
+        failing.clear()
+        self.assertEqual(self.bot.notify_waitlist(self.PRODUCT, 'M'), 1, 'недошедшее сообщение повторили')
+        pings = lambda uid: sum(1 for chat_id, text in delivered
+                                if chat_id == uid and 'РАЗМЕР ВЕРНУЛСЯ' in text)
+        self.assertEqual(pings(441), 1)
+        self.assertEqual(pings(442), 1, 'доставленного раньше не дублировали')
+
+    def test_old_database_gains_the_notified_at_column(self):
+        legacy = Path(self.temp.name) / 'legacy.sqlite'
+        conn = sqlite3.connect(legacy)
+        conn.executescript(
+            """CREATE TABLE waitlist (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+                 product_id TEXT NOT NULL, product_name TEXT NOT NULL, size TEXT NOT NULL,
+                 created_at TEXT NOT NULL, UNIQUE(user_id, product_id, size));
+               INSERT INTO waitlist(user_id, product_id, product_name, size, created_at)
+                 VALUES (5, 'tee', 'СИЛА', 'M', '2026-01-01');"""
+        )
+        conn.commit(); conn.close()
+        migrated = Database(legacy)
+        self.addCleanup(migrated.close_current)
+        columns = [row[1] for row in migrated.connection().execute('PRAGMA table_info(waitlist)')]
+        self.assertIn('notified_at', columns)
+        self.assertEqual(migrated.connection().execute('SELECT COUNT(*) FROM waitlist').fetchone()[0], 1)
+        self.assertEqual(migrated.claim_waitlist('tee', 'M'), [5])
+        self.assertEqual(migrated.claim_waitlist('tee', 'M'), [])
+
+
+class PollingLoopRegressionTests(unittest.TestCase):
+    """Очередь обновлений: одно отравленное обновление не должно останавливать бота."""
+
+    class FakeAPI:
+        def __init__(self, batches):
+            self.batches, self.offsets = list(batches), []
+
+        def call(self, method, payload=None, timeout=None):
+            self.offsets.append(payload.get('offset'))
+            if not self.batches:
+                STOP_EVENT.set()
+                return []
+            return self.batches.pop(0)
+
+    class FakeBot:
+        def __init__(self, poison=()):
+            self.seen, self.poison = [], set(poison)
+
+        def handle_update(self, update):
+            uid = update.get('update_id') if isinstance(update, dict) else None
+            self.seen.append(uid)
+            if uid in self.poison:
+                raise RuntimeError('сбой вокруг обработчика')
+            return True
+
+    def poll(self, batches, poison=()):
+        STOP_EVENT.clear()
+        self.addCleanup(STOP_EVENT.clear)
+        api = self.FakeAPI(batches)
+        bot = self.FakeBot(poison)
+        polling_loop(api, bot)
+        return api, bot
+
+    def test_poison_update_is_skipped_and_the_queue_moves_on(self):
+        """Без пропуска смещения бот вечно перезапрашивал бы одно обновление."""
+        batch = [{'update_id': 1}, {'update_id': 2}, {'update_id': 3},
+                 {'message': {}}, 'не словарь', {'update_id': '5'}]
+        api, bot = self.poll([batch, [{'update_id': 9}], []], poison={2})
+        self.assertEqual(bot.seen, [1, 2, 3, None, '5', 9])
+        self.assertGreaterEqual(api.offsets[-1], 6)
+
+    def test_unexpected_getupdates_payload_does_not_stop_polling(self):
+        api, bot = self.poll([{'unexpected': 'dict вместо списка'}, [{'update_id': 7}], []])
+        self.assertEqual(bot.seen, [7])
+        self.assertGreaterEqual(api.offsets[-1], 8)

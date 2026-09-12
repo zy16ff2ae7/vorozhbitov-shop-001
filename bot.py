@@ -274,6 +274,19 @@ class Catalog:
 
     def reload(self) -> None:
         raw = json.loads(self.path.read_text(encoding="utf-8"))
+        data, products = self.parse(raw)
+        with self.lock:
+            self.data = data
+            self.products_by_id = products
+
+    def parse(self, raw: dict[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+        """Проверить каталог и вернуть готовые структуры, ничего не меняя.
+
+        Проверка отделена от записи намеренно: сначала убеждаемся, что каталог
+        целый, и только потом подменяем его в памяти и на диске. Иначе неудачная
+        публикация оставляла испорченный файл, с которым бот не запускался, а
+        память и диск расходились.
+        """
         if not isinstance(raw.get("categories"), list) or not isinstance(raw.get("products"), list):
             raise ValueError("catalog.json must contain categories and products arrays")
         category_ids: set[str] = set()
@@ -281,7 +294,7 @@ class Catalog:
             if not isinstance(category, dict) or not all(isinstance(category.get(key), str) for key in ("id", "name")):
                 raise ValueError(f"Invalid category: {category}")
             category_id = category["id"]
-            if not category_id or ":" in category_id or len(category_id.encode("utf-8")) > 48:
+            if not category_id or ":" in category_id or len(category_id.encode("utf-8")) > MAX_CATEGORY_ID_BYTES:
                 raise ValueError(f"Category id is not callback-safe: {category_id}")
             if category_id in category_ids:
                 raise ValueError(f"Duplicate category id: {category_id}")
@@ -292,7 +305,7 @@ class Catalog:
             if not isinstance(product, dict) or not required.issubset(product):
                 raise ValueError(f"Product is missing fields: {product}")
             product_id = str(product["id"])
-            if not product_id or ":" in product_id or len(product_id.encode("utf-8")) > 40:
+            if not product_id or ":" in product_id or len(product_id.encode("utf-8")) > MAX_PRODUCT_ID_BYTES:
                 raise ValueError(f"Product id is not callback-safe: {product_id}")
             if product_id in products:
                 raise ValueError(f"Duplicate product id: {product_id}")
@@ -304,7 +317,7 @@ class Catalog:
                 raise ValueError(f"Product sizes must be a non-empty array: {product_id}")
             for size in product["sizes"]:
                 callback = f"size:{product_id}:{size}"
-                if ":" in str(size) or len(callback.encode("utf-8")) > 64:
+                if ":" in str(size) or len(callback.encode("utf-8")) > CALLBACK_DATA_LIMIT:
                     raise ValueError(f"Size is not callback-safe for {product_id}: {size}")
             photo_url = str(product.get("photo_url", ""))
             if photo_url and not photo_url.startswith(("https://", "http://")):
@@ -321,11 +334,7 @@ class Catalog:
                 )
             products[product_id] = product
         raw.setdefault("lookbook", [])
-        # Обе структуры собраны целиком — подменяем их разом, чтобы читатель
-        # никогда не увидел новый data со старым индексом товаров.
-        with self.lock:
-            self.data = raw
-            self.products_by_id = products
+        return raw, products
 
     @property
     def categories(self) -> list[dict[str, str]]:
@@ -350,6 +359,10 @@ class Catalog:
             payload = json.dumps(self.data, ensure_ascii=False, indent=2) + "\n"
         tmp = self.path.with_name(self.path.name + ".tmp")
         tmp.write_text(payload, encoding="utf-8")
+        # Каталог — это склад. Без fsync обрыв питания может оставить переименование
+        # с пустым файлом внутри, и бот больше не запустится: каталог не прочитается.
+        with open(tmp, "rb") as handle:
+            os.fsync(handle.fileno())
         os.replace(tmp, self.path)
 
     def unique_id(self, name: str) -> str:
@@ -361,26 +374,52 @@ class Catalog:
             index += 1
         return candidate
 
+    def _commit(self, candidate: dict[str, Any]) -> None:
+        """Проверить кандидата и только потом записать его в память и на диск."""
+        data, products = self.parse(candidate)
+        self.data = data
+        self.products_by_id = products
+        self.save()
+
+    def add_category(self, name: str) -> str:
+        """Создать раздел и вернуть его id."""
+        with self.lock:
+            base = slugify(name, "category")
+            existing = {category["id"] for category in self.data["categories"]}
+            category_id = base
+            index = 2
+            while category_id in existing:
+                category_id = f"{base}-{index}"
+                index += 1
+            self._commit({
+                **self.data,
+                "categories": [*self.data["categories"], {"id": category_id, "name": name}],
+            })
+            return category_id
+
     def add_product(self, product: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
             product = dict(product)
             product["id"] = self.unique_id(str(product["name"]))
             product.setdefault("active", True)
             product.setdefault("photo_url", "")
-            self.data["products"].append(product)
-            self.save()
-            self.reload()
+            self._commit({**self.data, "products": [*self.data["products"], product]})
             return product
 
     def set_active(self, product_id: str, active: bool) -> bool:
         with self.lock:
+            products = []
+            found = False
             for product in self.data["products"]:
-                if str(product.get("id")) == product_id:
-                    product["active"] = active
-                    self.save()
-                    self.reload()
-                    return True
-            return False
+                item = dict(product)
+                if str(item.get("id")) == product_id:
+                    item["active"] = active
+                    found = True
+                products.append(item)
+            if not found:
+                return False
+            self._commit({**self.data, "products": products})
+            return True
 
 
 class Database:
@@ -465,6 +504,7 @@ class Database:
                 product_name TEXT NOT NULL,
                 size TEXT NOT NULL,
                 created_at TEXT NOT NULL,
+                notified_at TEXT,
                 UNIQUE(user_id, product_id, size)
             );
             CREATE TABLE IF NOT EXISTS events (
@@ -554,6 +594,9 @@ class Database:
             conn.execute("ALTER TABLE users ADD COLUMN comment TEXT")
         if "profile_at" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN profile_at TEXT")
+        waitlist_columns = {row[1] for row in conn.execute("PRAGMA table_info(waitlist)")}
+        if "notified_at" not in waitlist_columns:
+            conn.execute("ALTER TABLE waitlist ADD COLUMN notified_at TEXT")
 
     def upsert_user(self, telegram_user: dict[str, Any], source: str | None = None) -> tuple[bool, int | None]:
         conn = self.connection()
@@ -823,6 +866,9 @@ class Database:
                 )
                 order_ids.append(int(cursor.lastrowid))
                 self.event(user_id, "order_created", {"order_id": order_ids[-1], "product_id": line["product_id"]})
+            # Размер получен — ждать больше нечего. Иначе следующий /restock
+            # напишет человеку о размере, который он уже купил.
+            self.drop_fulfilled_waitlist(user_id, lines)
             receipt = {
                 "payment_id": payment_id, "amount_rub": total, "amount_label": format_rub(total),
                 "amount_stars": amount_stars, "order_ids": order_ids,
@@ -981,6 +1027,53 @@ class Database:
                 (limit,),
             )
         )
+
+    def claim_waitlist(self, product_id: str, size: str) -> list[int]:
+        """Забрать неоповещённых из листа ожидания — по одному разу на запись.
+
+        Отметка ставится до отправки и внутри одной транзакции, поэтому
+        повторный или одновременный ``/restock`` не превращается в поток
+        одинаковых сообщений одним и тем же людям.
+        """
+        conn = self.connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = list(conn.execute(
+                "SELECT user_id FROM waitlist WHERE product_id=? AND size=? AND notified_at IS NULL",
+                (product_id, size),
+            ))
+            if rows:
+                conn.execute(
+                    "UPDATE waitlist SET notified_at=? WHERE product_id=? AND size=? AND notified_at IS NULL",
+                    (utc_now(), product_id, size),
+                )
+            conn.execute("COMMIT")
+            return [row[0] for row in rows]
+        except Exception:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+
+    def release_waitlist(self, user_ids: list[int], product_id: str, size: str) -> None:
+        """Снять отметку, если сообщение не ушло: человек всё ещё ждёт размер."""
+        if not user_ids:
+            return
+        self.connection().executemany(
+            "UPDATE waitlist SET notified_at=NULL WHERE user_id=? AND product_id=? AND size=?",
+            [(user_id, product_id, size) for user_id in user_ids],
+        )
+
+    def drop_fulfilled_waitlist(self, user_id: int, lines: list[dict[str, Any]]) -> None:
+        """Убрать из листа ожидания то, что человек только что купил."""
+        pairs = [
+            (user_id, str(line.get("product_id", "")), str(line.get("size", "")))
+            for line in lines
+            if line.get("product_id") and line.get("size")
+        ]
+        if pairs:
+            self.connection().executemany(
+                "DELETE FROM waitlist WHERE user_id=? AND product_id=? AND size=?", pairs
+            )
 
     def waitlist_user_ids(self, product_id: str, size: str) -> list[int]:
         return [
@@ -1940,6 +2033,16 @@ ADD_TOTAL = len(ADD_STEPS) + 2
 
 # Пределы ввода мастера: названия попадают в кнопки (лимит Telegram 64 знака),
 # описание — в карточку вещи, которая обязана влезть в одно сообщение (4096).
+# Callback кнопки размера собран как «size:<id вещи>:<размер>» и обязан войти
+# в 64 байта. id вещи занимает до MAX_PRODUCT_ID_BYTES, поэтому на размер
+# остаётся MAX_SIZE_BYTES — и считать это надо по настоящему id, а не по
+# заглушке: прежняя проверка «size:x:…» пропускала размеры, из-за которых
+# публикация портила catalog.json и бот не запускался после перезапуска.
+CALLBACK_DATA_LIMIT = 64
+MAX_PRODUCT_ID_BYTES = 40
+MAX_CATEGORY_ID_BYTES = 48
+MAX_SIZE_BYTES = CALLBACK_DATA_LIMIT - len("size:") - MAX_PRODUCT_ID_BYTES - len(":")
+
 ADD_NAME_LIMIT = 48
 ADD_CATEGORY_LIMIT = 32
 ADD_DESCRIPTION_LIMIT = 1200
@@ -3143,12 +3246,13 @@ class BrandBot:
         )
 
     def notify_waitlist(self, product_id: str, size: str) -> int:
-        """Admin-triggered ping for a restocked size. Returns number of notified users."""
+        """Оповестить тех, кто ждёт размер. Каждая запись срабатывает один раз."""
         delivered = 0
         product = self.catalog.get(product_id)
         if not product:
             return 0
-        for recipient in self.db.waitlist_user_ids(product_id, size):
+        failed: list[int] = []
+        for recipient in self.db.claim_waitlist(product_id, size):
             try:
                 self.api.send_message(
                     recipient,
@@ -3159,7 +3263,10 @@ class BrandBot:
                 delivered += 1
                 time.sleep(0.04)
             except Exception as exc:
+                failed.append(recipient)
                 LOG.warning("Waitlist notify failed for %s: %s", recipient, exc)
+        # Не дошло — значит, человек ещё не оповещён: вернём ему место в очереди.
+        self.db.release_waitlist(failed, product_id, size)
         return delivered
 
     # Группы списка покупок: один порядок и одни названия на всех экранах.
@@ -3721,7 +3828,22 @@ class BrandBot:
                 self.api.send_message(chat_id, "Использование: <code>/restock id_товара размер</code>")
             else:
                 delivered = self.notify_waitlist(parts[0], parts[1])
-                self.api.send_message(chat_id, f"Уведомлено по листу ожидания: {delivered}.")
+                if delivered:
+                    self.api.send_message(
+                        chat_id,
+                        f"Уведомлено по листу ожидания: {delivered}.",
+                        inline_keyboard(staff_nav_rows()),
+                    )
+                else:
+                    waiting = len(self.db.waitlist_user_ids(parts[0], parts[1]))
+                    if waiting:
+                        text = (
+                            f"Никого не оповестил: все {waiting} уже получали сообщение об этом размере.\n"
+                            "Одна запись листа ожидания — одно сообщение, иначе люди тонут в повторах."
+                        )
+                    else:
+                        text = "По этому размеру никто не ждёт — оповещать некого."
+                    self.api.send_message(chat_id, text, inline_keyboard(staff_nav_rows()))
         elif command == "/waitlist":
             rows = self.db.waitlist_rows()
             if not rows:
@@ -3731,13 +3853,25 @@ class BrandBot:
                     inline_keyboard(staff_nav_rows()),
                 )
             else:
-                lines = ["<b>ЛИСТ ОЖИДАНИЯ</b>", "", f"Ждут размер: {len(rows)}", ""]
+                def notified_at(row: sqlite3.Row) -> str:
+                    # str(None) — это строка "None", то есть истина: без `or ""`
+                    # экран показал бы оповещёнными всех, кто ещё ждёт.
+                    return str(row["notified_at"] or "") if "notified_at" in row.keys() else ""
+
+                notified = sum(1 for row in rows if notified_at(row))
+                head = f"Ждут размер: {len(rows)}"
+                if notified:
+                    head += f" · из них оповещены: {notified}"
+                lines = ["<b>ЛИСТ ОЖИДАНИЯ</b>", "", head, ""]
                 for row in rows:
                     who = f"@{row['username']}" if row["username"] else str(row["first_name"] or "")
+                    tail = " · оповещён" if notified_at(row) else ""
                     lines.append(
-                        f"• {esc(row['product_name'])} · {esc(row['size'])} · {esc(who or str(row['user_id']))}"
+                        f"• {esc(row['product_name'])} · {esc(row['size'])} · "
+                        f"{esc(who or str(row['user_id']))}{tail}"
                     )
-                lines.extend(["", "Написать им, когда размер вернётся: <code>/restock id размер</code>"])
+                lines.extend(["", "Написать им, когда размер вернётся: <code>/restock id размер</code>",
+                              "Повторно тем же людям не пишем — одна запись даёт одно сообщение."])
                 self.api.send_message(chat_id, "\n".join(lines), inline_keyboard(staff_nav_rows()))
         elif command == "/top":
             rows = self.db.top_referrers()
@@ -3787,22 +3921,45 @@ class BrandBot:
         elif command == "/hide":
             if not argument:
                 self.api.send_message(chat_id, "Использование: <code>/hide id_товара</code>")
-            elif self.catalog.set_active(argument, False):
-                self.api.send_message(chat_id, f"Вещь {esc(argument)} скрыта из витрины.")
             else:
-                self.api.send_message(chat_id, "Не нашёл такой id.")
+                try:
+                    hidden = self.catalog.set_active(argument, False)
+                except (ValueError, OSError) as exc:
+                    self.catalog_refused(chat_id, "ВЕЩЬ НЕ СКРЫТА", exc)
+                else:
+                    self.api.send_message(
+                        chat_id,
+                        f"Вещь {esc(argument)} скрыта из витрины." if hidden else "Не нашёл такой id.",
+                        inline_keyboard(staff_nav_rows()),
+                    )
         elif command == "/show":
             if not argument:
                 self.api.send_message(chat_id, "Использование: <code>/show id_товара</code>")
-            elif self.catalog.set_active(argument, True):
-                self.api.send_message(chat_id, f"Вещь {esc(argument)} снова в витрине.")
             else:
-                self.api.send_message(chat_id, "Не нашёл такой id.")
+                try:
+                    shown = self.catalog.set_active(argument, True)
+                except (ValueError, OSError) as exc:
+                    self.catalog_refused(chat_id, "ВЕЩЬ НЕ ВОЗВРАЩЕНА", exc)
+                else:
+                    self.api.send_message(
+                        chat_id,
+                        f"Вещь {esc(argument)} снова в витрине." if shown else "Не нашёл такой id.",
+                        inline_keyboard(staff_nav_rows()),
+                    )
         elif command == "/export":
             self.api.send_document(chat_id, "users.csv", self.db.export_users_csv(), "Экспорт базы")
         elif command == "/reload":
-            self.catalog.reload()
-            self.api.send_message(chat_id, "Каталог перечитан без перезапуска.", inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]))
+            try:
+                self.catalog.reload()
+            except (ValueError, OSError, json.JSONDecodeError) as exc:
+                self.catalog_refused(
+                    chat_id, "КАТАЛОГ НЕ ПЕРЕЧИТАН", exc,
+                    "Файл не прошёл проверку, поэтому работаю со старым каталогом: "
+                    "витрина цела. Поправь catalog.json и повтори /reload.",
+                )
+            else:
+                self.api.send_message(chat_id, "Каталог перечитан без перезапуска.",
+                                      inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]))
         elif command in ("/admin", "/panel"):
             self.admin_panel(chat_id)
         else:
@@ -3871,17 +4028,11 @@ class BrandBot:
                     "Напиши короче.",
                 )
                 return True
-            base = slugify(name, "category")
-            category_id = base
-            index = 2
-            with self.catalog.lock:
-                existing = {category["id"] for category in self.catalog.categories}
-                while category_id in existing:
-                    category_id = f"{base}-{index}"
-                    index += 1
-                self.catalog.data["categories"].append({"id": category_id, "name": name})
-                self.catalog.save()
-                self.catalog.reload()
+            try:
+                category_id = self.catalog.add_category(name)
+            except (ValueError, OSError) as exc:
+                self.catalog_refused(chat_id, "РАЗДЕЛ НЕ СОЗДАН", exc)
+                return True
             data = {"step": "name", "category": category_id}
             self.db.set_state(user_id, "admin_add", data)
             self.api.send_message(
@@ -3937,8 +4088,18 @@ class BrandBot:
             if not sizes:
                 self.api.send_message(chat_id, "Ни одного размера не распознал. Формат: S, M, L, XL")
                 return True
-            if any(":" in size or len(f"size:x:{size}".encode("utf-8")) > 64 for size in sizes):
-                self.api.send_message(chat_id, "Слишком длинный размер или двоеточие. Напиши короче.")
+            # Считаем по худшему случаю: id вещи занимает до 40 байт, и если
+            # проверить с заглушкой, callback при публикации выйдет за 64 байта.
+            too_long = next((size for size in sizes
+                             if ":" in size or len(size.encode("utf-8")) > MAX_SIZE_BYTES), None)
+            if too_long is not None:
+                self.api.send_message(
+                    chat_id,
+                    f"Размер «{esc(too_long)}» не влезет в кнопку: максимум {MAX_SIZE_BYTES} байт "
+                    "(кириллическая буква занимает два).\n\n"
+                    "Пиши коротко: <code>S, M, XL</code>, <code>ONE SIZE</code>, <code>48-50</code>. "
+                    "Двоеточие нельзя — из него собран callback кнопки.",
+                )
                 return True
             data["sizes"] = sizes
         else:
@@ -3988,12 +4149,36 @@ class BrandBot:
             ),
         )
 
+    def catalog_refused(self, chat_id: int, heading: str, exc: Exception, tail: str = "") -> None:
+        """Каталог отверг изменение — говорим вслух.
+
+        Исключение из каталога гасится на уровне обработки обновления, поэтому
+        без явного ответа админ видит тишину и не знает, что ничего не случилось.
+        """
+        LOG.error("%s: каталог отверг изменение: %s", heading, exc, exc_info=True)
+        lines = [f"<b>{heading}</b>", "", f"Причина: {esc(str(exc))}", ""]
+        lines.append(tail or "Файл каталога не тронут, витрина работает как прежде.")
+        self.api.send_message(
+            chat_id,
+            "\n".join(lines),
+            inline_keyboard([[(icon("stock", "Новая вещь"), "adm:add"),
+                              (icon("tools", "Управление"), "adm:panel")]]),
+        )
+
     def publish_product(self, chat_id: int, user_id: int) -> None:
         state = self.db.get_state(user_id)
         if not state or state[0] != "admin_add" or not state[1].get("preview"):
             self.api.send_message(chat_id, "Черновик не найден. Начни заново: /add")
             return
-        product = self.catalog.add_product(dict(state[1]["preview"]))
+        try:
+            product = self.catalog.add_product(dict(state[1]["preview"]))
+        except (ValueError, OSError, json.JSONDecodeError) as exc:
+            self.catalog_refused(
+                chat_id, "ВЕЩЬ НЕ ОПУБЛИКОВАНА", exc,
+                "Файл каталога цел, витрина работает. Черновик не опубликован — "
+                "начни заново и напиши значения короче.",
+            )
+            return
         self.db.clear_state(user_id)
         self.db.event(user_id, "product_added", {"product_id": product["id"]})
         self.api.send_message(
@@ -5303,10 +5488,32 @@ def polling_loop(api: TelegramAPI, bot: BrandBot) -> None:
                 timeout=15,
             )
             retry_delay = 1
+            if not isinstance(updates, list):
+                # Ответ не похож на список обновлений. Разбирать его как
+                # обновления нельзя: цикл спотыкался бы об одно и то же вечно.
+                LOG.warning("getUpdates вернул %s вместо списка", type(updates).__name__)
+                updates = []
             for update in updates:
-                if not bot.handle_update(update):
-                    LOG.warning("Skipping failed update %s", update.get("update_id"))
-                offset = max(offset, int(update["update_id"]) + 1)
+                if not isinstance(update, dict):
+                    LOG.warning("Пропущено обновление не-словарь: %.120r", update)
+                    continue
+                try:
+                    if not bot.handle_update(update):
+                        LOG.warning("Skipping failed update %s", update.get("update_id"))
+                except Exception:
+                    # handle_update ловит свои ошибки сам; это страховка от сбоя
+                    # вокруг него. Без неё смещение не сдвинется и бот будет до
+                    # перезапуска перезапрашивать одно отравленное обновление.
+                    LOG.exception("Update %s raised outside handler, skipping", update.get("update_id"))
+                raw_id = update.get("update_id")
+                if isinstance(raw_id, bool):
+                    raw_id = None
+                elif isinstance(raw_id, str) and raw_id.isdigit():
+                    raw_id = int(raw_id)
+                if isinstance(raw_id, int):
+                    offset = max(offset, raw_id + 1)
+                else:
+                    LOG.warning("Обновление без update_id пропущено: %.120r", update)
         except Exception as exc:
             LOG.warning("Polling error: %s", exc)
             STOP_EVENT.wait(retry_delay)
@@ -5339,6 +5546,13 @@ def main() -> int:
     try:
         ensure_catalog_exists(settings.catalog_path, BASE_DIR / "catalog.json")
         catalog = Catalog(settings.catalog_path)
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        # Частый случай после ручной правки файла. Говорим прямо, что чинить:
+        # иначе оператор видит только «Startup failed» и не понимает, где причина.
+        LOG.error("catalog.json не прошёл проверку (%s): %s. Исправь файл — без этого бот не запустится.",
+                  settings.catalog_path, exc)
+        return 2
+    try:
         db = Database(settings.database_path)
         api = TelegramAPI(settings.token)
         identity = api.call("getMe")

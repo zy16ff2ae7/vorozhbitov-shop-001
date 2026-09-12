@@ -33,6 +33,7 @@ from bot import (
     buyer_commands,
     channel_target,
     ensure_catalog_exists,
+    MAX_SIZE_BYTES,
     fit_html_text,
     inline_keyboard,
     nav_rows,
@@ -2187,6 +2188,127 @@ class NativeMenuTests(unittest.TestCase):
                     self.assertEqual(api.attempts, 1, "постоянный сбой не должен повторяться")
                 # Соседнее сообщение при этом доставлено.
                 self.assertIn("менеджеру", [item[1] for item in api.sent])
+
+    def test_wizard_rejects_a_size_that_would_break_the_callback(self):
+        """Размер меряем по настоящему id вещи: из длинного callback не собрать."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+
+            def run_to_sizes():
+                bot.start_add_product(1, 1)
+                bot.route_callback("cb", 1, 1, "addcat:access")
+                bot.handle_add_product_text(1, 1, "Парка зимняя удлинённая с мехом")
+                bot.handle_add_product_text(1, 1, "18 900 ₽")
+
+            run_to_sizes()
+            bot.handle_add_product_text(1, 1, "размер сорок восемь пятьдесят")
+            _, text, markup = api.last(1)
+            self.assertIn(f"максимум {MAX_SIZE_BYTES} байт", text)
+            self.assertEqual(db.get_state(1)[1]["step"], "sizes", "мастер обязан остаться на том же шаге")
+            self.assertIsNone(markup, "шаг размера принимают текстом, не кнопкой")
+
+            bot.handle_add_product_text(1, 1, "OДИН:РАЗМЕР")
+            self.assertIn("не влезет в кнопку", api.last(1)[1])
+            bot.handle_add_product_text(1, 1, "S, M, XL")
+            self.assertEqual(db.get_state(1)[1]["step"], "description")
+
+            # Каждая опубликованная вещь остаётся в пределах callback.
+            bot.handle_add_product_text(1, 1, "Тёплая парка.")
+            bot.handle_add_product_text(1, 1, "/skip")
+            bot.route_callback("cb", 1, 1, "add:publish")
+            self.assertIn("ВЕЩЬ ОПУБЛИКОВАНА", api.last(1)[1])
+            product = bot.catalog.get("parka-zimnyaya-udlinennaya-s-meh")
+            self.assertTrue(product, "вещь не появилась в витрине")
+            for size in product["sizes"]:
+                self.assertLessEqual(len(f"size:{product['id']}:{size}".encode()), 64)
+
+    def test_catalog_refusal_is_announced_and_leaves_the_file_intact(self):
+        """Отвергнутый черновик не портит catalog.json и не оставляет админа в тишине."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
+            catalog_path = Path(directory) / "catalog.json"
+            before = json.loads(catalog_path.read_text(encoding="utf-8"))
+
+            # Черновик с размером, который в кнопку не войдёт: каталог обязан отказать.
+            db.set_state(1, "admin_add", {"step": "confirm", "preview": {
+                "category": "access", "name": "Длиннющее название вещи", "price": "1 000 ₽",
+                "sizes": ["s" * 40], "description": "описание", "photo_url": ""}})
+            bot.publish_product(1, 1)
+            _, text, markup = api.last(1)
+            self.assertIn("ВЕЩЬ НЕ ОПУБЛИКОВАНА", text)
+            self.assertIn("Причина", text)
+            self.assertIn("adm:add", button_targets(markup), "у отказа должен быть выход")
+            self.assertEqual(json.loads(catalog_path.read_text(encoding="utf-8")), before,
+                             "файл каталога изменён отвергнутым черновиком")
+
+            # Испорченный файл: /reload говорит правду и продолжает работать со старым.
+            broken = json.loads(catalog_path.read_text(encoding="utf-8"))
+            broken["products"][0]["category"] = "нет-такого-раздела"
+            catalog_path.write_text(json.dumps(broken, ensure_ascii=False), encoding="utf-8")
+            known = len(bot.catalog.products_by_id)
+            api.sent.clear()
+            bot.admin_command(1, 1, "/reload")
+            _, text, markup = api.last(1)
+            self.assertIn("КАТАЛОГ НЕ ПЕРЕЧИТАН", text)
+            self.assertIn("со старым каталогом", text)
+            self.assertIn("adm:panel", button_targets(markup))
+            self.assertEqual(len(bot.catalog.products_by_id), known, "память потеряла рабочий каталог")
+
+    def test_restock_notifies_each_waiter_once(self):
+        """Одна запись листа ожидания — одно сообщение; купленный размер закрывает ожидание."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            admin = {"id": 1, "username": "owner", "first_name": "Owner"}
+            for user in (admin, {"id": 601, "username": "w1", "first_name": "Ждун"},
+                         {"id": 602, "username": "w2", "first_name": "Ждуна"}):
+                db.upsert_user(user)
+            db.add_to_waitlist(601, bot.catalog.get("tee-sila-i-chest"), "M")
+            db.add_to_waitlist(602, bot.catalog.get("tee-sila-i-chest"), "S")
+
+            def say(text):
+                bot.handle_message({"message_id": 1, "date": 0, "chat": {"id": 1, "type": "private"},
+                                    "from": admin, "text": text})
+                return api.last(1)
+
+            pings = lambda uid: sum(1 for item in api.sent
+                                    if item[0] == uid and "РАЗМЕР ВЕРНУЛСЯ" in item[1])
+
+            _, text, markup = say("/restock tee-sila-i-chest M")
+            self.assertEqual(pings(601), 1)
+            self.assertEqual(pings(602), 0, "чужой размер оповещать не должен")
+            self.assertIn("Уведомлено по листу ожидания: 1", text)
+            self.assertIn("adm:panel", button_targets(markup), "ответ команды не должен быть тупиком")
+
+            api.sent.clear()
+            _, text, markup = say("/restock tee-sila-i-chest M")
+            self.assertEqual(pings(601), 0, "повторный /restock не пишет тем же людям второй раз")
+            self.assertIn("уже получали сообщение", text)
+            self.assertIn("adm:panel", button_targets(markup))
+
+            api.sent.clear()
+            _, text, _ = say("/restock tee-sila-i-chest XXL")
+            self.assertIn("никто не ждёт", text.lower())
+
+            # Экран команды показывает, кто уже оповещён.
+            api.sent.clear()
+            _, text, markup = say("/waitlist")
+            self.assertIn("Ждут размер: 2", text)
+            self.assertIn("из них оповещены: 1", text)
+            self.assertIn("@w1 · оповещён", text)
+            self.assertNotIn("@w2 · оповещён", text)
+            self.assertIn("adm:panel", button_targets(markup))
+
+            # Купил размер, который ждал, — ждать больше нечего.
+            self._purchase(db, user_id=602, product_id="tee-sila-i-chest", size="S")
+            self.assertEqual(db.waitlist_user_ids("tee-sila-i-chest", "S"), [])
+            api.sent.clear()
+            _, text, _ = say("/waitlist")
+            self.assertIn("Ждут размер: 1", text)
 
     def test_staff_reference_screens_are_not_dead_ends(self):
         """Справочные экраны команды ведут обратно в пульт — и пустые, и с данными."""
