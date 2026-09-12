@@ -27,6 +27,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -289,8 +290,9 @@ def run_team(bot: BrandBot, db: Database, rec: Recorder, director: Director) -> 
     try:
         db.upsert_user({"id": 2, "username": "ref", "first_name": "Рина"})
         for guest in range(3, 7):
-            db.upsert_user({"id": guest, "username": f"g{guest}", "first_name": "Гость",
-                            "source": "ref2"})
+            # source — отдельный аргумент: именно он засчитывает приглашение.
+            db.upsert_user({"id": guest, "username": f"g{guest}", "first_name": "Гость"},
+                           source="ref002")
         guest_director = Director(bot, rec, 501, GUEST)
         guest_director.say("/start")
         guest_director.tap("intr:drop")
@@ -305,7 +307,6 @@ def run_team(bot: BrandBot, db: Database, rec: Recorder, director: Director) -> 
         rec.muted = False
 
     director.say("/panel")
-    director.tap("adm:summary")
     director.tap("adm:orders")
     order = next(row["id"] for row in db.connection().execute(
         "SELECT id FROM orders WHERE status IN ('new', 'awaiting_payment') LIMIT 1"))
@@ -323,12 +324,36 @@ def run_team(bot: BrandBot, db: Database, rec: Recorder, director: Director) -> 
     director.tap("adm:waitlist")
     director.say("/restock tee-sila-i-chest XXL")
     director.tap("adm:panel")
+
+
+def wait_event(rec: Recorder, chat: int, fragment: str, timeout: float = 15.0) -> None:
+    """Ждём асинхронное событие: отчёт рассылки приходит из отдельного потока."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for event in reversed(rec.events):
+            if event.get("chat") == chat and fragment in str(event.get("text", "")):
+                return
+        time.sleep(0.05)
+    raise SystemExit(f"событие «{fragment}» не появилось за {timeout} с")
+
+
+def run_owner(bot: BrandBot, db: Database, rec: Recorder, director: Director) -> None:
+    # Пульт владельца: деньги, аудитория и рассылка — то, что команда не трогает.
+    director.say("/panel")
+    director.tap("adm:summary")
+    director.tap("adm:panel")
+    director.say("/broadcast Футболка «Сила и честь»: размер L — последние штуки. Кто ждал — забирайте.")
+    director.tap("seg:all")
+    director.tap("admin:broadcast_confirm")
+    wait_event(rec, director.chat, "РАССЫЛКА ГОТОВА")
+    director.tap("adm:panel")
+    director.say("/giveaway 1")
+    director.tap("adm:panel")
     director.tap("adm:top")
     director.tap("adm:panel")
     director.tap("adm:export")
     director.tap("adm:panel")
     director.tap("adm:reload")
-    director.tap("adm:panel")
     director.tap_label("Режим покупателя")
 
 
@@ -496,7 +521,7 @@ def encode(units: list[Any], out: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="video", help="куда положить ролики")
-    parser.add_argument("--roles", default="all", choices=["all", "buyer", "team"])
+    parser.add_argument("--roles", default="all", choices=["all", "buyer", "team", "owner"])
     parser.add_argument("--frames", metavar="DIR", default="",
                         help="не кодировать, а сохранить проверочные кадры сцен")
     args = parser.parse_args()
@@ -507,15 +532,19 @@ def main() -> None:
 
     bot, db, rec = build_bot(workspace)
     run_buyer(Director(bot, rec, 500, BUYER), db)
-    boundary = len(rec.events)
+    buyer_end = len(rec.events)
     run_team(bot, db, rec, Director(bot, rec, 1, BOSS))
-    buyer_events = rec.events[:boundary]
-    team_events = rec.events[boundary:]
+    team_end = len(rec.events)
+    run_owner(bot, db, rec, Director(bot, rec, 1, BOSS))
+    buyer_events = rec.events[:buyer_end]
+    team_events = rec.events[buyer_end:team_end]
+    owner_events = rec.events[team_end:]
 
     if args.frames:
         frames_dir = Path(args.frames)
         frames_dir.mkdir(parents=True, exist_ok=True)
-        for name, events, focus in (("buyer", buyer_events, 500), ("team", team_events, 1)):
+        for name, events, focus in (("buyer", buyer_events, 500), ("team", team_events, 1),
+                                      ("owner", owner_events, 1)):
             scene = build_scene("ВОРОЖБИТОВ", "бот", "assets/bot-avatar.jpg", events, focus)
             for moment in (6.0, 14.0, 26.0, 40.0, 58.0, max(6.0, scene.duration - 3.0)):
                 if moment < scene.duration:
@@ -534,12 +563,18 @@ def main() -> None:
         path = out_dir / "team.mp4"
         encode([Title("КОМАНДА"), scene], path)
         made.append(path)
-    if args.roles == "all" and (out_dir / "buyer.mp4").exists() and (out_dir / "team.mp4").exists():
+    if args.roles in ("all", "owner"):
+        scene = build_scene("ВОРОЖБИТОВ", "бот · владелец", "assets/bot-avatar.jpg", owner_events, 1)
+        path = out_dir / "owner.mp4"
+        encode([Title("ВЛАДЕЛЕЦ"), scene], path)
+        made.append(path)
+    if args.roles == "all" and all((out_dir / n).exists()
+                                   for n in ("buyer.mp4", "team.mp4", "owner.mp4")):
         binary = ffmpeg_binary()
         list_file = workspace / "concat.txt"
         list_file.write_text(
-            f"file '{(out_dir / 'buyer.mp4').resolve()}'\n"
-            f"file '{(out_dir / 'team.mp4').resolve()}'\n", encoding="utf-8")
+            "".join(f"file '{(out_dir / n).resolve()}'\n"
+                    for n in ("buyer.mp4", "team.mp4", "owner.mp4")), encoding="utf-8")
         combined = (out_dir / "vorozhbitov-roles.mp4").resolve()
         subprocess.run([binary, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
                         "-i", str(list_file.resolve()), "-c", "copy", "-movflags", "+faststart",
