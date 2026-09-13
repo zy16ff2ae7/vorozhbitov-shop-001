@@ -1,0 +1,19 @@
+name: tests
+on:
+  push:
+    paths: ["bot.py", "test_bot.py", "test_regressions.py", "smoke_test.py", "catalog.json", ".github/workflows/tests.yml"]
+  pull_request:
+    paths: ["bot.py", "test_bot.py", "test_regressions.py", "smoke_test.py", "catalog.json", ".github/workflows/tests.yml"]
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: unit + regression + smoke
+        run: |
+          python test_bot.py
+          python test_regressions.py
+          python smoke_test.py
