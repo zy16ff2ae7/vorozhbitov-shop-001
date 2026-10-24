@@ -22,10 +22,6 @@
     {
       "id": "bottom",
       "name": "Низ"
-    },
-    {
-      "id": "access",
-      "name": "Аксессуары"
     }
   ],
   "products": [
@@ -44,12 +40,12 @@
       "description": "Чёрная футболка первого тиража. Надпись «СИЛА И ЧЕСТЬ» на груди, фирменная чёрная нашивка слева у подола. На спине — постоянная деталь с монограммой у горловины и длинный узкий клинок с потёртой фактурой.",
       "signature": "Первый тираж. Один раз и без повторов.",
       "photo_url": "",
-      "image": "assets/drop/tee-real-8276.jpg",
+      "image": "assets/spin/tee-sich-01-v2.jpg",
       "images": [
-        "assets/drop/tee-real-8276.jpg",
-        "assets/drop/tee-real-8273.jpg",
-        "assets/drop/tee-real-8272.jpg",
-        "assets/drop/tee-real-8275.jpg",
+        "assets/spin/tee-sich-01-v2.jpg",
+        "assets/spin/tee-sich-03-v2.jpg",
+        "assets/spin/tee-sich-05-v2.jpg",
+        "assets/spin/tee-sich-07-v2.jpg",
         "assets/drop/tee-detail-v4.jpg"
       ],
       "badge": "ВЫПУСК 001",
@@ -78,13 +74,14 @@
         "assets/spin/tee-sich-08-v2.jpg"
       ],
       "image_labels": [
-        "Спереди",
-        "Сзади",
-        "Ткань и принт",
-        "В зале · посадка",
-        "Нашивка"
+        "Спереди · предметный рендер",
+        "Сбоку · предметный рендер",
+        "Сзади · предметный рендер",
+        "Другой бок · предметный рендер",
+        "Фурнитура · нашивка у горловины"
       ],
-      "featured": true
+      "featured": true,
+      "media_note": "Визуальные материалы подготовлены к согласованию. Производственную размерную сетку уточняет менеджер."
     },
     {
       "id": "tee-vzglyad",
@@ -101,9 +98,13 @@
       "description": "Футболка «ВЗГЛЯД» из первого дропа бренда «СИЛА И ЧЕСТЬ». Символ стойкости и характера. Доступна по предзаказу.",
       "signature": "Первый дроп. По предзаказу.",
       "photo_url": "",
-      "image": "assets/drop/tee-vzglyad-graphic.jpg",
+      "image": "assets/spin/tee-vzglyad-01.jpg",
       "images": [
-        "assets/drop/tee-vzglyad-graphic.jpg"
+        "assets/spin/tee-vzglyad-01.jpg",
+        "assets/spin/tee-vzglyad-03.jpg",
+        "assets/spin/tee-vzglyad-05.jpg",
+        "assets/spin/tee-vzglyad-07.jpg",
+        "assets/drop/tee-vzglyad-detail.jpg"
       ],
       "badge": "ПРЕДЗАКАЗ",
       "material": "100% хлопок · 240-260 г/м²",
@@ -118,16 +119,28 @@
       "stock_label": "Предзаказ",
       "active": true,
       "spin": [
-        "assets/drop/tee-vzglyad-graphic.jpg"
+        "assets/spin/tee-vzglyad-01.jpg",
+        "assets/spin/tee-vzglyad-02.jpg",
+        "assets/spin/tee-vzglyad-03.jpg",
+        "assets/spin/tee-vzglyad-04.jpg",
+        "assets/spin/tee-vzglyad-05.jpg",
+        "assets/spin/tee-vzglyad-06.jpg",
+        "assets/spin/tee-vzglyad-07.jpg",
+        "assets/spin/tee-vzglyad-08.jpg"
       ],
       "image_labels": [
-        "Смысл и принт"
+        "Спереди · предметный рендер",
+        "Сбоку · предметный рендер",
+        "Сзади · предметный рендер",
+        "Другой бок · предметный рендер",
+        "Деталь · принт на груди"
       ],
-      "featured": false
+      "featured": false,
+      "media_note": "Предметные ракурсы и 360° подготовлены к согласованию. Производственную размерную сетку уточняет менеджер."
     },
     {
       "id": "tag-sila-i-chest",
-      "category": "access",
+      "category": "drop",
       "name": "ЖЕТОН",
       "price": "0 ₽",
       "sizes": [
@@ -465,7 +478,7 @@
     },
     {
       "id": "cap-logo-001",
-      "category": "access",
+      "category": "drop",
       "name": "КЕПКА V",
       "price": "3 200 ₽",
       "sizes": [

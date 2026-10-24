@@ -2023,3 +2023,11 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   #welcomeVideo { display: none; }
   .sk-media::after, .sk-line::after { animation: none; }
 }
+
+/* Заказ: менеджер — основной сценарий, онлайн-оплата — отдельно. */
+#submitManagerOrder + #submitOrder { margin-top: 10px; }
+.media-note { margin-top: 14px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.profile-order-main small { overflow-wrap: anywhere; }
+.profile-order-status.is-shipped { color: #83c79c; }
+.profile-order-status.is-received,
+.profile-order-status.is-completed { color: var(--muted); }

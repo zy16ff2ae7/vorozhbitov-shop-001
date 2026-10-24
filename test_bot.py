@@ -96,6 +96,28 @@ class BotTests(unittest.TestCase):
         self.assertEqual(catalog.get("tee-sila-i-chest")["category"], "drop")
         self.assertEqual(catalog.lookbook, [])
 
+    def test_both_drop_tees_have_full_photo_and_spin_sets(self):
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        miniapp = Path(__file__).with_name("miniapp")
+        for product_id in ("tee-sila-i-chest", "tee-vzglyad"):
+            with self.subTest(product_id=product_id):
+                product = catalog.get(product_id)
+                self.assertEqual(len(product["spin"]), 8)
+                self.assertEqual(len(set(product["spin"])), 8)
+                self.assertEqual(len(product["images"]), 5)
+                self.assertEqual(len(set(product["images"])), 5)
+                self.assertEqual(product["images"][:4], product["spin"][::2])
+                self.assertEqual(len(product["image_labels"]), 5)
+                self.assertEqual(product["image"], product["spin"][0])
+                for asset in (*product["spin"], *product["images"]):
+                    self.assertTrue((miniapp / asset).is_file(), asset)
+                spin_hashes = {hashlib.sha256((miniapp / asset).read_bytes()).digest() for asset in product["spin"]}
+                self.assertEqual(len(spin_hashes), 8, "360° frames must not be copies of one image")
+        self.assertIn("принт на груди", catalog.get("tee-vzglyad")["image_labels"][-1])
+        self.assertIn("360°", catalog.get("tee-vzglyad")["media_note"])
+        # The original combined design remains an untouched source material.
+        self.assertTrue((miniapp / "assets/drop/tee-vzglyad-graphic.jpg").is_file())
+
     def test_catalog_seed_is_copied_once_to_mutable_storage(self):
         with tempfile.TemporaryDirectory() as directory:
             seed = Path(__file__).with_name("catalog.json")
@@ -655,7 +677,7 @@ class BotTests(unittest.TestCase):
             self.assertTrue(db.has_consent(44))
             self.assertIn("ПРОФИЛЬ СОХРАНЁН", api.sent[-1][1])
 
-    def test_start_sends_welcome_photo(self):
+    def test_start_sends_welcome_photo_not_drop_film(self):
         class FakeAPI(TelegramAPI):
             def __init__(self):
                 self.photos = []
@@ -700,9 +722,9 @@ class BotTests(unittest.TestCase):
                     "text": "/start",
                 },
             })
-            self.assertEqual(len(api.videos), 1)
+            self.assertEqual(api.videos, [])
             self.assertEqual(api.messages, [])
-            self.assertEqual(api.videos[0], brand_bot.local_asset_path(catalog.data["media"]["teaser"]))
+            self.assertEqual(len(api.photos), 1)
             brand_bot.handle_update({
                 "update_id": 41,
                 "message": {
@@ -711,7 +733,8 @@ class BotTests(unittest.TestCase):
                     "text": "/start",
                 },
             })
-            self.assertEqual(len(api.videos), 2)
+            self.assertEqual(api.videos, [])
+            self.assertEqual(len(api.photos), 2)
 
     def test_webapp_init_data_must_be_signed(self):
         token = "123456:TESTTOKEN"
@@ -768,7 +791,8 @@ class BotTests(unittest.TestCase):
             db.upsert_user({"id": 77, "first_name": "Buyer"})
             db.upsert_user({"id": 88, "first_name": "Other"})
             order_id, _ = db.create_order(
-                "web-scope-1", 77, {"id": "tee-sila-i-chest", "name": "ФУТБОЛКА"}, "M", "+79991234567"
+                "web-scope-1", 77, {"id": "tee-sila-i-chest", "name": "ФУТБОЛКА"}, "M", "+79991234567",
+                note="Old City · СДЭК · Old Street, 1",
             )
             catalog = Catalog(catalog_path)
             server = start_health_server(0, catalog, settings, db)
@@ -783,7 +807,8 @@ class BotTests(unittest.TestCase):
                 self.assertEqual(len(payload["orders"]), 1)
                 self.assertEqual(payload["orders"][0]["id"], order_id)
                 self.assertEqual(payload["orders"][0]["status"], "new")
-                self.assertEqual(payload["orders"][0]["status_label"], "новая")
+                self.assertEqual(payload["orders"][0]["status_label"], "новый")
+                self.assertEqual(payload["orders"][0]["legacy_details"], "Old City · СДЭК · Old Street, 1")
                 self.assertTrue(payload["orders"][0]["can_cancel"])
                 status, payload = request_json(f"http://127.0.0.1:{port}/api/my-orders", stranger)
                 self.assertEqual(status, 200)
@@ -1069,22 +1094,47 @@ class BotTests(unittest.TestCase):
         for marker in ("data-save-id", 'id="sheetSave"', 'id="profileSavedBtn"', "toggleSaved", "openTryon", "tryonCanvas"):
             self.assertNotIn(marker, index + app)
 
-    def test_teaser_has_russian_descriptive_captions(self):
+    def test_drop_film_and_lookbook_are_removed_but_sources_stay(self):
         miniapp = Path(__file__).with_name("miniapp")
         index = (miniapp / "index.html").read_text(encoding="utf-8")
-        self.assertIn('kind="captions"', index)
-        self.assertIn('src="assets/video/campaign-v11.ru.vtt"', index)
-        captions = (miniapp / "assets/video/campaign-v11.ru.vtt").read_text(encoding="utf-8")
-        self.assertTrue(captions.startswith("WEBVTT"))
-        self.assertIn("00:14.000 --> 00:18.000", captions)
+        app = (miniapp / "app.js").read_text(encoding="utf-8")
+        for marker in ('id="teaserModal"', 'id="heroWatchFilm"', 'id="watchTeaser"',
+                       'id="lookbook"', 'id="lookbookGrid"', "openTeaser", "renderLookbook"):
+            self.assertNotIn(marker, index + app)
+        self.assertNotIn("Фильм выпуска", index + app)
+        captions = miniapp / "assets/video/campaign-v11.ru.vtt"
+        self.assertTrue(captions.is_file(), "исходные материалы не удаляем")
+        self.assertTrue(captions.read_text(encoding="utf-8").startswith("WEBVTT"))
 
-    def test_teaser_has_no_photo_lead(self):
-        """Фильм выпуска начинается сразу с видео: фото-заставки нет ни на карточке, ни в модалке."""
+    def test_no_detached_size_quiz_or_offline_store(self):
         miniapp = Path(__file__).with_name("miniapp")
         index = (miniapp / "index.html").read_text(encoding="utf-8")
-        self.assertNotIn('id="teaserPoster"', index)
-        video = next(line for line in index.splitlines() if 'id="teaserVideo"' in line)
-        self.assertNotIn("poster=", video)
+        app = (miniapp / "app.js").read_text(encoding="utf-8")
+        core = (miniapp / "shop-core.js").read_text(encoding="utf-8")
+        for marker in ('id="quizModal"', 'id="sizeGuideModal"', "adviseSize", "openQuiz",
+                       "size-table", "164–172", "Самовывоз", "самовывоз из магазина"):
+            self.assertNotIn(marker, index + app + core)
+        self.assertIn('id="waitlistButton"', index)
+        self.assertIn('id="sizeList"', index)
+
+    def test_miniapp_manager_checkout_is_separate_from_online_payment(self):
+        miniapp = Path(__file__).with_name("miniapp")
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        app = (miniapp / "app.js").read_text(encoding="utf-8")
+        styles = (miniapp / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('id="submitManagerOrder"', index)
+        self.assertIn('id="submitOrder"', index)
+        manager = app.split("  function submitManagerOrder()", 1)[1].split("  async function submitOrder()", 1)[0]
+        online = app.split("  async function submitOrder()", 1)[1].split("  function openChannel()", 1)[0]
+        self.assertIn("checkoutClient.managerMessage", manager)
+        self.assertIn("checkoutClient.managerUrl", manager)
+        self.assertNotIn("checkoutClient.submit", manager)
+        self.assertNotIn("state.cart = []", manager)
+        self.assertIn("checkoutClient.submit", online)
+        self.assertIn("/api/my-orders", app)
+        self.assertNotIn("vorozhbitov_orders", app)
+        self.assertIn("--bg: #070708", styles)
+        self.assertIn("--red: #e10600", styles)
 
     def test_teaser_starts_from_zero(self):
         """Монтаж тизера начинается с видео: никаких пропусков начала в плеере."""
@@ -1660,19 +1710,18 @@ class NativeMenuTests(unittest.TestCase):
         )
         return receipt
 
-    def test_main_menu_is_six_sections_in_two_columns(self):
-        """Шесть разделов по два в строке: не стена из двадцати кнопок."""
+    def test_main_menu_has_drop_channel_and_brand_without_retired_sections(self):
         with tempfile.TemporaryDirectory() as directory:
             bot, _ = self._bot(directory)
             markup = bot.main_menu(500)
             rows = button_rows(markup)
-            sections = rows[:3]
-            self.assertTrue(all(len(row) == 2 for row in sections), rows)
-            self.assertEqual(
-                [text for row in sections for text in row],
-                [f"{ICON['catalog']} Каталог", f"{ICON['orders']} Мои покупки", f"{ICON['looks']} Образы", f"{ICON['film']} Ролик", f"{ICON['account']} Кабинет", f"{ICON['support']} Поддержка"],
-            )
-            # Витрина остаётся входом, но не занимает системную кнопку «Меню».
+            self.assertEqual(rows[0], [f"{ICON['catalog']} Первый дроп"])
+            self.assertEqual(rows[1], [f"{ICON['channel']} Канал"])
+            self.assertEqual(rows[2], [f"{ICON['seal']} О бренде"])
+            self.assertEqual(rows[3], [f"{ICON['account']} Кабинет", f"{ICON['support']} Поддержка"])
+            labels = " ".join(flat_buttons(markup))
+            for retired in ("Образы", "Ролик", "Фильм выпуска", "Привести друга", "Узнать первым"):
+                self.assertNotIn(retired, labels)
             self.assertEqual(rows[-1], ["Открыть витрину ↗"])
             for label in flat_buttons(markup):
                 self.assertLessEqual(len(label), 26, f"длинная подпись кнопки: {label}")
@@ -2010,7 +2059,7 @@ class NativeMenuTests(unittest.TestCase):
             self.assertEqual(db.get_state(1)[1]["step"], "category")
 
             # Мастер: текст на шаге проверки показывает карточку заново.
-            press(1, "addcat:access")
+            press(1, "addcat:drop")
             for answer in ("CAP", "3 900 ₽", "ONE SIZE", "Кепка второго выпуска.", "/skip"):
                 say(1, answer)
             self.assertEqual(db.get_state(1)[1]["step"], "confirm")
@@ -2031,7 +2080,7 @@ class NativeMenuTests(unittest.TestCase):
             self.assertIsNone(db.get_state(500))
             # Главное меню — оно и есть точка возврата, кнопки «menu» в нём нет.
             self.assertIn("остановились", text)
-            self.assertIn("catalog", button_targets(markup))
+            self.assertIn("cat:drop", button_targets(markup))
 
     def test_message_and_button_limits_are_respected(self):
         """Обрезка не ломает разметку, а подпись кнопки не превышает лимит Telegram."""
@@ -2135,7 +2184,7 @@ class NativeMenuTests(unittest.TestCase):
 
             def run_to_sizes():
                 bot.start_add_product(1, 1)
-                bot.route_callback("cb", 1, 1, "addcat:access")
+                bot.route_callback("cb", 1, 1, "addcat:drop")
                 bot.handle_add_product_text(1, 1, "Парка зимняя удлинённая с мехом")
                 bot.handle_add_product_text(1, 1, "18 900 ₽")
 
@@ -2595,7 +2644,7 @@ class NativeMenuTests(unittest.TestCase):
             self.assertIn("устарела", text)
             # Актуальный экран — главное меню: разделы на месте, тупика нет.
             self.assertIn("Выбери вещь", text)
-            self.assertIn("catalog", button_targets(markup))
+            self.assertIn("cat:drop", button_targets(markup))
             bot.route_callback("cb", 500, 500, "product:honor-hoodie")
             _chat, text, markup = api.last(500)
             self.assertIn("ВЕЩЬ НЕ НАЙДЕНА", text)
@@ -2628,9 +2677,9 @@ class NativeMenuTests(unittest.TestCase):
             self.assertIn("ВИТРИНА</b>", text)
             labels = flat_buttons(markup)
             self.assertTrue(any("Выпуск" in l or "Первый дроп" in l for l in labels))
-            self.assertIn("Аксессуары · 1 вещь", labels)
+            self.assertNotIn("Аксессуары", " ".join(labels))
             self.assertNotIn("Худи", " ".join(labels))
-            self.assertIn("size_guide:catalog", button_targets(markup))
+            self.assertNotIn("size_guide:catalog", button_targets(markup))
 
     def test_album_labels_come_from_the_catalog(self):
         """Подписи кадров честные: берём их из каталога, а не придумываем."""
@@ -2642,7 +2691,12 @@ class NativeMenuTests(unittest.TestCase):
             self.assertEqual(len(api.albums), 1)
             _chat, photos, _caption, labels = api.albums[0]
             self.assertEqual(len(photos), len(labels))
-            self.assertEqual(labels[:3], ["Спереди", "Сзади", "Ткань и принт"])
+            expected = bot.catalog.get("tee-sila-i-chest")["image_labels"]
+            self.assertEqual(labels, expected[:6])
+            self.assertTrue(any("Спереди" in label for label in labels))
+            self.assertTrue(any("Сбоку" in label for label in labels))
+            self.assertTrue(any("Сзади" in label for label in labels))
+            self.assertTrue(any("Фурнитура" in label for label in labels))
             card = api.last(500)[1]
             self.assertIn("СИЛА И ЧЕСТЬ", card)
             self.assertIn("4 900 ₽", card)
@@ -2686,7 +2740,7 @@ class NativeMenuTests(unittest.TestCase):
             self.assertIn("Выбери вещь", api.last(500)[1])
             self.assertFalse(bot.user_command(500, 500, "/broadcast текст"))
 
-    def test_account_screen_shows_real_contact_and_priority(self):
+    def test_account_screen_shows_real_contact_and_gift_serial_state(self):
         """Кабинет показывает то, что действительно хранится."""
         with tempfile.TemporaryDirectory() as directory:
             api = MenuAPI()
@@ -2695,7 +2749,9 @@ class NativeMenuTests(unittest.TestCase):
             bot.route_callback("cb", 500, 500, "account")
             _chat, text, markup = api.last(500)
             self.assertIn("не указан", text)
-            self.assertIn("Приглашено: 0", text)
+            self.assertIn("серийный номер", text)
+            self.assertNotIn("Приглашено:", text)
+            self.assertNotIn("#500", text)
             self.assertIn("my_orders", button_targets(markup))
             db.set_phone(500, "+79991234567")
             bot.route_callback("cb", 500, 500, "account")
@@ -2803,7 +2859,7 @@ class NativeMenuTests(unittest.TestCase):
             self.assertEqual(len(button_rows(markup)[0]), 2, "разделы витрины — в две колонки")
             self.assertEqual(button_rows(markup)[-1], ["✖ Отмена"])
 
-            bot.route_callback("cb", 1, 1, "addcat:access")
+            bot.route_callback("cb", 1, 1, "addcat:drop")
             self.assertIn(f"ШАГ 2/{ADD_TOTAL}", api.last(1)[1])
             for answer in ("DROP 002 CAP", "3 900 ₽", "ONE SIZE", "Кепка второго выпуска.", "/skip"):
                 bot.handle_add_product_text(1, 1, answer)
@@ -2830,7 +2886,9 @@ class NativeMenuTests(unittest.TestCase):
             bot.admin_command(1, 1, "/broadcast ВЫПУСК СЕГОДНЯ В 19:00")
             rows = button_rows(api.last(1)[2])
             self.assertEqual(rows[-1], ["✖ Отмена"])
-            self.assertTrue(all(len(row) == 2 for row in rows[:-1]), rows)
+            options = rows[:-1]
+            self.assertTrue(all(len(row) == 2 for row in options[:-1]), rows)
+            self.assertIn(len(options[-1]), {1, 2}, rows)
             targets = button_targets(api.last(1)[2])
             self.assertIn("seg:all", targets)
             self.assertIn("seg:interest:hoodie", targets)

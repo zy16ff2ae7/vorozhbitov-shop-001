@@ -4,5 +4,5 @@
   "commit": null,
   "deployed": false,
   "url": null,
-  "notes": "No reproducible production release is asserted by this checkout. Deployment must replace this file with the actual immutable commit, UTC timestamp, artifact SHA-256 and verified URL."
+  "notes": "No production release, real payment, customer media approval or final production size-grid approval is asserted. Manager checkout still requires the real SUPPORT_USERNAME. Deployment must replace this file with the actual immutable commit, UTC timestamp, artifact SHA-256 and verified URL."
 }

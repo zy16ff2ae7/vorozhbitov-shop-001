@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createClient } = require('./miniapp/checkout.js');
+const { createClient, managerMessage, managerUrl } = require('./miniapp/checkout.js');
 function fixture(fetch) {
   const storage = new Map();
   const options = { fetch, read: key => storage.get(key), write: (key, value) => storage.set(key, value) };
@@ -8,6 +8,25 @@ function fixture(fetch) {
 }
 const payload = { consent: true, customer: { phone: '+79990000000' }, items: [{ product_id: 'tee', size: 'M' }] };
 const ok = () => ({ ok: true, status: 200, json: async () => ({ ok: true, payment_id: 'payment' }) });
+test('manager handoff contains the cart and never calls checkout transport', () => {
+  let calls = 0;
+  const f = fixture(async () => { calls++; return ok(); });
+  const message = f.client.managerMessage({
+    customer: { name: 'Buyer', phone: '+79990000000', city: 'Helsinki', address: 'Street 1', deliver: 'СДЭК' },
+    lines: [{ name: 'СИЛА И ЧЕСТЬ', size: 'M', quantity: 2, priceLabel: '4 900 ₽' }],
+    totalLabel: '9 800 ₽'
+  });
+  assert.match(message, /СИЛА И ЧЕСТЬ · размер M · 2 шт\. · 4 900 ₽/);
+  assert.match(message, /Итого за вещи: 9 800 ₽/);
+  assert.match(message, /Доставка: СДЭК/);
+  const url = f.client.managerUrl('@real_manager', message);
+  const parsed = new URL(url);
+  assert.equal(parsed.origin, 'https://t.me');
+  assert.equal(parsed.pathname, '/real_manager');
+  assert.equal(parsed.searchParams.get('text'), message);
+  assert.equal(managerUrl('', message), '');
+  assert.equal(calls, 0);
+});
 test('network failure retains payload key across reload and retry', async () => {
   const bodies = [];
   const f = fixture(async (_, options) => { bodies.push(JSON.parse(options.body)); if (bodies.length === 1) throw new TypeError('offline'); return ok(); });
