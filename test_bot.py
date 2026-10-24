@@ -138,6 +138,73 @@ class BotTests(unittest.TestCase):
         self.assertIn('if (mode !== "video") pauseProductVideo();', app)
         self.assertIn('if (document.hidden) pauseProductVideo();', app)
         self.assertIn('if (!product || state.stage === "video") return;', app)
+
+    def test_reference_typography_is_local_and_active_media_use_new_cuts(self):
+        root = Path(__file__).parent
+        miniapp = root / "miniapp"
+        styles = (miniapp / "styles.css").read_text(encoding="utf-8")
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        self.assertGreaterEqual(styles.count('font-family: "Sila Chest"'), 2)
+        self.assertIn('--font-display: "Sila Chest"', styles)
+        self.assertIn('--font-ui: "Sila Chest"', styles)
+        self.assertNotIn('font-family: "Manrope"', styles)
+        self.assertNotIn('font-family: "Unbounded"', styles)
+        self.assertNotIn('fonts/manrope-', index)
+        self.assertNotIn('fonts/unbounded-', index)
+        self.assertIn('class="brand-wordmark"', index)
+        app = (miniapp / "app.js").read_text(encoding="utf-8")
+        self.assertIn('px "Sila Chest", "Times New Roman", serif`', app)
+        self.assertNotIn('"Arial Narrow", Arial', app)
+        menu_preview = (root / "tools/menu_preview.py").read_text(encoding="utf-8")
+        self.assertIn('font: 15px/1.45 "Sila Chest", "Times New Roman", serif', menu_preview)
+        self.assertIn('content_type = "font/woff2"', menu_preview)
+        from tools.menu_preview import render_page
+        self.assertIn('font: 15px/1.45 "Sila Chest", "Times New Roman", serif', render_page())
+        for weight in (400, 700):
+            font = miniapp / f"fonts/sila-chest-{weight}.woff2"
+            self.assertTrue(font.is_file())
+            self.assertEqual(font.read_bytes()[:4], b"wOF2")
+            self.assertIn(f"fonts/sila-chest-{weight}.woff2", styles)
+        self.assertTrue((miniapp / "fonts/SilaChest-OFL.txt").is_file())
+        wordmark = miniapp / "assets/brand/sila-chest-wordmark.png"
+        self.assertTrue(wordmark.is_file())
+        self.assertEqual(wordmark.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+
+        catalog = Catalog(root / "catalog.json")
+        media = catalog.data["media"]
+        self.assertEqual(media["teaser"], "assets/video/drop-typography-18s.mp4")
+        self.assertEqual(media["teaser_poster"], "assets/video/drop-typography-18s-thumb.jpg")
+        self.assertEqual(media["teaser_thumbnail"], "assets/video/drop-typography-18s-thumb.jpg")
+        self.assertAlmostEqual(mp4_duration_seconds(miniapp / media["teaser"]), 18.0, places=2)
+        for product_id, old_name in (
+            ("tee-sila-i-chest", "tee-sila-i-chest-360.mp4"),
+            ("tee-vzglyad", "tee-vzglyad-360.mp4"),
+        ):
+            self.assertTrue(catalog.get(product_id)["video"].endswith("-360-v2.mp4"))
+            self.assertTrue((miniapp / "assets/video" / old_name).is_file(), "старый исходник удалён")
+        self.assertTrue((miniapp / "assets/video/campaign-v11.mp4").is_file(), "старый фильм удалён")
+
+    def test_typography_approval_pack_links_resolve(self):
+        root = Path(__file__).parent
+        approval = root / "approval"
+        readme = (approval / "README.md").read_text(encoding="utf-8")
+        for name in (
+            "tee-sila-i-chest-contact-sheet.jpg",
+            "tee-vzglyad-contact-sheet.jpg",
+            "drop-typography-18s-contact-sheet.jpg",
+            "tee-sila-i-chest-360-v2.mp4",
+            "tee-vzglyad-360-v2.mp4",
+            "drop-typography-18s.mp4",
+        ):
+            self.assertIn(name, readme)
+        links = re.findall(r"\]\(([^)]+)\)", readme)
+        self.assertGreater(len(links), 30)
+        for link in links:
+            if "://" in link or link.startswith("#"):
+                continue
+            with self.subTest(link=link):
+                self.assertTrue((approval / link).resolve().is_file(), link)
+
     def test_catalog_seed_is_copied_once_to_mutable_storage(self):
         with tempfile.TemporaryDirectory() as directory:
             seed = Path(__file__).with_name("catalog.json")

@@ -3,7 +3,7 @@ import math
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 import numpy as np
 
-REPO_DIR = "/Users/mac/Documents/Codex/2026-09-13/https-github-com-zy16ff2ae7-vorozhbitov-shop/work/vorozhbitov-shop"
+REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(REPO_DIR, "custom_emoji_pack/icons")
 os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -22,7 +22,7 @@ C_GOLD = (235, 185, 80, 255)       # EMV chip gold
 C_MUTED = (130, 145, 160, 255)     # Secondary typography
 C_BORDER = (45, 55, 68, 255)
 
-FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+FONT_BOLD = os.path.join(REPO_DIR, "miniapp/fonts/sila-chest-700.woff2")
 
 def get_font(size):
     return ImageFont.truetype(FONT_BOLD, size)
@@ -170,9 +170,10 @@ def make_drop():
     d.ellipse([235, 92, 365, 145], fill=C_WHITE)
     d.ellipse([247, 100, 353, 137], fill=C_CARBON)
     
-    # Authentic chest typography: «СИЛА И ЧЕСТЬ»
-    f_chest = get_font(32)
-    d.text((300, 235), "СИЛА И ЧЕСТЬ", font=f_chest, fill=C_WHITE, anchor="mm")
+    # Exact reference contours for the small chest print; other captions use Sila Chest.
+    wordmark = Image.open(os.path.join(REPO_DIR, "miniapp/assets/brand/sila-chest-wordmark.png")).convert("RGBA")
+    wordmark = wordmark.resize((220, 46), Image.Resampling.LANCZOS)
+    im.alpha_composite(wordmark, (300 - wordmark.width // 2, 235 - wordmark.height // 2))
     # Red tactical accent dash
     d.rectangle([230, 260, 370, 268], fill=C_RED)
     
