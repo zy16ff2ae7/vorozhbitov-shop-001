@@ -76,7 +76,7 @@ def teaser_sheet() -> None:
     ffmpeg = os.environ.get("FFMPEG") or shutil.which("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("FFMPEG is required for the teaser review sheet")
-    video = MINIAPP / "assets/video/drop-glaza-18s.mp4"
+    video = MINIAPP / "assets/video/drop-vzglyad-18s.mp4"
     with tempfile.TemporaryDirectory(prefix="typography-review-") as directory:
         pattern = str(Path(directory) / "frame-%02d.jpg")
         subprocess.run(
@@ -97,7 +97,7 @@ def teaser_sheet() -> None:
             draw.text((x, y + 389), f"{index * 2:02d}–{index * 2 + 2:02d} СЕК", font=font(18, True), fill=INK)
         draw.line((48, 1442, 744, 1442), fill=(50, 48, 46), width=1)
         draw.text((48, 1460), "Статус: на согласование. Предметные рендеры, не заявленная живая съёмка.", font=font(18), fill=MUTED)
-        canvas.save(APPROVAL / "drop-glaza-18s-contact-sheet.jpg", quality=94, subsampling=0, optimize=True)
+        canvas.save(APPROVAL / "drop-vzglyad-18s-contact-sheet.jpg", quality=94, subsampling=0, optimize=True)
 
 
 def main() -> None:

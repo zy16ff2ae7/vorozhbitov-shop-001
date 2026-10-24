@@ -139,21 +139,21 @@ class BotTests(unittest.TestCase):
         self.assertIn('if (document.hidden) pauseProductVideo();', app)
         self.assertIn('if (!product || state.stage === "video") return;', app)
 
-    def test_public_product_name_is_glaza_with_stable_technical_id(self):
+    def test_public_product_name_is_vzglyad_with_stable_technical_id(self):
         root = Path(__file__).parent
         catalog = Catalog(root / "catalog.json")
         product = catalog.get("tee-vzglyad")
         self.assertEqual(product["id"], "tee-vzglyad", "технический ID нельзя ломать")
-        self.assertEqual(product["name"], "ГЛАЗА")
-        self.assertIn("Футболка «ГЛАЗА»", product["description"])
-        self.assertNotIn("ВЗГЛЯД", product["description"])
+        self.assertEqual(product["name"], "ВЗГЛЯД")
+        self.assertIn("Футболка «ВЗГЛЯД»", product["description"])
+        self.assertNotIn("ГЛАЗА", product["description"])
         index = (root / "miniapp/index.html").read_text(encoding="utf-8")
-        self.assertIn('data-hint="глаза">глаза</button>', index)
-        self.assertNotIn('data-hint="взгляд"', index)
+        self.assertIn('data-hint="взгляд">взгляд</button>', index)
+        self.assertNotIn('data-hint="глаза"', index)
         approval = (root / "approval/README.md").read_text(encoding="utf-8")
-        self.assertIn("Футболка «ГЛАЗА»", approval)
-        self.assertNotIn("ВЗГЛЯД", approval)
-        self.assertIn("drop-glaza-18s.mp4", catalog.data["media"]["teaser"])
+        self.assertIn("Футболка «ВЗГЛЯД»", approval)
+        self.assertNotIn("ГЛАЗА", approval)
+        self.assertIn("drop-vzglyad-18s.mp4", catalog.data["media"]["teaser"])
 
     def test_reference_typography_is_local_and_active_media_use_new_cuts(self):
         root = Path(__file__).parent
@@ -188,9 +188,9 @@ class BotTests(unittest.TestCase):
 
         catalog = Catalog(root / "catalog.json")
         media = catalog.data["media"]
-        self.assertEqual(media["teaser"], "assets/video/drop-glaza-18s.mp4")
-        self.assertEqual(media["teaser_poster"], "assets/video/drop-glaza-18s-thumb.jpg")
-        self.assertEqual(media["teaser_thumbnail"], "assets/video/drop-glaza-18s-thumb.jpg")
+        self.assertEqual(media["teaser"], "assets/video/drop-vzglyad-18s.mp4")
+        self.assertEqual(media["teaser_poster"], "assets/video/drop-vzglyad-18s-thumb.jpg")
+        self.assertEqual(media["teaser_thumbnail"], "assets/video/drop-vzglyad-18s-thumb.jpg")
         self.assertAlmostEqual(mp4_duration_seconds(miniapp / media["teaser"]), 18.0, places=2)
         for product_id, old_name in (
             ("tee-sila-i-chest", "tee-sila-i-chest-360.mp4"),
@@ -199,7 +199,8 @@ class BotTests(unittest.TestCase):
             self.assertTrue(catalog.get(product_id)["video"].endswith("-360-v2.mp4"))
             self.assertTrue((miniapp / "assets/video" / old_name).is_file(), "старый исходник удалён")
         self.assertTrue((miniapp / "assets/video/campaign-v11.mp4").is_file(), "старый фильм удалён")
-        self.assertTrue((miniapp / "assets/video/drop-typography-18s.mp4").is_file(), "прежний teaser удалён")
+        for previous in ("drop-typography-18s.mp4", "drop-glaza-18s.mp4"):
+            self.assertTrue((miniapp / "assets/video" / previous).is_file(), f"прежний teaser удалён: {previous}")
 
     def test_typography_approval_pack_links_resolve(self):
         root = Path(__file__).parent
@@ -208,10 +209,10 @@ class BotTests(unittest.TestCase):
         for name in (
             "tee-sila-i-chest-contact-sheet.jpg",
             "tee-vzglyad-contact-sheet.jpg",
-            "drop-glaza-18s-contact-sheet.jpg",
+            "drop-vzglyad-18s-contact-sheet.jpg",
             "tee-sila-i-chest-360-v2.mp4",
             "tee-vzglyad-360-v2.mp4",
-            "drop-glaza-18s.mp4",
+            "drop-vzglyad-18s.mp4",
             "welcome-no-intro-22s.mp4",
             "hero-sila-chest-v2.jpg",
         ):
