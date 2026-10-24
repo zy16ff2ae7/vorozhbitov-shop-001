@@ -98,7 +98,7 @@ def run_scenarios(workdir: Path) -> int:
         webapp_url="https://shop.example.com",
         manager_chat_id=1,
         brand_name="ВОРОЖБИТОВ | ОДЕЖДА",
-        support_username="",
+        support_username="smoke_manager",
         database_path=workdir / "data/bot.sqlite3",
         catalog_path=catalog_path,
         health_port=8080,
@@ -117,16 +117,16 @@ def run_scenarios(workdir: Path) -> int:
         ("Открытие каталога", callback(500, "catalog")),
         ("Категория выпуска", callback(500, "cat:drop")),
         ("Карточка товара", callback(500, "product:tee-sila-i-chest")),
-        ("Выбор размера", callback(500, "size:tee-sila-i-chest:L")),
+        ("Основной заказ через менеджера", callback(500, "order_direct:tee-sila-i-chest")),
+        ("Размер для менеджера", callback(500, "msize:tee-sila-i-chest:L")),
+        ("Выбор размера для отдельной онлайн-оплаты", callback(500, "size:tee-sila-i-chest:L")),
         ("Запрос согласия перед контактом", callback(500, "consent:yes")),
         ("Клиент прислал номер", message(500, "+79991234567")),
         ("Второй клиент зашёл", message(700, "/start")),
         ("Интерес пропустил", callback(700, "intr:skip")),
         ("Второй клиент выбрал размер", callback(700, "size:tee-sila-i-chest:M")),
         ("Второй клиент отказал в согласии", callback(700, "consent:no")),
-        ("Реферальная механика", callback(500, "referral")),
         ("Лист ожидания", callback(500, "wsize:tee-sila-i-chest:XXL")),
-        ("Lookbook", callback(500, "lookbook")),
         # native-меню: главный экран, покупки, карточка покупки, кабинет и поддержка.
         ("Главное меню покупателя", message(500, "/menu")),
         ("Мои покупки", callback(500, "my_orders")),
@@ -144,14 +144,15 @@ def run_scenarios(workdir: Path) -> int:
         ("Покупки у команды", message(1, "/orders")),
         ("Карточка покупки у команды", callback(1, "aord:1")),
         ("Подтверждение покупки", callback(1, "order:1:confirmed")),
-        ("Завершение покупки", callback(1, "order:1:completed")),
+        ("Передача в доставку", callback(1, "order:1:shipped")),
+        ("Получение покупки", callback(1, "order:1:received")),
         ("Второй пользователь по реф-ссылке", message(600, "/start ref500")),
         ("Топ рефералов", message(1, "/top")),
         ("Черновик рассылки", message(1, "/broadcast ВЫПУСК СЕГОДНЯ В 19:00 — размеры разберут за час")),
         ("Выбор сегмента", callback(1, "seg:interest:hoodie")),
         ("Подтверждение рассылки", callback(1, "admin:broadcast_confirm")),
         ("Админ добавляет вещь", message(1, "/add")),
-        ("Категория новой вещи", callback(1, "addcat:access")),
+        ("Категория новой вещи", callback(1, "addcat:drop")),
         ("Название", message(1, "DROP 002 CAP")),
         ("Цена", message(1, "3 900 ₽")),
         ("Размеры", message(1, "ONE SIZE")),
@@ -171,11 +172,21 @@ def run_scenarios(workdir: Path) -> int:
             assert db.mark_payment_paid(order["payment_id"], "stars", "smoke-charge"), "payment failed"
         assert brand_bot.handle_update(update), f"Handler failed: {title}"
         if title == "Старт нового пользователя":
-            assert any(method == "sendVideo" for method, _ in SENT), "welcome video missing"
+            assert any(method == "sendPhoto" for method, _ in SENT), "welcome photo missing"
+            assert not any(method == "sendVideo" for method, _ in SENT), "retired drop film returned"
+        if title == "Размер для менеджера":
+            links = [button.get("url", "") for method, payload in SENT if method in {"sendMessage", "editMessageText"}
+                     for row in payload.get("reply_markup", {}).get("inline_keyboard", [])
+                     for button in row]
+            assert any(link.startswith("https://t.me/smoke_manager?text=") for link in links), links
+            assert db.stats()["orders"] == 0, "manager deep link created a false order"
+            assert not db.connection().execute("SELECT 1 FROM payments LIMIT 1").fetchone(), "manager deep link created an invoice"
         if title == "Подтверждение покупки":
             assert db.get_order(1)["status"] == "confirmed", "confirmation failed"
-        if title == "Завершение покупки":
-            assert db.get_order(1)["status"] == "completed", "completion failed"
+        if title == "Передача в доставку":
+            assert db.get_order(1)["status"] == "shipped", "shipment failed"
+        if title == "Получение покупки":
+            assert db.get_order(1)["status"] == "received", "receipt failed"
         show()
 
     for thread in threading.enumerate():

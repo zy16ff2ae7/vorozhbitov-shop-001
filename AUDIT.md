@@ -1,8 +1,22 @@
 # Аудит проекта «СИЛА И ЧЕСТЬ» · 2026-10-24
 
-Срез: ветка `arena/0794331d-vorozhbitov-shop-001`, коммит `1bc9a364c646ee31de3e7f80cc0b253ff1a667be`.
+Первоначальный срез: ветка `arena/0794331d-vorozhbitov-shop-001`, коммит `1bc9a364c646ee31de3e7f80cc0b253ff1a667be`. Актуальная доработка ведётся в `arena/59ae83d7-vorozhbitov-shop-001`.
 
 Проверялись текущие код, тесты, каталог, контейнерная конфигурация, Git-репозиторий и документация. Продакшен, реальные аккаунты Telegram и платёжных провайдеров не затрагивались. Удалённый репозиторий на момент проверки приватный.
+
+## Актуальный срез доработок · 24 октября 2026
+
+| Область | Подтверждённое состояние рабочего дерева |
+|---|---|
+| Навигация | Основные разделы — «Первый дроп», «Канал», «О бренде». Film/lookbook/join/referral/size quiz убраны из соответствующих меню и Mini App; «Аксессуары» больше не отдельная продающая категория. Выбор размера и waitlist сохранены. |
+| Manager-first | Готовый Telegram deep link содержит состав, размеры, количество, цены и контакты. Ни native, ни Mini App manager path не создаёт заказ, pending invoice или списание; корзина не очищается. Online checkout остаётся отдельной кнопкой. |
+| Кабинет | Локальная псевдоистория удалена. API отдаёт только серверные заказы со snapshot контактов/доставки, суммой, способом и статусом оплаты, серийным номером и fulfilment-стадиями. PAN и `provider_id` в API кабинета отсутствуют. Старый `note` доступен как `legacy_details`, если structured snapshot отсутствует. |
+| Жетон | Номер 1–100 выделяется в `BEGIN IMMEDIATE`, связан с active reservation, имеет partial unique index, backfill для старых резервов и освобождение/повторное использование после отмены. Проверены граница 100 и параллельные checkout. |
+| Доставка | Разрешены только СДЭК/Яндекс. Добавлены admin transitions `confirmed → shipped → received`, нейтральные клиентские подписи и сохранение старого `completed`. |
+| Материалы | Основная футболка имеет предметные front/back/side/detail/hardware кадры. Для второй честно указан combined front/back макет. Неподтверждённые числовые замеры удалены из активных сценариев; `media_note` не объявляет материалы согласованными. |
+| Проверки | 200/200 Python tests с optional media dependencies, 14/14 Node tests, `smoke_test.py`, syntax и `tools/validate_release.py` зелёные. Chromium проверяет тёмную тему, manager flow, кабинет, отсутствие page errors и overflow на 320/390/1280/1440 px. |
+
+**Не закрытые внешние gates:** реальный `SUPPORT_USERNAME` не задан и не выдуман; фактического approval заказчицы на медиа и финальной производственной сетки в workspace нет; production deploy, provider sandbox и реальные списания не выполнялись. Исходные материалы сохранены.
 
 ## Итог исправлений после аудита
 
@@ -17,7 +31,7 @@
 | Возвраты | Отмена любой позиции оплаченной корзины отменяет всю оплату и фиксирует полную сумму возврата; завершение возврата имеет защищённый односторонний переход. |
 | Support/health/backups | Нет ложного fallback на ненастроенный username; `/health` проверяет SQLite и каталог; ежедневные консистентные backup с rotation и fsync; добавлена безопасная retention-политика служебных записей. |
 | Mini App | Сохранена фирменная тёмная editorial-тема: графитовые витрина, карточка, корзина, checkout, профиль, формы и модальные окна, красные CTA; удалены saved/try-on, исправлены фото, SVG-иконки, keyboard tabs, Telegram colors и русские captions. |
-| Проверки | 192 Python tests, 13 Node tests, smoke, syntax, release/media validation и Chromium-сценарии 320/390/1440 px зелёные; page errors и horizontal overflow отсутствуют. CI также собирает runtime image и запускает container smoke без внешней сети. |
+| Проверки | 200 Python tests, 14 Node tests, smoke, syntax, release/media validation и Chromium-сценарии 320/390/1440 px зелёные; page errors и horizontal overflow отсутствуют. CI также собирает runtime image и запускает container smoke без внешней сети. |
 
 **Внешние release gates не подменены локальными тестами:** перед реальными деньгами всё ещё обязательны sandbox-проверки Lava/Crypto Pay, deploy и smoke на боевом окружении, внешнее хранение backup/alerting и проверка в Telegram WebView на iOS/Android. Большая Git-история требует отдельной согласованной LFS/архивной миграции; исходные материалы заказчика не удалялись. Локальный Docker недоступен, поэтому сборка образа и его smoke вынесены в GitHub Actions.
 

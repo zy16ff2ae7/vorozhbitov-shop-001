@@ -360,6 +360,82 @@ class CheckoutRegressionTests(unittest.TestCase):
             with exc:
                 return exc.code, exc.read()
 
+    def test_http_orders_include_safe_historical_details(self):
+        payload = copy.deepcopy(self.payload)
+        payload['customer'] = {
+            'name': 'Historical Buyer', 'phone': '+79990000000', 'city': 'Old City',
+            'address': 'Old Street, 1', 'entrance': '2', 'deliver': 'СДЭК', 'note': 'before noon',
+        }
+        receipt = self.checkout(payload)
+        self.db.mark_payment_paid(receipt['payment_id'], 'lava', 'provider-transaction')
+        # A later profile edit must not rewrite the delivery snapshot of an old order.
+        self.db.set_profile(420, {'name': 'New Name', 'city': 'New City', 'address': 'New Street', 'deliver': 'Яндекс'})
+        status, body = self.http('/api/my-orders')
+        self.assertEqual(status, 200)
+        order = json.loads(body)['orders'][0]
+        self.assertEqual(order['product_name'], 'СИЛА И ЧЕСТЬ')
+        self.assertEqual(order['size'], 'M')
+        self.assertEqual(order['quantity'], 1)
+        self.assertEqual(order['amount_rub'], 4900)
+        self.assertEqual(order['payment_method'], 'lava')
+        self.assertEqual(order['payment_method_label'], 'карта / СБП')
+        self.assertEqual(order['phone'], '+79990000000')
+        self.assertEqual(order['customer_name'], 'Historical Buyer')
+        self.assertEqual(order['city'], 'Old City')
+        self.assertEqual(order['address'], 'Old Street, 1')
+        self.assertEqual(order['entrance'], '2')
+        self.assertEqual(order['delivery_method'], 'СДЭК')
+        self.assertEqual(order['legacy_details'], '')
+        self.assertEqual(order['gift']['serial'], 1)
+        self.assertEqual(order['gift']['serial_label'], '00001')
+        self.assertNotIn('provider_id', order)
+        self.assertNotIn('card_number', order)
+        self.assertNotIn('pan', order)
+        stored = self.db.get_order(receipt['order_ids'][0])
+        self.assertEqual(stored['city'], 'Old City')
+        self.assertEqual(stored['address'], 'Old Street, 1')
+        self.assertEqual(stored['deliver'], 'СДЭК')
+
+    def test_delivery_stages_and_legacy_completion_are_explicit(self):
+        receipt = self.checkout()
+        order_id = receipt['order_ids'][0]
+        self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'charge')
+        self.assertEqual(self.db.set_order_status(order_id, 'confirmed')[0]['status'], 'confirmed')
+        markup = self.bot.order_status_keyboard(order_id, 'confirmed')
+        self.assertIn(f'order:{order_id}:shipped', str(markup))
+        shipped, changed = self.db.set_order_status(order_id, 'shipped')
+        self.assertTrue(changed)
+        self.assertEqual(shipped['status'], 'shipped')
+        markup = self.bot.order_status_keyboard(order_id, 'shipped')
+        self.assertIn(f'order:{order_id}:received', str(markup))
+        received, changed = self.db.set_order_status(order_id, 'received')
+        self.assertTrue(changed)
+        self.assertEqual(received['status'], 'received')
+        with self.assertRaises(ValueError):
+            self.db.set_order_status(order_id, 'cancelled')
+        # Legacy completed orders remain valid; the new flow does not rewrite them.
+        legacy = self.checkout({'request_id': 'legacy-complete', 'consent': True,
+                                'customer': {'phone': '+79990000000', 'city': 'Test'},
+                                'items': [{'product_id': 'tee-vzglyad', 'size': 'M', 'quantity': 1}]})
+        legacy_id = legacy['order_ids'][0]
+        self.db.mark_payment_paid(legacy['payment_id'], 'stars', 'legacy-charge')
+        self.db.set_order_status(legacy_id, 'confirmed')
+        self.assertEqual(self.db.set_order_status(legacy_id, 'completed')[0]['status'], 'completed')
+        status, body = self.http('/api/my-orders')
+        self.assertEqual(status, 200)
+        orders = {row['id']: row for row in json.loads(body)['orders']}
+        self.assertEqual(orders[order_id]['status_label'], 'получен')
+        self.assertEqual(orders[order_id]['delivery_status_label'], 'получен')
+        self.assertEqual(orders[legacy_id]['status_label'], 'завершён')
+
+    def test_offline_pickup_is_not_accepted_as_a_delivery_method(self):
+        payload = copy.deepcopy(self.payload)
+        payload['customer']['deliver'] = 'Самовывоз'
+        result = self.checkout(payload)
+        self.assertFalse(result['ok'])
+        self.assertEqual(self.db.stats()['orders'], 0)
+        self.assertEqual(self.db.connection().execute('SELECT COUNT(*) FROM payments').fetchone()[0], 0)
+
     def test_http_cancel_rejects_paid_order(self):
         receipt = self.checkout()
         self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'charge')
@@ -987,12 +1063,16 @@ class GiftInventoryRegressionTests(unittest.TestCase):
         self.assertEqual(receipt['amount_rub'], 4900)
         self.assertEqual(receipt['gift']['product_id'], 'tag-sila-i-chest')
         self.assertEqual(receipt['gift']['quantity'], 1)
+        self.assertEqual(receipt['gift']['serial'], 1)
+        self.assertEqual(receipt['gift']['serial_label'], '00001')
         self.assertEqual(self.inventory()['available'], 99)
         self.assertEqual(self.checkout()['payment_id'], receipt['payment_id'])
         self.assertEqual(self.inventory()['available'], 99, 'retry must not reserve another gift')
         payment = self.db.get_payment(receipt['payment_id'])
         self.assertEqual(payment['gift_name'], 'ЖЕТОН')
         self.assertEqual(payment['gift_qty'], 1)
+        self.assertEqual(payment['gift_serial'], 1)
+        self.assertEqual(self.db.gift_for_user(420)['gift_serial'], 1)
         rejected = self.bot.checkout_web_payload(
             {'id': 420, 'first_name': 'Test'},
             {'request_id': 'gift-as-product', 'consent': True,
@@ -1043,6 +1123,57 @@ class GiftInventoryRegressionTests(unittest.TestCase):
         self.assertTrue(self.checkout()['ok'])
         self.assertEqual(self.inventory()['available'], 99)
 
+    def test_gift_serial_is_released_and_reused_with_the_same_reservation(self):
+        first = self.checkout(request_id='serial-first')
+        second = self.checkout(user_id=421, request_id='serial-second')
+        self.assertEqual((first['gift']['serial'], second['gift']['serial']), (1, 2))
+        self.db.set_order_status(first['order_ids'][0], 'cancelled', customer_id=420)
+        self.assertIsNone(self.db.gift_for_user(420))
+        self.assertIsNotNone(self.db.get_payment(first['payment_id'])['gift_released_at'])
+        third = self.checkout(user_id=422, request_id='serial-third')
+        self.assertEqual(third['gift']['serial'], 1, 'the freed run number is reusable')
+        self.assertEqual(self.db.gift_for_user(421)['gift_serial'], 2)
+        self.assertEqual(self.db.gift_for_user(422)['gift_serial'], 1)
+        active = self.db.connection().execute(
+            'SELECT gift_serial FROM payments WHERE gift_released_at IS NULL AND gift_serial IS NOT NULL'
+        ).fetchall()
+        self.assertEqual(sorted(row[0] for row in active), [1, 2])
+
+    def test_legacy_gift_reservation_gets_a_real_serial_before_new_checkout(self):
+        self.db.upsert_user({'id': 420, 'first_name': 'Legacy'})
+        self.db.create_payment(
+            'legacy-gift-payment', 420, 4900, 0,
+            gift={'product_id': 'tag-sila-i-chest', 'name': 'ЖЕТОН'},
+        )
+        self.db.gift_status(self.catalog.get('tag-sila-i-chest'))
+        self.assertEqual(self.db.get_payment('legacy-gift-payment')['gift_serial'], 1)
+        receipt = self.checkout(user_id=421, request_id='after-legacy-backfill')
+        self.assertEqual(receipt['gift']['serial'], 2)
+
+    def test_gift_serial_hundred_is_the_last_and_never_overflows(self):
+        for serial in range(1, 100):
+            self.db.create_payment(
+                f'seed-serial-{serial}', 1000 + serial, 4900, 0,
+                gift={'product_id': 'tag-sila-i-chest', 'name': 'ЖЕТОН', 'serial': serial},
+            )
+        self.db.connection().execute(
+            "INSERT INTO inventory(product_id, total, available, updated_at) "
+            "VALUES ('tag-sila-i-chest', 100, 1, '2026-01-01T00:00:00+00:00')"
+        )
+        last = self.checkout(user_id=420, request_id='serial-hundred')
+        self.assertEqual(last['gift']['serial'], 100)
+        self.assertEqual(last['gift']['serial_label'], '00100')
+        self.assertEqual(self.inventory()['available'], 0)
+        without_gift = self.checkout(user_id=421, request_id='serial-hundred-one')
+        self.assertTrue(without_gift['ok'], 'the main item remains purchasable after the gift run ends')
+        self.assertIsNone(without_gift['gift'])
+        self.assertEqual(self.db.connection().execute(
+            'SELECT COUNT(*) FROM payments WHERE gift_serial IS NOT NULL AND gift_released_at IS NULL'
+        ).fetchone()[0], 100)
+        self.assertEqual(self.db.connection().execute(
+            'SELECT MAX(gift_serial) FROM payments WHERE gift_released_at IS NULL'
+        ).fetchone()[0], 100)
+
     def test_parallel_checkouts_never_oversell_gift_stock(self):
         self.catalog.get('tag-sila-i-chest')['gift_stock'] = 3
         def submit(index):
@@ -1054,6 +1185,7 @@ class GiftInventoryRegressionTests(unittest.TestCase):
             results = list(pool.map(submit, range(8)))
         self.assertTrue(all(result.get('ok') or result.get('code') == 'gift_unavailable' for result in results))
         self.assertEqual(sum(bool(result.get('gift')) for result in results), 3)
+        self.assertEqual(sorted(result['gift']['serial'] for result in results if result.get('gift')), [1, 2, 3])
         self.assertEqual(self.inventory()['available'], 0)
         self.assertEqual(self.db.connection().execute(
             'SELECT COUNT(*) FROM payments WHERE gift_qty=1').fetchone()[0], 3)
@@ -1074,12 +1206,38 @@ class GiftInventoryRegressionTests(unittest.TestCase):
         self.assertEqual(self.db.connection().execute(
             'SELECT COUNT(*) FROM payment_methods').fetchone()[0], 0)
 
+    def test_native_manager_order_prefills_message_without_creating_an_invoice(self):
+        manager_bot = BrandBot(replace(self.settings, support_username='real_manager'), self.api, self.db, self.catalog)
+        self.api.reset_mock()
+        self.assertTrue(manager_bot.route_callback('cb-manager', 420, 420, 'order_direct:tee-sila-i-chest'))
+        self.assertIn('Выбери размер', self.api.send_message.call_args.args[1])
+        self.assertTrue(manager_bot.route_callback('cb-size', 420, 420, 'msize:tee-sila-i-chest:M'))
+        call = self.api.send_message.call_args
+        self.assertIn('ЗАКАЗ ГОТОВ К ОТПРАВКЕ', call.args[1])
+        markup = call.args[2]
+        url = markup['inline_keyboard'][0][0]['url']
+        self.assertEqual(urllib.parse.urlsplit(url).netloc, 't.me')
+        self.assertEqual(urllib.parse.urlsplit(url).path, '/real_manager')
+        message = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)['text'][0]
+        self.assertIn('СИЛА И ЧЕСТЬ', message)
+        self.assertIn('размер M', message)
+        self.assertIn('1 шт.', message)
+        self.assertIn('4 900', message)
+        self.assertEqual(self.db.stats()['orders'], 0)
+        self.assertEqual(self.db.connection().execute('SELECT COUNT(*) FROM payments').fetchone()[0], 0)
+        self.api.create_invoice_link.assert_not_called()
+
     def test_empty_support_configuration_never_uses_a_hardcoded_account(self):
         self.assertNotIn('intellectual_sabotage', self.bot.support_text())
         self.assertTrue(self.bot.route_callback('cb', 420, 420, 'order_direct:tee-sila-i-chest'))
         text = self.api.send_message.call_args.args[1]
-        self.assertIn('РАЗМЕР', text)
+        self.assertIn('МЕНЕДЖЕР ПОКА НЕ ПОДКЛЮЧЁН', text)
+        self.assertIn('Заказ через чат не создан', text)
+        markup = self.api.send_message.call_args.args[2]
+        self.assertIn('want:tee-sila-i-chest', str(markup))
         self.assertNotIn('intellectual_sabotage', text)
+        self.assertEqual(self.db.stats()['orders'], 0)
+        self.assertEqual(self.db.connection().execute('SELECT COUNT(*) FROM payments').fetchone()[0], 0)
 
 
 class WebhookIntegrityRegressionTests(unittest.TestCase):
