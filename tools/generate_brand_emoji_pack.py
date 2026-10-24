@@ -61,8 +61,8 @@ def get_clean_sword(target_w=None, target_h=None, color=C_WHITE):
     return img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
 def get_clean_seal(size=400, color=C_WHITE):
-    """Extracts authentic round seal from sila-chest-seal.jpg"""
-    seal_path = os.path.join(REPO_DIR, "miniapp/assets/sila-chest-seal.jpg")
+    """Extracts authentic round seal from sila-chest-seal-v2.jpg"""
+    seal_path = os.path.join(REPO_DIR, "miniapp/assets/sila-chest-seal-v2.jpg")
     im = Image.open(seal_path).convert("L")
     crop = im.crop((17, 13, 490, 485)) # 473 x 472
     arr = np.array(crop).astype(float)
@@ -243,7 +243,7 @@ def make_orders():
     finalize(im, "04_orders.png")
 
 # =============================================================
-# 05. PROFILE — Стальной жетон «СИЛА И ЧЕСТЬ» (по tag-sich-01.jpg)
+# 05. PROFILE — Стальной жетон «СИЛА И ЧЕСТЬ» (по tag-sich-01-v2.jpg)
 # =============================================================
 def make_profile():
     im = make_canvas()
@@ -353,7 +353,7 @@ def make_cart():
     finalize(im, "07_cart.png")
 
 # =============================================================
-# 08. RULER — Тканый шеврон у подола / Замеры (tee-detail-v4.jpg)
+# 08. RULER — Тканый шеврон у подола / Замеры (tee-detail-v5.jpg)
 # =============================================================
 def make_ruler():
     im = make_canvas()

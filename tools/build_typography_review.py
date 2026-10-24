@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Rebuild the typography review sheets from the active catalog assets.
+"""Compatibility entry point for the current versioned logo review builders.
 
-Requires Pillow. The optional teaser sheet also needs FFmpeg (binary path can be
-provided through FFMPEG). No production size chart or customer approval is
+The maintained implementations live in ``rebuild_logo_media.py`` and
+``rebuild_logo_teaser.py``.  No production size chart or customer approval is
 inferred: every sheet keeps the explicit review status.
 """
 from __future__ import annotations
@@ -101,11 +101,16 @@ def teaser_sheet() -> None:
 
 
 def main() -> None:
-    APPROVAL.mkdir(exist_ok=True)
-    products = {p["id"]: p for p in json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))["products"]}
-    product_sheet("tee-sila-i-chest", products["tee-sila-i-chest"]["name"], "tee-sich-", "drop/tee-detail-v4.jpg", "tee-sila-i-chest-360-v2.mp4")
-    product_sheet("tee-vzglyad", products["tee-vzglyad"]["name"], "tee-vzglyad-", "drop/tee-vzglyad-detail.jpg", "tee-vzglyad-360-v2.mp4")
-    teaser_sheet()
+    """Compatibility entry point for the current versioned logo review builders."""
+    try:
+        from .rebuild_logo_media import main as rebuild_media
+        from .rebuild_logo_teaser import main as rebuild_teaser
+    except ImportError:  # direct script execution
+        from rebuild_logo_media import main as rebuild_media
+        from rebuild_logo_teaser import main as rebuild_teaser
+
+    rebuild_media()
+    rebuild_teaser()
 
 
 if __name__ == "__main__":
