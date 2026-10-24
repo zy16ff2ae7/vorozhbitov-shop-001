@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           # Root code/tests are included automatically; fetch only runtime
@@ -20,11 +20,12 @@ jobs:
           sparse-checkout: |
             miniapp
             tools
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: pip
-      - uses: actions/setup-node@v4
+          cache-dependency-path: requirements-test.txt
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Install optional media-test dependencies
