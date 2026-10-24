@@ -430,8 +430,33 @@ button:disabled { opacity: .45; cursor: default; transform: none; }
 .qty-control button { position: relative; }
 .qty-control button::after { content: ""; position: absolute; inset: -5px; }
 .size-button { min-height: 44px; }
-/* Фирменное выделение текста вместо системного синего. */
-::selection { background: var(--red); color: #fff; }
+/* Фирменное выделение текста — только в текстовых зонах.
+   Глобальный ::selection + long-press в iOS/Telegram WebView заливал
+   весь .view3d/.sheet-image красным при drag 360°. */
+.sheet-description::selection,
+.sign-block::selection,
+.faq-list::selection,
+.sheet-content p::selection,
+.sheet-content li::selection,
+.welcome-copy p::selection {
+  background: var(--red);
+  color: #fff;
+}
+
+/* Медиа-блок 360°/фото: без выделения и callout, чтобы тап-драг не поднимал selection. */
+.sheet-image,
+.sheet-image *,
+.view3d,
+.view3d *,
+.media-toolbar,
+.media-toolbar *,
+.view3d-hint,
+.stage-switch,
+.stage-switch * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
 @media (hover: none) {
   .product-card:active { transform: scale(.985); }
 }
