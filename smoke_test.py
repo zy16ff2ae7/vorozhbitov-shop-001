@@ -97,7 +97,7 @@ def run_scenarios(workdir: Path) -> int:
         channel_url="https://t.me/+XufFz8GGR0o3Njky",
         webapp_url="https://shop.example.com",
         manager_chat_id=1,
-        brand_name="ВОРОЖБИТОВ | ОДЕЖДА",
+        brand_name="СИЛА И ЧЕСТЬ",
         support_username="smoke_manager",
         database_path=workdir / "data/bot.sqlite3",
         catalog_path=catalog_path,

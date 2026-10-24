@@ -367,7 +367,10 @@
     modal.classList.add("hidden");
     state.modalStack = state.modalStack.filter(item => item !== id);
     if (!state.modalStack.length) document.body.classList.remove("modal-open");
-    if (id === "productModal") stop3D();
+    if (id === "productModal") {
+      stop3D();
+      pauseProductVideo();
+    }
     if (id === "payModal") stopPayPoll();
     syncModalLayers();
     const previous = state.modalFocus.get(id);
@@ -407,18 +410,38 @@
     if (state.viewer) state.viewer.stop();
   }
 
+  function pauseProductVideo() {
+    const video = $("#sheetVideo");
+    if (video) video.pause();
+  }
+
+  function playProductVideo() {
+    const video = $("#sheetVideo");
+    if (!video || !state.currentProduct || !state.currentProduct.video) return;
+    const playback = video.play();
+    if (playback && typeof playback.catch === "function") playback.catch(() => { /* Controls remain available after an autoplay block. */ });
+  }
+
   function setStage(mode, silent) {
+    if (mode === "video" && (!state.currentProduct || !state.currentProduct.video)) mode = "photo";
     state.stage = mode;
     const canvas = $("#view3d");
     const photo = $("#sheetImage");
+    const video = $("#sheetVideo");
     const hint = $("#view3dHint");
     const dots = $("#galleryDots");
+    if (mode !== "3d") stop3D();
+    if (mode !== "video") pauseProductVideo();
     if ($("#stage3d")) $("#stage3d").classList.toggle("active", mode === "3d");
     if ($("#stagePhoto")) $("#stagePhoto").classList.toggle("active", mode === "photo");
+    if ($("#stageVideo")) $("#stageVideo").classList.toggle("active", mode === "video");
     if (canvas) canvas.classList.toggle("hidden", mode !== "3d");
     if (photo) photo.classList.toggle("hidden", mode !== "photo");
+    if (video) video.classList.toggle("hidden", mode !== "video");
     if (hint) hint.classList.toggle("hidden", mode !== "3d");
     if (dots) dots.classList.toggle("hidden", mode !== "photo");
+    $("#zoomProduct").classList.toggle("hidden", mode === "video");
+    $(".media-toolbar").classList.toggle("hidden", mode === "video");
     $("#spinToggle").classList.toggle("hidden", mode !== "3d");
     $$("[data-stage]").forEach(button => {
       const active = button.dataset.stage === mode;
@@ -428,7 +451,7 @@
     updateMediaPosition();
     if (silent) return;
     if (mode === "3d" && state.currentProduct) start3D(state.currentProduct);
-    else stop3D();
+    else if (mode === "video") playProductVideo();
   }
 
   function closeTopModal() {
@@ -498,6 +521,13 @@
 
   function updateMediaPosition() {
     const viewer = state.viewer;
+    if (state.stage === "video") {
+      $("#mediaPosition").textContent = "ВИДЕО";
+      $("#mediaPrev").disabled = true;
+      $("#mediaNext").disabled = true;
+      $("#spinToggle").disabled = true;
+      return;
+    }
     const count = state.stage === "3d" && viewer ? viewer.frames.length : imagesFor(state.currentProduct || {}).length;
     const index = state.stage === "3d" && viewer ? viewer.frameIndex() : state.galleryIndex;
     $("#mediaPosition").textContent = `${String(index + 1).padStart(2, "0")} / ${String(count).padStart(2, "0")}`;
@@ -532,6 +562,7 @@
   }
 
   function stepMedia(delta) {
+    if (state.stage === "video") return;
     if (state.stage === "3d" && state.viewer) state.viewer.step(delta);
     else setGallery(state.galleryIndex + delta);
     updateMediaPosition();
@@ -539,7 +570,7 @@
 
   function zoomProduct() {
     const product = state.currentProduct;
-    if (!product) return;
+    if (!product || state.stage === "video") return;
     const src = state.stage === "3d" && state.viewer ? state.viewer.currentSource() : imagesFor(product)[state.galleryIndex];
     openLightbox(src, `${product.name} · ${state.stage === "photo" ? galleryLabel(product, state.galleryIndex) : "Обзор 360°"}`);
   }
@@ -564,6 +595,18 @@
     state.qty = 1;
     $("#qtyValue").textContent = "1";
     renderGallery(product);
+    const productVideo = $("#sheetVideo");
+    pauseProductVideo();
+    $("#stageVideo").classList.toggle("hidden", !product.video);
+    if (product.video) {
+      if (productVideo.getAttribute("src") !== product.video) productVideo.src = product.video;
+      productVideo.poster = product.image || "";
+      productVideo.setAttribute("aria-label", `${product.name} — предметный 360°-видеообзор без звука`);
+    } else {
+      productVideo.removeAttribute("src");
+      productVideo.removeAttribute("poster");
+      productVideo.load();
+    }
     $("#sheetBadge").textContent = product.badge || "БАЗА";
     $("#sheetKicker").textContent = `${categoryName(product.category).toUpperCase()} / ${product.fit || "БАЗА"}`;
     $("#sheetTitle").textContent = product.name;
@@ -1465,7 +1508,10 @@
       if (!zoomed) $("#lightboxViewport").scrollTo(0, 0);
     });
     $$('[data-detail-product]').forEach(button => button.addEventListener('click', () => openProduct(button.dataset.detailProduct, Number(button.dataset.detailPhoto))));
-    document.addEventListener("visibilitychange", syncModalLayers);
+    document.addEventListener("visibilitychange", () => {
+      syncModalLayers();
+      if (document.hidden) pauseProductVideo();
+    });
     $("#enterShop").addEventListener("click", enterShop);
     $$("[data-stage]").forEach(button => button.addEventListener("click", () => {
       setStage(button.dataset.stage);
@@ -1661,7 +1707,7 @@
       }
       if (event.target.matches("[data-stage]") && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
         event.preventDefault();
-        const tabs = $$("[data-stage]");
+        const tabs = $$("[data-stage]").filter(tab => !tab.classList.contains("hidden"));
         const current = tabs.indexOf(event.target);
         const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1
           : (current + (event.key === "ArrowLeft" ? -1 : 1) + tabs.length) % tabs.length;

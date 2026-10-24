@@ -118,6 +118,26 @@ class BotTests(unittest.TestCase):
         # The original combined design remains an untouched source material.
         self.assertTrue((miniapp / "assets/drop/tee-vzglyad-graphic.jpg").is_file())
 
+    def test_product_videos_are_local_mp4_and_pause_outside_the_video_stage(self):
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        miniapp = Path(__file__).with_name("miniapp")
+        for product_id in ("tee-sila-i-chest", "tee-vzglyad"):
+            video = miniapp / catalog.get(product_id)["video"]
+            self.assertEqual(video.suffix, ".mp4")
+            self.assertGreater(video.stat().st_size, 10_000)
+            self.assertAlmostEqual(mp4_duration_seconds(video), 4.0, places=2)
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        video_tag = next(line for line in index.splitlines() if 'id="sheetVideo"' in line)
+        self.assertIn('id="stageVideo"', index)
+        self.assertIn("controls", video_tag)
+        self.assertIn("playsinline", video_tag)
+        self.assertIn("muted", video_tag)
+        self.assertIn('preload="none"', video_tag)
+        self.assertNotIn("autoplay", video_tag)
+        app = (miniapp / "app.js").read_text(encoding="utf-8")
+        self.assertIn('if (mode !== "video") pauseProductVideo();', app)
+        self.assertIn('if (document.hidden) pauseProductVideo();', app)
+        self.assertIn('if (!product || state.stage === "video") return;', app)
     def test_catalog_seed_is_copied_once_to_mutable_storage(self):
         with tempfile.TemporaryDirectory() as directory:
             seed = Path(__file__).with_name("catalog.json")
@@ -138,12 +158,13 @@ class BotTests(unittest.TestCase):
         env = {
             key: value
             for key, value in os.environ.items()
-            if key not in {"CATALOG_PATH", "DATABASE_PATH", "PORT", "GIVEAWAY_MIN_INVITES"}
+            if key not in {"CATALOG_PATH", "DATABASE_PATH", "PORT", "GIVEAWAY_MIN_INVITES", "BRAND_NAME"}
         }
         with patch.dict(os.environ, env, clear=True), patch("bot.load_dotenv"):
             settings = Settings.from_env()
         self.assertEqual(settings.catalog_path, BASE_DIR / "data/catalog.json")
         self.assertEqual(settings.database_path, BASE_DIR / "data/bot.sqlite3")
+        self.assertEqual(settings.brand_name, "СИЛА И ЧЕСТЬ")
 
     def test_database_uses_wal_and_deduplicates_orders(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -395,20 +416,21 @@ class BotTests(unittest.TestCase):
                 self.assertFalse(bot.send_teaser(1))
                 self.assertEqual(len(api.videos), 4)
 
-    def test_product_card_shows_the_whole_garment_as_an_album(self):
-        """В чате вещь тоже показывается со всех сторон, а не одним кадром."""
+    def test_product_card_sends_one_main_photo_without_an_album(self):
+        """В чате одно главное фото; полный обзор открывается в Mini App."""
         class FakeAPI(TelegramAPI):
             def __init__(self):
                 super().__init__("test-token")
                 self.albums = []
                 self.photos = []
+                self.messages = []
 
             def send_media_group(self, chat_id, photos, caption="", labels=None):
                 self.albums.append((photos, labels or []))
                 return {"message_id": 1}
 
             def send_photo(self, chat_id, photo, caption, reply_markup=None):
-                self.photos.append(photo)
+                self.photos.append((photo, caption, reply_markup))
                 return {"message_id": 1}
 
             def send_message(self, chat_id, text, reply_markup=None):
@@ -417,19 +439,15 @@ class BotTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             api = FakeAPI()
-            api.messages = []
             bot, _ = self._teaser_bot(directory, api)
             bot.show_product(1, 1, "tag-sila-i-chest")
-            self.assertEqual(len(api.albums), 1, "карточка ушла без альбома")
-            photos, labels = api.albums[0]
-            self.assertGreaterEqual(len(photos), 2)
-            self.assertEqual(api.photos, [], "альбом отправлен, одиночное фото лишнее")
-            for url in photos:
-                self.assertTrue(url.startswith("https://"), f"нелокальный адрес обязателен: {url}")
-            # Подписи кадров — из каталога: у жетона их нет, значит и выдумывать нечего.
-            self.assertEqual([label for label in labels if label], [])
-            # Карточка вещи уходит отдельным сообщением вместе с кнопками.
-            card, keyboard = api.messages[-1]
+            self.assertEqual(api.albums, [], "карточка не должна отправлять альбом")
+            self.assertEqual(len(api.photos), 1, "нужно ровно одно главное фото")
+            photo, card, keyboard = api.photos[0]
+            self.assertTrue(photo.startswith("https://"), f"нелокальный адрес обязателен: {photo}")
+            if api.messages:
+                card += "\n" + api.messages[-1][0]
+                keyboard = keyboard or api.messages[-1][1]
             self.assertIn("ЖЕТОН", card)
             self.assertIn("БЕСПЛАТНО", card)
             self.assertIn("осталось 100 из 100", card)
@@ -1261,13 +1279,18 @@ class BotTests(unittest.TestCase):
         port = server.server_address[1]
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/catalog", timeout=5) as response:
-                media = json.loads(response.read().decode("utf-8"))["media"]
+                payload = json.loads(response.read().decode("utf-8"))
+            media = payload["media"]
             self.assertIs(media.get("welcome_motion"), False)
             for key in ("teaser", "teaser_poster", "welcome_loop", "welcome_poster"):
                 with self.subTest(key=key):
                     self.assertRegex(media[key], r"\?v=\d+$", f"{key} без версии — попадёт в кеш")
             # Подписи в media — не адреса, версией их портить нельзя.
             self.assertNotIn("?v=", media.get("teaser_title", ""))
+            product_videos = [product["video"] for product in payload["products"] if product.get("video")]
+            self.assertEqual(len(product_videos), 2)
+            for video in product_videos:
+                self.assertRegex(video, r"\?v=\d+$", "товарное видео без версии попадёт в суточный кеш")
             # Адрес с версией обязан вести к настоящему файлу, а не в 404.
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/{media['teaser']}", timeout=5) as response:
                 self.assertEqual(response.status, 200)
@@ -2681,23 +2704,19 @@ class NativeMenuTests(unittest.TestCase):
             self.assertNotIn("Худи", " ".join(labels))
             self.assertNotIn("size_guide:catalog", button_targets(markup))
 
-    def test_album_labels_come_from_the_catalog(self):
-        """Подписи кадров честные: берём их из каталога, а не придумываем."""
+    def test_product_photo_is_the_catalog_primary_image(self):
+        """Главное фото берём из каталога и не дублируем альбомом."""
         with tempfile.TemporaryDirectory() as directory:
             api = MenuAPI()
             bot, db = self._bot(directory, api)
             db.upsert_user(self.USER)
             bot.show_product(500, 500, "tee-sila-i-chest")
-            self.assertEqual(len(api.albums), 1)
-            _chat, photos, _caption, labels = api.albums[0]
-            self.assertEqual(len(photos), len(labels))
-            expected = bot.catalog.get("tee-sila-i-chest")["image_labels"]
-            self.assertEqual(labels, expected[:6])
-            self.assertTrue(any("Спереди" in label for label in labels))
-            self.assertTrue(any("Сбоку" in label for label in labels))
-            self.assertTrue(any("Сзади" in label for label in labels))
-            self.assertTrue(any("Фурнитура" in label for label in labels))
-            card = api.last(500)[1]
+            self.assertEqual(api.albums, [])
+            self.assertEqual(len(api.photos), 1)
+            _chat, photo, caption, _keyboard = api.photos[0]
+            product = bot.catalog.get("tee-sila-i-chest")
+            self.assertEqual(photo, bot.public_asset_url(product["image"]))
+            card = caption + "\n" + api.last(500)[1]
             self.assertIn("СИЛА И ЧЕСТЬ", card)
             self.assertIn("4 900 ₽", card)
             self.assertIn("Размеры:", card)

@@ -98,7 +98,7 @@ REF_RE = re.compile(r"^ref(\d{3,15})$")
 TEASER_UPLOAD_LIMIT = 50 * 1024 * 1024
 BOT_SHORT_DESCRIPTION = "Сила и честь. Одежда. Закрытый выпуск."
 BOT_DESCRIPTION = (
-    "Закрытая витрина ВОРОЖБИТОВ. Малые тиражи, честный крой. "
+    "Закрытая витрина «СИЛА И ЧЕСТЬ». Малые тиражи, честный крой. "
     "Смотри выпуск, бери размер, оплачивай сразу: карта, крипта или звёзды."
 )
 
@@ -268,7 +268,7 @@ class Settings:
             channel_url=os.getenv("CHANNEL_URL", "https://t.me/").strip(),
             webapp_url=os.getenv("WEBAPP_URL", "").strip(),
             manager_chat_id=int(manager_raw) if manager_raw.lstrip("-").isdigit() else None,
-            brand_name=os.getenv("BRAND_NAME", "ВОРОЖБИТОВ").strip() or "ВОРОЖБИТОВ",
+            brand_name=os.getenv("BRAND_NAME", "СИЛА И ЧЕСТЬ").strip() or "СИЛА И ЧЕСТЬ",
             support_username=os.getenv("SUPPORT_USERNAME", "").strip().lstrip("@"),
             database_path=BASE_DIR / os.getenv("DATABASE_PATH", "data/bot.sqlite3"),
             catalog_path=BASE_DIR / os.getenv("CATALOG_PATH", "data/catalog.json"),
@@ -3701,26 +3701,13 @@ class BrandBot:
         keyboard = inline_keyboard(
             rows + nav_rows((category_title, f"cat:{product['category']}"))
         )
-        # Вещь показываем со всех сторон: альбом с честными подписями кадров,
-        # затем карточка с кнопками — текст в альбоме читается хуже.
+        # В чат отправляем одно главное фото, как просила заказчица. Полная
+        # предметная галерея, 360° и видео остаются внутри Mini App.
         shots = self.product_shots(product)
-        if len(shots) > 1:
-            try:
-                self.api.send_media_group(
-                    chat_id,
-                    [url for url, _ in shots],
-                    "",
-                    [label for _, label in shots],
-                )
-                self.api.send_message(chat_id, text, keyboard)
-                return
-            except Exception:
-                LOG.exception("Failed to send product album, falling back to a single photo")
         photo = shots[0][0] if shots else self.public_asset_url(product.get("photo_url") or product.get("image"))
         if photo:
-            self.send_card_photo(chat_id, photo, text, keyboard)
-        else:
-            self.api.send_message(chat_id, text, keyboard)
+            self.api.send_photo(chat_id, photo, "")
+        self.api.send_message(chat_id, text, keyboard)
 
     def choose_size(self, chat_id: int, user_id: int, product_id: str) -> None:
         product = self.catalog.get(product_id)
@@ -3911,7 +3898,7 @@ class BrandBot:
         return amount * max(1, int(quantity or 1))
 
     def pay_title(self) -> str:
-        return (self.settings.brand_name or "ВОРОЖБИТОВ")[:32]
+        return (self.settings.brand_name or "СИЛА И ЧЕСТЬ")[:32]
 
     def gift_for_checkout(self) -> dict[str, Any] | None:
         gift = self.db.gift_status(self.catalog.get(self.settings.gift_product_id))
@@ -7512,13 +7499,13 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                 return
             with catalog.lock:
                 payload = {
-                    "brand": catalog.data.get("brand", {"name": settings.brand_name if settings else "ВОРОЖБИТОВ"}),
+                    "brand": catalog.data.get("brand", {"name": settings.brand_name if settings else "СИЛА И ЧЕСТЬ"}),
                     "channel_url": settings.channel_url if settings else "",
                     "privacy_url": settings.privacy_url if settings else "",
                     "support_username": settings.support_username if settings else "",
-                    "products": [
+                    "products": self._stamp_product_videos([
                         product for product in catalog.data.get("products", []) if product.get("active", True)
-                    ],
+                    ]),
                     "categories": catalog.categories,
                     "lookbook": catalog.data.get("lookbook", []),
                     "media": self._stamp_media(catalog.data.get("media", {})),
@@ -7581,6 +7568,18 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         else:
             cache = "no-cache"
         self._write(body, content_type, 200, cache)
+
+    def _stamp_product_videos(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Версионировать MP4 товаров, не меняя остальной каталог в памяти."""
+        stamped_products: list[dict[str, Any]] = []
+        for product in products:
+            if not product.get("video"):
+                stamped_products.append(product)
+                continue
+            stamped = dict(product)
+            stamped["video"] = self._stamp_media({"value": product["video"]})["value"]
+            stamped_products.append(stamped)
+        return stamped_products
 
     def _stamp_media(self, media: dict[str, Any]) -> dict[str, Any]:
         """Добавить ?v=<время правки> к роликам и постерам из блока media.

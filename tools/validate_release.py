@@ -52,6 +52,14 @@ def main() -> int:
     if not isinstance(media, dict):
         errors.append('catalog media must be an object')
         media = {}
+    else:
+        media = dict(media)
+    for product in catalog.get('products', []):
+        if not isinstance(product, dict) or not product.get('active', True):
+            continue
+        video = product.get('video')
+        if video:
+            media[f"product.{product.get('id', '<unknown>')}.video"] = video
     checked = []
     for key, value in media.items():
         if key.endswith(('_title', '_caption')) or not isinstance(value, str) or not value or '://' in value:
