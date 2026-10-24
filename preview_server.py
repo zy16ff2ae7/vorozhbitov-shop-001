@@ -20,7 +20,7 @@ if __name__ == "__main__":
         channel_url="https://t.me/+XufFz8GGR0o3Njky",
         webapp_url="",
         manager_chat_id=None,
-        brand_name="ВОРОЖБИТОВ",
+        brand_name="СИЛА И ЧЕСТЬ",
         support_username="",
         database_path=root / "data/preview.sqlite3",
         catalog_path=root / "catalog.json",

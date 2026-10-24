@@ -261,9 +261,11 @@
         <div class="stage-switch" role="tablist" aria-label="Просмотр">
           <button class="stage-btn active" id="stage3d" data-stage="3d" role="tab" aria-selected="true" aria-controls="view3d" type="button">360°</button>
           <button class="stage-btn" id="stagePhoto" data-stage="photo" role="tab" aria-selected="false" aria-controls="sheetImage" type="button">ФОТО</button>
+          <button class="stage-btn hidden" id="stageVideo" data-stage="video" role="tab" aria-selected="false" aria-controls="sheetVideo" type="button">ВИДЕО</button>
         </div>
         <div class="view3d" id="view3d" role="tabpanel" tabindex="0" aria-label="Обзор вещи. Повернуть: стрелки влево и вправо." aria-describedby="view3dHint"></div>
         <img id="sheetImage" class="sheet-photo hidden" role="tabpanel" alt="">
+        <video id="sheetVideo" class="sheet-video hidden" role="tabpanel" muted loop playsinline controls preload="none" aria-label="Предметный 360°-видеообзор без звука"></video>
         <span class="sheet-badge" id="sheetBadge"></span>
         <p class="view3d-hint" id="view3dHint">ТЯНИ В СТОРОНЫ</p>
         <button class="media-zoom" id="zoomProduct" type="button" aria-label="Увеличить фото"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5"/></svg></button>

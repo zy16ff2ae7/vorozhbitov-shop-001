@@ -99,7 +99,7 @@ def build(workspace: Path) -> tuple[BrandBot, Database, RecordingAPI]:
         channel_url="https://t.me/channel",
         webapp_url="https://shop.example/app",
         manager_chat_id=MANAGER_CHAT,
-        brand_name="ВОРОЖБИТОВ",
+        brand_name="СИЛА И ЧЕСТЬ",
         support_username="vorozhbitov_shop",
         database_path=workspace / "preview.sqlite3",
         catalog_path=catalog_path,
@@ -337,7 +337,7 @@ def render_page() -> str:
     return f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ВОРОЖБИТОВ — меню в чате Telegram</title>
+<title>СИЛА И ЧЕСТЬ — меню в чате Telegram</title>
 <style>{CSS}</style></head>
 <body>
 <header>
