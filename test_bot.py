@@ -2810,11 +2810,11 @@ class NativeMenuTests(unittest.TestCase):
         self.assertEqual(rows[0][0]["web_app"]["url"], "https://vorozhbitov.shop")
         self.assertEqual(rows[0][0].get("style"), "primary")
         self.assertEqual(len(rows[1]), 2)
-        self.assertEqual([b["text"] for b in rows[1]], ["☷ Первый дроп", "○ Личный кабинет"])
+        self.assertEqual([b["text"] for b in rows[1]], [f"{ICON['catalog']} Первый дроп", f"{ICON['account']} Личный кабинет"])
         self.assertEqual(len(rows[2]), 2)
-        self.assertEqual([b["text"] for b in rows[2]], ["📢 Канал", "ℹ︎ О бренде"])
+        self.assertEqual([b["text"] for b in rows[2]], [f"{ICON['channel']} Канал", f"{ICON['seal']} О бренде"])
         self.assertEqual(len(rows[3]), 1)
-        self.assertEqual(rows[3][0]["text"], "✉ Поддержка")
+        self.assertEqual(rows[3][0]["text"], f"{ICON['support']} Поддержка")
         self.assertEqual(len(rows), 4)
 
         # Админская версия содержит кнопку управления
@@ -2869,14 +2869,15 @@ class NativeMenuTests(unittest.TestCase):
 
             # 3. Вызов команды /emoji
             bot.handle_update({"update_id": 10, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "/emoji"}})
-            _chat, text, markup = api.last(500)
+            text = api.photos[-1][2] if api.photos else api.last(500)[1]
+            markup = api.photos[-1][3] if api.photos else api.last(500)[2]
             self.assertIn("ЭМОДЗИ-ПАК", text)
             self.assertIn("addemoji", text)
             self.assertIn("addemoji", button_targets(markup)[0])
 
             # 4. Текстовое сообщение «эмодзи»
             bot.handle_update({"update_id": 11, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "эмодзи"}})
-            _chat, text, markup = api.last(500)
+            text = api.photos[-1][2] if api.photos else api.last(500)[1]
             self.assertIn("ЭМОДЗИ-ПАК", text)
 
 

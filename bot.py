@@ -1950,13 +1950,13 @@ def buyer_reply_keyboard(webapp_url: str = "", is_admin: bool = False) -> dict[s
     if webapp_url.startswith("https://"):
         rows.append([{"text": "⊞ Открыть витрину", "web_app": {"url": webapp_url}, "style": "primary"}])
     rows.extend([
-        [{"text": "☷ Первый дроп"}, {"text": "○ Личный кабинет"}],
-        [{"text": "📢 Канал"}, {"text": "ℹ︎ О бренде"}],
+        [{"text": f"{ICON['catalog']} Первый дроп"}, {"text": f"{ICON['account']} Личный кабинет"}],
+        [{"text": f"{ICON['channel']} Канал"}, {"text": f"{ICON['seal']} О бренде"}],
     ])
     if is_admin:
-        rows.append([{"text": "✉ Поддержка"}, {"text": "⚙︎ Управление магазином"}])
+        rows.append([{"text": f"{ICON['support']} Поддержка"}, {"text": "⚙︎ Управление магазином"}])
     else:
-        rows.append([{"text": "✉ Поддержка"}])
+        rows.append([{"text": f"{ICON['support']} Поддержка"}])
     return {
         "keyboard": rows,
         "resize_keyboard": True,
@@ -2409,6 +2409,13 @@ class BrandBot:
             [(f"Установить эмодзи-пак {ICON['outside']}", pack_link)],
             [(f"{ICON['back']} Главное меню", "menu")]
         ])
+        preview_path = BASE_DIR / "custom_emoji_pack" / "preview_grid.png"
+        if preview_path.is_file():
+            try:
+                self.api.send_photo_file(chat_id, preview_path, caption=text, reply_markup=markup)
+                return
+            except Exception:
+                LOG.warning("Could not send emoji pack preview image")
         self.api.send_message(chat_id, text, markup)
 
     # ------------------------------------------------------------------ utils
@@ -5947,10 +5954,11 @@ class BrandBot:
         # 2.1 Каталог / Витрина
         if clean in {"каталог", "витрина каталога", "товары"}:
             self.db.clear_state(user_id)
+            self.api.send_message(chat_id, "⚔️ Меню обновлено на «СИЛА И ЧЕСТЬ».", self.buyer_reply_keyboard(chat_id))
             self.show_catalog(chat_id, user_id)
             return True
 
-        # 2.1 Канал бренда
+        # 2.2 Канал бренда
         if clean in {"канал", "канал бренда"}:
             self.db.clear_state(user_id)
             link = self.channel_link()
@@ -5964,7 +5972,7 @@ class BrandBot:
                 self.api.send_message(chat_id, "Канал бренда скоро появится.", inline_keyboard(nav_rows(("Главное меню", "menu"))))
             return True
 
-        # 2.2 О бренде
+        # 2.3 О бренде
         if clean in {"о бренде", "бренд", "о нас"}:
             self.db.clear_state(user_id)
             self.show_about(chat_id)
@@ -5973,6 +5981,7 @@ class BrandBot:
         # 3. Мои покупки
         if clean in {"мои покупки", "покупки", "мои заказы", "заказы"}:
             self.db.clear_state(user_id)
+            self.api.send_message(chat_id, "📦 Твои покупки:", self.buyer_reply_keyboard(chat_id))
             self.show_my_orders(chat_id, user_id)
             return True
 
@@ -5980,7 +5989,12 @@ class BrandBot:
         if clean in {"фильм выпуска", "фильм", "ролик", "видео", "тизер"}:
             self.db.clear_state(user_id)
             self.db.event(user_id, "teaser_open")
-            keyboard = inline_keyboard([[(icon("catalog", "Каталог"), "catalog")]] + nav_rows())
+            self.api.send_message(
+                chat_id,
+                "⚔️ <b>СИЛА И ЧЕСТЬ</b>\nОбновили меню чата на актуальное.",
+                self.buyer_reply_keyboard(chat_id),
+            )
+            keyboard = inline_keyboard([[(icon("catalog", "Первый дроп"), "drop")]] + nav_rows())
             if not self.send_teaser(chat_id, keyboard=keyboard):
                 self.api.send_message(
                     chat_id,
@@ -5993,6 +6007,7 @@ class BrandBot:
         # 5. Образы / Лукбук
         if clean in {"образы", "лукбук", "фото"}:
             self.db.clear_state(user_id)
+            self.api.send_message(chat_id, "⚔️ Меню обновлено на «СИЛА И ЧЕСТЬ».", self.buyer_reply_keyboard(chat_id))
             self.show_lookbook(chat_id, user_id)
             return True
 
