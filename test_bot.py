@@ -96,6 +96,28 @@ class BotTests(unittest.TestCase):
         self.assertEqual(catalog.get("tee-sila-i-chest")["category"], "drop")
         self.assertEqual(catalog.lookbook, [])
 
+    def test_both_drop_tees_have_full_photo_and_spin_sets(self):
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        miniapp = Path(__file__).with_name("miniapp")
+        for product_id in ("tee-sila-i-chest", "tee-vzglyad"):
+            with self.subTest(product_id=product_id):
+                product = catalog.get(product_id)
+                self.assertEqual(len(product["spin"]), 8)
+                self.assertEqual(len(set(product["spin"])), 8)
+                self.assertEqual(len(product["images"]), 5)
+                self.assertEqual(len(set(product["images"])), 5)
+                self.assertEqual(product["images"][:4], product["spin"][::2])
+                self.assertEqual(len(product["image_labels"]), 5)
+                self.assertEqual(product["image"], product["spin"][0])
+                for asset in (*product["spin"], *product["images"]):
+                    self.assertTrue((miniapp / asset).is_file(), asset)
+                spin_hashes = {hashlib.sha256((miniapp / asset).read_bytes()).digest() for asset in product["spin"]}
+                self.assertEqual(len(spin_hashes), 8, "360° frames must not be copies of one image")
+        self.assertIn("принт на груди", catalog.get("tee-vzglyad")["image_labels"][-1])
+        self.assertIn("360°", catalog.get("tee-vzglyad")["media_note"])
+        # The original combined design remains an untouched source material.
+        self.assertTrue((miniapp / "assets/drop/tee-vzglyad-graphic.jpg").is_file())
+
     def test_catalog_seed_is_copied_once_to_mutable_storage(self):
         with tempfile.TemporaryDirectory() as directory:
             seed = Path(__file__).with_name("catalog.json")

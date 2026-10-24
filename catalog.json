@@ -98,9 +98,13 @@
       "description": "Футболка «ВЗГЛЯД» из первого дропа бренда «СИЛА И ЧЕСТЬ». Символ стойкости и характера. Доступна по предзаказу.",
       "signature": "Первый дроп. По предзаказу.",
       "photo_url": "",
-      "image": "assets/drop/tee-vzglyad-graphic.jpg",
+      "image": "assets/spin/tee-vzglyad-01.jpg",
       "images": [
-        "assets/drop/tee-vzglyad-graphic.jpg"
+        "assets/spin/tee-vzglyad-01.jpg",
+        "assets/spin/tee-vzglyad-03.jpg",
+        "assets/spin/tee-vzglyad-05.jpg",
+        "assets/spin/tee-vzglyad-07.jpg",
+        "assets/drop/tee-vzglyad-detail.jpg"
       ],
       "badge": "ПРЕДЗАКАЗ",
       "material": "100% хлопок · 240-260 г/м²",
@@ -115,13 +119,24 @@
       "stock_label": "Предзаказ",
       "active": true,
       "spin": [
-        "assets/drop/tee-vzglyad-graphic.jpg"
+        "assets/spin/tee-vzglyad-01.jpg",
+        "assets/spin/tee-vzglyad-02.jpg",
+        "assets/spin/tee-vzglyad-03.jpg",
+        "assets/spin/tee-vzglyad-04.jpg",
+        "assets/spin/tee-vzglyad-05.jpg",
+        "assets/spin/tee-vzglyad-06.jpg",
+        "assets/spin/tee-vzglyad-07.jpg",
+        "assets/spin/tee-vzglyad-08.jpg"
       ],
       "image_labels": [
-        "Макет принта · спереди и сзади"
+        "Спереди · предметный рендер",
+        "Сбоку · предметный рендер",
+        "Сзади · предметный рендер",
+        "Другой бок · предметный рендер",
+        "Деталь · принт на груди"
       ],
       "featured": false,
-      "media_note": "Макет принта подготовлен к согласованию. Предметные ракурсы и производственная размерная сетка будут добавлены после подтверждения."
+      "media_note": "Предметные ракурсы и 360° подготовлены к согласованию. Производственную размерную сетку уточняет менеджер."
     },
     {
       "id": "tag-sila-i-chest",
