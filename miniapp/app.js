@@ -1135,8 +1135,8 @@
       tg.expand();
       if (typeof tg.disableVerticalSwipes === "function") tg.disableVerticalSwipes();
       if (typeof tg.enableClosingConfirmation === "function") tg.enableClosingConfirmation();
-      if (typeof tg.setHeaderColor === "function") tg.setHeaderColor("#f3f0e9");
-      if (typeof tg.setBackgroundColor === "function") tg.setBackgroundColor("#f3f0e9");
+      if (typeof tg.setHeaderColor === "function") tg.setHeaderColor("#0c0c0e");
+      if (typeof tg.setBackgroundColor === "function") tg.setBackgroundColor("#0c0c0e");
       if (tg.MainButton) tg.MainButton.hide();
       if (tg.BackButton && typeof tg.BackButton.onClick === "function") {
         tg.BackButton.onClick(() => closeTopModal());
