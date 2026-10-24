@@ -1935,22 +1935,23 @@ def nav_rows(back: tuple[str, str] | None = None) -> list[list[tuple[str, str]]]
 
 
 def buyer_reply_keyboard(webapp_url: str = "", is_admin: bool = False) -> dict[str, Any]:
-    """Постоянная нижняя клавиатура покупателя: строгий стритвир-стиль ВОРОЖБИТОВ (бесцветные монохромные символы)."""
+    """Постоянная нижняя клавиатура покупателя: строгий стиль СИЛА И ЧЕСТЬ."""
     rows: list[list[dict[str, Any]]] = []
     if webapp_url.startswith("https://"):
         rows.append([{"text": "⊞ Открыть витрину", "web_app": {"url": webapp_url}, "style": "primary"}])
     rows.extend([
-        [{"text": "☷ Каталог"}, {"text": "◻ Мои покупки"}],
-        [{"text": "▷ Фильм выпуска"}, {"text": "✦ Образы"}],
-        [{"text": "○ Личный кабинет"}, {"text": "✉ Поддержка"}],
+        [{"text": "☷ Первый дроп"}, {"text": "○ Личный кабинет"}],
+        [{"text": "📢 Канал"}, {"text": "ℹ︎ О бренде"}],
     ])
     if is_admin:
-        rows.append([{"text": "⚙︎ Управление магазином"}])
+        rows.append([{"text": "✉ Поддержка"}, {"text": "⚙︎ Управление магазином"}])
+    else:
+        rows.append([{"text": "✉ Поддержка"}])
     return {
         "keyboard": rows,
         "resize_keyboard": True,
         "is_persistent": True,
-        "input_field_placeholder": "ВОРОЖБИТОВ · Сила и честь",
+        "input_field_placeholder": "СИЛА И ЧЕСТЬ",
     }
 
 
@@ -2667,15 +2668,25 @@ class BrandBot:
         rows.append([("Пока не знаю", "intr:skip")])
         return inline_keyboard(rows)
 
+    def show_about(self, chat_id: int) -> None:
+        self.api.send_message(
+            chat_id,
+            f"<b>О БРЕНДЕ</b>\n\n"
+            f"{esc(self.settings.brand_name)}\n"
+            "Сила и честь. Одежда для своих: плотная, честная, без лишнего шума. "
+            "Малые тиражи, городская форма, выпуски без повторов."
+            + (f"\n\n{ICON['support']} Вопросы: @{esc(self.settings.support_username)}" if self.settings.support_username else "")
+            + self.cta("channel"),
+            inline_keyboard(self.channel_rows() + nav_rows(("Главное меню", "menu"))),
+        )
+
     def account_menu(self, user_id: int) -> dict[str, Any]:
-        """Кабинет покупателя: свои данные, приоритет, бренд и канал."""
+        """Кабинет покупателя: покупки и лист ожидания."""
         rows = [
-            [(icon("notice", "Узнать первым"), "profile"), (icon("link", "Привести друга"), "referral")],
-            [(icon("size", "Подобрать размер"), "size_guide:account"), (icon("info", "О бренде"), "about")],
+            [(icon("orders", "Мои покупки"), "my_orders")],
         ]
         waiting = self.db.waitlist_for_user(user_id)
         if waiting:
-            # Кнопка появляется, только когда есть что снимать: пустой раздел — шум.
             label = "Жду размер" if len(waiting) == 1 else f"Жду размер ({len(waiting)})"
             rows.append([(icon("wait", label), "waits")])
         rows.extend(self.channel_rows())
@@ -2687,9 +2698,13 @@ class BrandBot:
         phone = str(user["phone"]) if user and user["phone"] else ""
         invited = int(user["invited_count"]) if user else 0
         threshold = max(1, self.settings.giveaway_min_invites)
+        orders = self.db.orders_for_user(user_id)
+        orders_count = len(orders)
         lines = ["<b>МОЙ КАБИНЕТ</b>", ""]
+        lines.append(f"🎖 Жетон: #{user_id}")
         lines.append(f"{ICON['notice']} Номер: {esc(phone) if phone else 'не указан'}")
         lines.append(f"{ICON['link']} Приглашено: {invited} · до приоритета: {max(0, threshold - invited)}")
+        lines.append(f"{ICON['orders']} Покупок: {orders_count}")
         size = str(user["pref_size"]) if user and user["pref_size"] else ""
         if size:
             lines.append(f"{ICON['size']} Твой размер: {esc(size)}")
@@ -2936,17 +2951,21 @@ class BrandBot:
             "Каталог",
         )
         text = self.product_card_text(product)
-        primary = (
-            [("Выбрать размер →", f"want:{product_id}")]
-            if self.price_is_payable(product)
-            else [(icon("support", "Написать менеджеру →"), "support")]
-        )
-        rows = [
-            # Главное действие — отдельной широкой строкой, остальное ниже.
-            primary,
-            [(icon("wait", "Ждать размер"), f"wait:{product_id}"),
-             (icon("size", "Замеры"), f"size_guide:product:{product_id}")],
-        ]
+        manager = self.settings.support_username or "intellectual_sabotage"
+        verb = "предзаказ" if product.get("badge") == "ПРЕДЗАКАЗ" or "предзаказ" in str(product.get("stock_label", "")).lower() else "заказ"
+        order_label = "🛍 Оформить предзаказ" if verb == "предзаказ" else "🛍 Оформить заказ"
+
+        if self.price_is_payable(product):
+            rows = [
+                [(order_label, f"order_direct:{product_id}")],
+                [("Выбрать размер →", f"want:{product_id}")],
+                [(icon("wait", "Ждать размер"), f"wait:{product_id}")],
+            ]
+        else:
+            rows = [
+                [(icon("support", "Написать менеджеру →"), "support")],
+                [(icon("wait", "Ждать размер"), f"wait:{product_id}")],
+            ]
         if self.is_admin(user_id):
             rows.append([(icon("tools", "Править вещь"), f"eedit:{product_id}")])
         keyboard = inline_keyboard(
@@ -5659,6 +5678,21 @@ class BrandBot:
                     + self.cta("drop"),
                     keyboard,
                 )
+        elif data.startswith("order_direct:"):
+            pid = data.split(":", 1)[1]
+            prod = self.catalog.get(pid) or {}
+            name = prod.get("name", "СИЛА И ЧЕСТЬ")
+            verb = "предзаказ" if prod.get("badge") == "ПРЕДЗАКАЗ" or "предзаказ" in str(prod.get("stock_label", "")).lower() else "заказ"
+            manager = self.settings.support_username or "intellectual_sabotage"
+            msg_template = f"Здравствуйте, хочу оформить {verb} футболки «{name}»"
+            order_url = f"https://t.me/{manager}?text={urllib.parse.quote(msg_template)}"
+            self.api.answer_callback(callback_id)
+            self.api.send_message(
+                chat_id,
+                f"<b>ОФОРМЛЕНИЕ ЗАКАЗА</b>\n\nДля заказа футболки «{esc(name)}» перейди к менеджеру в Telegram:\n\n👉 <a href=\"{order_url}\">Перейти к менеджеру</a>",
+                inline_keyboard([[("Перейти в чат с менеджером ↗", order_url)]] + nav_rows()),
+            )
+            return True
         elif data == "about":
             self.api.send_message(
                 chat_id,
@@ -5851,10 +5885,36 @@ class BrandBot:
                 self.show_catalog(chat_id, user_id)
             return True
 
-        # 2. Каталог
+        # 2. Первый дроп
+        if clean in {"первый дроп", "дроп", "вещи"}:
+            self.db.clear_state(user_id)
+            self.show_category(chat_id, user_id, "drop")
+            return True
+
+        # 2.1 Каталог / Витрина
         if clean in {"каталог", "витрина каталога", "товары"}:
             self.db.clear_state(user_id)
             self.show_catalog(chat_id, user_id)
+            return True
+
+        # 2.1 Канал бренда
+        if clean in {"канал", "канал бренда"}:
+            self.db.clear_state(user_id)
+            link = self.channel_link()
+            if link:
+                self.api.send_message(
+                    chat_id,
+                    f"<b>КАНАЛ БРЕНДА</b>\n\nВсе новости, дропы и закрытые анонсы выходят в нашем канале.\n\nПодписывайся: {link}",
+                    inline_keyboard(self.channel_rows() + nav_rows(("Главное меню", "menu"))),
+                )
+            else:
+                self.api.send_message(chat_id, "Канал бренда скоро появится.", inline_keyboard(nav_rows(("Главное меню", "menu"))))
+            return True
+
+        # 2.2 О бренде
+        if clean in {"о бренде", "бренд", "о нас"}:
+            self.db.clear_state(user_id)
+            self.show_about(chat_id)
             return True
 
         # 3. Мои покупки

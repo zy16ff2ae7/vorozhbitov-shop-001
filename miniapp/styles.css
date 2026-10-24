@@ -337,11 +337,11 @@ main > section { scroll-margin-top: calc(62px + var(--safe-top)); }
 }
 .brand-lockup, .footer-brand { display: inline-flex; align-items: center; gap: 10px; }
 .brand-mark {
-  width: 30px; height: 30px; display: grid; place-items: center;
-  background: var(--red); color: #0a0a0a;
-  font-family: var(--font-display); font-weight: 900; font-size: 18px;
-  letter-spacing: -.12em; transform: skewX(-12deg);
-  box-shadow: 4px 4px 0 #3a0503;
+  width: 32px; height: 32px; display: inline-block;
+  background: url("assets/sila-chest-emblem.jpg") center/cover no-repeat;
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+  font-size: 0; color: transparent; transform: none;
 }
 .brand-type, .footer-brand > div { display: flex; flex-direction: column; gap: 3px; }
 .brand-type strong, .footer-brand strong {

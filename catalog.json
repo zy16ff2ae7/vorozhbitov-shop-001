@@ -1,8 +1,8 @@
 {
   "brand": {
-    "name": "ВОРОЖБИТОВ",
+    "name": "СИЛА И ЧЕСТЬ",
     "descriptor": "сила и честь / городская форма",
-    "drop": "ВЫПУСК",
+    "drop": "ПЕРВЫЙ ДРОП",
     "welcome_image": "assets/drop/hero-sila-chest-v1.jpg",
     "store_image": "assets/store.jpg"
   },
@@ -88,6 +88,47 @@
         "Нашивка у подола"
       ],
       "featured": true
+    },
+    {
+      "id": "tee-vzglyad",
+      "category": "drop",
+      "name": "ВЗГЛЯД",
+      "price": "4 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL",
+        "XXL"
+      ],
+      "description": "Футболка «ВЗГЛЯД» из первого дропа бренда «СИЛА И ЧЕСТЬ». Символ стойкости и характера. Доступна по предзаказу.",
+      "signature": "Первый дроп. По предзаказу.",
+      "photo_url": "",
+      "image": "assets/drop/tee-vzglyad.jpg",
+      "images": [
+        "assets/drop/tee-vzglyad.jpg",
+        "assets/drop/odin-v-pole-voin.jpg"
+      ],
+      "badge": "ПРЕДЗАКАЗ",
+      "material": "100% хлопок · 240-260 г/м²",
+      "fit": "Прямой крой",
+      "details": [
+        "Принт «ВЗГЛЯД»",
+        "Плотный хлопок 240-260 GSM",
+        "Фирменная нашивка у подола",
+        "Постоянная деталь с монограммой",
+        "Символ стойкости и братства"
+      ],
+      "stock_label": "Предзаказ",
+      "active": true,
+      "spin": [
+        "assets/drop/tee-vzglyad.jpg"
+      ],
+      "image_labels": [
+        "Лицо",
+        "Смысл"
+      ],
+      "featured": false
     },
     {
       "id": "tag-sila-i-chest",
