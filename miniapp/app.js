@@ -3,7 +3,7 @@
 
   const Core = window.ShopCore;
   const FALLBACK_CATALOG = {
-    brand: { name: "ВОРОЖБИТОВ", descriptor: "Сила и честь", drop: "ВЫПУСК 001" },
+    brand: { name: "СИЛА И ЧЕСТЬ", descriptor: "Сила и честь", drop: "ВЫПУСК 001" },
     channel_url: "https://t.me/+XufFz8GGR0o3Njky",
     privacy_url: "",
     categories: [], products: [], lookbook: []
@@ -322,7 +322,7 @@
 
   function showToast(message) {
     const toast = $("#toast");
-    toast.innerHTML = '<span class="toast-mark" aria-hidden="true">V</span><span>' + escapeHTML(message) + "</span>";
+    toast.innerHTML = '<span class="toast-mark" aria-hidden="true">⚔</span><span>' + escapeHTML(message) + "</span>";
     toast.classList.add("visible");
     clearTimeout(state.toastTimer);
     state.toastTimer = setTimeout(() => toast.classList.remove("visible"), 2800);
@@ -1101,7 +1101,7 @@
   }
 
   async function shareSignal() {
-    const text = "Я в закрытом выпуске ВОРОЖБИТОВ. Сила и честь:";
+    const text = "Я в закрытом дропе «СИЛА И ЧЕСТЬ»:";
     const url = state.data.channel_url || FALLBACK_CATALOG.channel_url;
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
     if (tg && typeof tg.openTelegramLink === "function") return tg.openTelegramLink(shareUrl);
@@ -1244,7 +1244,7 @@
       welcomePoster: media.welcome_poster || "assets/drop/hero-sila-chest-v1.jpg",
       teaser: media.teaser || "assets/video/campaign-v6.mp4",
       title: media.teaser_title || "СИЛА И ЧЕСТЬ",
-      caption: media.teaser_caption || "Выпуск 001 · Никита Ворожбитов",
+      caption: media.teaser_caption || "Выпуск 001 · СИЛА И ЧЕСТЬ",
       storyUrl: media.teaser_story_url || ""
     };
   }
