@@ -2297,17 +2297,28 @@ def button_label(text: Any, limit: int = BUTTON_TEXT_LIMIT) -> str:
     return cut + "…"
 
 
-def inline_keyboard(rows: Iterable[Iterable[tuple[str, str]]]) -> dict[str, Any]:
+def inline_keyboard(rows: Iterable[Iterable[Any]]) -> dict[str, Any]:
     keyboard = []
     for row in rows:
         buttons = []
-        for label, target in row:
-            label = button_label(label)
-            if target.startswith("webapp:"):
-                buttons.append({"text": label, "web_app": {"url": target.removeprefix("webapp:")}})
+        for item in row:
+            if isinstance(item, dict):
+                buttons.append(item)
                 continue
-            key = "url" if target.startswith(("https://", "http://", "tg://")) else "callback_data"
-            buttons.append({"text": label, key: target})
+            label = item[0]
+            target = item[1]
+            icon_id = item[2] if len(item) > 2 else ""
+            label = button_label(label)
+            btn: dict[str, Any] = {"text": label}
+            if icon_id:
+                btn["icon_custom_emoji_id"] = str(icon_id)
+            if target.startswith("webapp:"):
+                btn["web_app"] = {"url": target.removeprefix("webapp:")}
+            elif target.startswith(("https://", "http://", "tg://")):
+                btn["url"] = target
+            else:
+                btn["callback_data"] = target
+            buttons.append(btn)
         keyboard.append(buttons)
     return {"inline_keyboard": keyboard}
 
@@ -2400,19 +2411,49 @@ def nav_rows(back: tuple[str, str] | None = None) -> list[list[tuple[str, str]]]
     return [[(f"{ICON['back']} {label}", target), (icon("home", "Главная"), "menu")]]
 
 
-def buyer_reply_keyboard(webapp_url: str = "", is_admin: bool = False) -> dict[str, Any]:
+def buyer_reply_keyboard(
+    webapp_url: str = "",
+    is_admin: bool = False,
+    custom_emoji_ids: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Постоянная нижняя клавиатура покупателя: строгий стиль СИЛА И ЧЕСТЬ."""
+    emojis = custom_emoji_ids or {}
     rows: list[list[dict[str, Any]]] = []
     if webapp_url.startswith("https://"):
-        rows.append([{"text": "⊞ Открыть витрину", "web_app": {"url": webapp_url}, "style": "primary"}])
+        btn: dict[str, Any] = {"text": "⊞ Открыть витрину", "web_app": {"url": webapp_url}, "style": "primary"}
+        if emojis.get("cart"):
+            btn["icon_custom_emoji_id"] = str(emojis["cart"])
+        rows.append([btn])
+
+    b_drop: dict[str, Any] = {"text": f"{ICON['catalog']} Первый дроп"}
+    if emojis.get("catalog") or emojis.get("sword"):
+        b_drop["icon_custom_emoji_id"] = str(emojis.get("catalog") or emojis.get("sword"))
+
+    b_acc: dict[str, Any] = {"text": f"{ICON['account']} Личный кабинет"}
+    if emojis.get("account"):
+        b_acc["icon_custom_emoji_id"] = str(emojis["account"])
+
+    b_chan: dict[str, Any] = {"text": f"{ICON['channel']} Канал"}
+    if emojis.get("channel"):
+        b_chan["icon_custom_emoji_id"] = str(emojis["channel"])
+
+    b_seal: dict[str, Any] = {"text": f"{ICON['seal']} О бренде"}
+    if emojis.get("seal"):
+        b_seal["icon_custom_emoji_id"] = str(emojis["seal"])
+
     rows.extend([
-        [{"text": f"{ICON['catalog']} Первый дроп"}, {"text": f"{ICON['account']} Личный кабинет"}],
-        [{"text": f"{ICON['channel']} Канал"}, {"text": f"{ICON['seal']} О бренде"}],
+        [b_drop, b_acc],
+        [b_chan, b_seal],
     ])
+
+    b_sup: dict[str, Any] = {"text": f"{ICON['support']} Поддержка"}
+    if emojis.get("support"):
+        b_sup["icon_custom_emoji_id"] = str(emojis["support"])
+
     if is_admin:
-        rows.append([{"text": f"{ICON['support']} Поддержка"}, {"text": "⚙︎ Управление магазином"}])
+        rows.append([b_sup, {"text": "⚙︎ Управление магазином"}])
     else:
-        rows.append([{"text": f"{ICON['support']} Поддержка"}])
+        rows.append([b_sup])
     return {
         "keyboard": rows,
         "resize_keyboard": True,
@@ -3113,9 +3154,13 @@ class BrandBot:
     # ------------------------------------------------------------------ menus
 
     def buyer_reply_keyboard(self, chat_id: int | None = None) -> dict[str, Any]:
-        """Постоянная нижняя клавиатура покупателя под брендинг ВОРОЖБИТОВ."""
+        """Постоянная нижняя клавиатура покупателя под брендинг СИЛА И ЧЕСТЬ."""
         is_adm = bool(chat_id and self.is_admin(int(chat_id)))
-        return buyer_reply_keyboard(self.settings.webapp_url, is_admin=is_adm)
+        return buyer_reply_keyboard(
+            self.settings.webapp_url,
+            is_admin=is_adm,
+            custom_emoji_ids=self.settings.custom_emoji_ids,
+        )
 
     def main_menu(self, chat_id: int | None = None) -> dict[str, Any]:
         """Главное меню покупателя: шесть разделов в две колонки.
@@ -3131,11 +3176,21 @@ class BrandBot:
             payment_id, amount = draft
             label = f"Продолжить оплату · {format_rub(amount)}" if amount else "Продолжить оплату"
             rows.append([(f"{ICON['pay']} {label} →", f"draft:{payment_id}")])
+        ce = self.settings.custom_emoji_ids
         rows.extend(
             [
-                [(icon("catalog", "Каталог"), "catalog"), (icon("orders", "Мои покупки"), "my_orders")],
-                [(icon("looks", "Образы"), "lookbook"), (icon("film", "Ролик"), "teaser")],
-                [(icon("account", "Кабинет"), "account"), (icon("support", "Поддержка"), "support")],
+                [
+                    (icon("catalog", "Каталог"), "catalog", ce.get("catalog") or ce.get("sword", "")),
+                    (icon("orders", "Мои покупки"), "my_orders", ce.get("orders", "")),
+                ],
+                [
+                    (icon("looks", "Образы"), "lookbook", ce.get("looks", "")),
+                    (icon("film", "Ролик"), "teaser", ce.get("film", "")),
+                ],
+                [
+                    (icon("account", "Кабинет"), "account", ce.get("account", "")),
+                    (icon("support", "Поддержка"), "support", ce.get("support", "")),
+                ],
             ]
         )
         if chat_id and self.is_admin(int(chat_id)):
