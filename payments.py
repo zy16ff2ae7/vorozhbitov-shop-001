@@ -41,7 +41,9 @@ def parse_price_strict(value: Any) -> int:
     В отличие от старого поведения (склеить все цифры подряд) неоднозначные
     строки вроде '1 200 - 1 500 ₽' или '4900 (скидка 3900)' отклоняются:
     молча выставить счёт на 12 001 500 ₽ хуже, чем отказать администратору.
-    Копейки округляются до рубля — оплата идёт в целых рублях.
+    Денежный контракт магазина — целые рубли. Дробная часть допустима только
+    как явные нули (``4900.00``): округлять копейки нельзя, иначе браузер,
+    счёт и webhook могут подтвердить три разные суммы.
     """
     raw = str(value or "").strip()
     if not raw:
@@ -51,8 +53,8 @@ def parse_price_strict(value: Any) -> int:
         raise PriceError(f"Непонятная цена: {raw!r}")
     rubles = int(re.sub(r"[\s\u00a0\u202f']", "", match.group("int")))
     frac = match.group("frac")
-    if frac:
-        rubles += round(int(frac.ljust(2, "0")) / 100)
+    if frac and int(frac):
+        raise PriceError("Копейки не поддерживаются: укажите цену в целых рублях")
     if rubles < 0 or rubles > 10_000_000:
         raise PriceError(f"Цена вне допустимых границ: {rubles}")
     return rubles
@@ -82,16 +84,41 @@ def stars_amount(rub: int, rub_per_star: float) -> int:
     return max(1, int(round(rub / rate)))
 
 
+def _lava_canonical_json(payload: dict[str, Any]) -> bytes:
+    """Match the official PHP SDK: top-level ksort + default json_encode."""
+    # PHP's default json_encode escapes non-ASCII and forward slashes.  The
+    # provider verifies the decoded, sorted object, not insignificant spaces in
+    # the transport body.  Nested objects retain their original order in PHP.
+    ordered = {key: payload[key] for key in sorted(payload)}
+    text = json.dumps(ordered, ensure_ascii=True, separators=(",", ":"))
+    return text.replace("/", "\\/").encode("utf-8")
+
+
 def lava_signature(payload: dict[str, Any], secret: str) -> str:
-    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-    return hmac.new(secret.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).hexdigest()
+    body = _lava_canonical_json(payload)
+    return hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
 
 def verify_lava_webhook(raw_body: bytes, signature: str, extra_key: str) -> bool:
     if not extra_key or not signature:
         return False
-    expected = hmac.new(extra_key.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected.lower(), signature.lower())
+    signature = signature.strip().lower()
+    candidates = [raw_body]
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+    if isinstance(payload, dict):
+        # Official Lava SDK verifies ksort(json_decode(body)); retain raw-body
+        # as a compatibility fallback for older integrations and test fixtures.
+        candidates.insert(0, _lava_canonical_json(payload))
+    return any(
+        hmac.compare_digest(
+            hmac.new(extra_key.encode("utf-8"), candidate, hashlib.sha256).hexdigest(),
+            signature,
+        )
+        for candidate in candidates
+    )
 
 
 def verify_crypto_webhook(raw_body: bytes, signature: str, token: str) -> bool:

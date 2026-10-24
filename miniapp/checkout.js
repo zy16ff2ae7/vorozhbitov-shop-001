@@ -14,7 +14,11 @@
         });
         const data = await response.json();
         if (response.status === 401) throw new Error("Сессия истекла. Закрой и снова открой витрину из бота. Корзина сохранена.");
-        if (!response.ok || !data.ok) throw new Error(data.error || "Не получилось принять заявку. Корзина сохранена.");
+        if (!response.ok || !data.ok) {
+          const error = new Error(data.error || "Не получилось принять заявку. Корзина сохранена.");
+          error.code = data.code || "";
+          throw error;
+        }
         return data;
       } catch (error) {
         if (error.name === "AbortError" || error instanceof TypeError || error instanceof SyntaxError) {

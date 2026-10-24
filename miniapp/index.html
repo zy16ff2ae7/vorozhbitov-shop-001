@@ -3,14 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#070708">
+  <meta name="theme-color" content="#f3f0e9">
   <meta name="description" content="СИЛА И ЧЕСТЬ — бренд одежды с характером. Выпуск 001. Основатель: Никита Ворожбитов.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23070708'/%3E%3Cpath d='M32 8 L35 20 L35 44 L40 48 L40 50 L34 50 L34 56 L30 56 L30 50 L24 50 L24 48 L29 44 L29 20 Z' fill='%23e10600'/%3E%3C/svg%3E">
   <title>СИЛА И ЧЕСТЬ</title>
   <link rel="preload" href="fonts/unbounded-900.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/manrope-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="refinement.css">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -43,7 +42,7 @@
         <p class="welcome-cta">Бери размер, пока он есть.</p>
       </div>
       <div class="welcome-actions">
-        <button class="button button-primary punch" id="enterShop" type="button">ВОЙТИ В МАГАЗИН <span>↗</span></button>
+        <button class="button button-primary punch" id="enterShop" type="button">ВОЙТИ В МАГАЗИН <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button>
         <button class="text-button welcome-skip" id="watchTeaser" type="button">
           <span class="ws-text">Сначала посмотреть ролик</span>
           <span class="ws-play" aria-hidden="true"><svg viewBox="0 0 10 12" width="9" height="11" focusable="false"><path d="M0 0 10 6 0 12Z" fill="currentColor"/></svg></span>
@@ -80,7 +79,7 @@
       </label>
       <div class="search-hints">
         <button type="button" data-hint="сила и честь">сила и честь</button>
-        <button type="button" data-hint="жетон">жетон</button>
+        <button type="button" data-hint="взгляд">взгляд</button>
       </div>
     </div>
 
@@ -96,8 +95,8 @@
           <h1 id="heroTitle">СИЛА<br><em>И ЧЕСТЬ.</em></h1>
           <p class="hero-lead">001 Первый дроп. Твоя форма на каждый день.</p>
           <div class="hero-actions">
-            <button class="button button-primary" id="heroProductButton" type="button">СМОТРЕТЬ ВЕЩИ <span>↗</span></button>
-            <button class="hero-film-button" id="heroWatchFilm" type="button"><span aria-hidden="true">▷</span> Фильм выпуска</button>
+            <button class="button button-primary" id="heroProductButton" type="button">СМОТРЕТЬ ВЕЩИ <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button>
+            <button class="hero-film-button" id="heroWatchFilm" type="button"><span class="film-play-icon" aria-hidden="true"><svg viewBox="0 0 12 14" focusable="false"><path d="M1 1 11 7 1 13Z"/></svg></span> Фильм выпуска</button>
           </div>
           <div class="brand-principles"><span>СИЛА</span><i aria-hidden="true">/</i><span>ДИСЦИПЛИНА</span><i aria-hidden="true">/</i><span>ЧЕСТЬ</span></div>
         </div>
@@ -148,11 +147,6 @@
             <button class="filter-chip" data-size-filter="L" type="button">L</button>
             <button class="filter-chip" data-size-filter="XL" type="button">XL</button>
           </div>
-        </div>
-
-        <div class="view-banner hidden" id="viewBanner">
-          <strong id="viewBannerTitle">СОХРАНЁННЫЕ</strong>
-          <button class="text-button" id="clearView" type="button">Показать всё</button>
         </div>
 
         <div class="catalog-status" id="catalogStatus" role="status"><span class="loading-line"></span>Загружаем коллекцию…</div>
@@ -224,7 +218,7 @@
           <p>Новые выпуски и наличие размеров — в канале.</p>
         </div>
         <div class="join-actions">
-          <button class="button button-primary punch" id="channelButton" type="button">ОТКРЫТЬ КАНАЛ <span>↗</span></button>
+          <button class="button button-primary punch" id="channelButton" type="button">ОТКРЫТЬ КАНАЛ <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button>
           <button class="button button-ghost" id="shareButton" type="button"><span class="icon" data-icon="share"></span> ПРИГЛАСИТЬ СВОИХ</button>
         </div>
       </section>
@@ -296,9 +290,8 @@
         <div class="view3d" id="view3d" role="tabpanel" tabindex="0" aria-label="Обзор вещи. Повернуть: стрелки влево и вправо." aria-describedby="view3dHint"></div>
         <img id="sheetImage" class="sheet-photo hidden" role="tabpanel" alt="">
         <span class="sheet-badge" id="sheetBadge"></span>
-        <button class="save-product" id="sheetSave" type="button" aria-label="Сохранить"><span class="icon" data-icon="bookmark"></span></button>
         <p class="view3d-hint" id="view3dHint">ТЯНИ В СТОРОНЫ</p>
-        <button class="media-zoom" id="zoomProduct" type="button" aria-label="Увеличить фото">⤢</button>
+        <button class="media-zoom" id="zoomProduct" type="button" aria-label="Увеличить фото"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5"/></svg></button>
       </div>
       <div class="media-toolbar">
         <button id="mediaPrev" type="button" aria-label="Предыдущий ракурс">←</button>
@@ -391,8 +384,7 @@
         <button class="button button-primary full-button punch" id="saveProfile" type="button">СОХРАНИТЬ <span>✓</span></button>
         <p class="form-note">Сохраняется на этом устройстве и подставляется в заявку: имя, телефон, город, адрес.</p>
 
-        <div class="profile-stats">
-          <button type="button" id="profileSavedBtn"><strong id="profileSavedN">0</strong><span>сохранённые</span></button>
+        <div class="profile-stats profile-stats-single">
           <button type="button" id="profileCartBtn"><strong id="profileCartN">0</strong><span>в заявке</span></button>
         </div>
         <div class="profile-orders" id="profileOrders"></div>
@@ -409,6 +401,7 @@
       </div>
       <div class="cart-content" id="cartContent"></div>
       <div class="cart-checkout hidden" id="checkoutForm">
+        <div class="checkout-gift hidden" id="checkoutGift"></div>
         <div class="form-rule"></div>
         <div class="checkout-total"><span>ИТОГО</span><strong id="cartTotal">0 ₽</strong></div>
         <label class="field-label">ИМЯ<input id="checkoutName" type="text" placeholder="Как к тебе обращаться?" autocomplete="name"></label>
@@ -422,7 +415,7 @@
         </div>
         <label class="field-label">КОММЕНТАРИЙ<input id="checkoutNote" type="text" placeholder="Подъезд, время, нюанс по размеру"></label>
         <label class="consent-check"><input id="checkoutConsent" type="checkbox"><span>Соглашаюсь на обработку данных для связи по заявке. <a id="privacyLink" class="privacy-link hidden" href="#" target="_blank" rel="noopener noreferrer">Политика</a></span></label>
-        <button class="button button-primary full-button punch" id="submitOrder" type="button">ПЕРЕЙТИ К ОПЛАТЕ <span>↗</span></button>
+        <button class="button button-primary full-button punch" id="submitOrder" type="button">ПЕРЕЙТИ К ОПЛАТЕ <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button>
         <p class="form-note">Оплата — после подтверждения выбранным способом. Состав и сумма заявки указаны выше.</p>
       </div>
     </div>
@@ -456,11 +449,13 @@
   <div class="modal-backdrop hidden" id="teaserModal" role="dialog" aria-modal="true" aria-label="Тизер выпуска">
     <div class="teaser-sheet">
       <button class="sheet-close" data-close="teaserModal" type="button" aria-label="Закрыть">×</button>
-      <video id="teaserVideo" tabindex="0" controls playsinline preload="none"></video>
+      <video id="teaserVideo" tabindex="0" controls playsinline preload="none">
+        <track kind="captions" srclang="ru" label="Русские" src="assets/video/campaign-v11.ru.vtt" default>
+      </video>
       <div class="teaser-actions">
-        <button class="button button-primary punch" id="teaserToShop" type="button">СМОТРЕТЬ ВЕЩИ <span>↗</span></button>
+        <button class="button button-primary punch" id="teaserToShop" type="button">СМОТРЕТЬ ВЕЩИ <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button>
         <button class="text-button hidden" id="teaserReplay" type="button">Посмотреть ещё раз <span aria-hidden="true">↻</span></button>
-        <button class="text-button hidden" id="teaserToStory" type="button">В сторис <span>↗</span></button>
+        <button class="text-button hidden" id="teaserToStory" type="button">В сторис <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button>
       </div>
     </div>
   </div>
