@@ -1,6 +1,7 @@
 """Regression coverage for the 2026-09-08 production audit (no external network)."""
 import copy
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import json
@@ -56,7 +57,7 @@ class CheckoutRegressionTests(unittest.TestCase):
     def test_modified_request_with_same_key_is_rejected(self):
         self.checkout()
         changed = copy.deepcopy(self.payload)
-        changed['items'].append({'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1})
+        changed['items'].append({'product_id': 'tee-vzglyad', 'size': 'M', 'quantity': 1})
         self.assertFalse(self.checkout(changed)['ok'])
         self.assertEqual(self.db.stats()['orders'], 1)
         self.assertEqual(self.db.connection().execute('SELECT COUNT(*) FROM payments').fetchone()[0], 1)
@@ -77,7 +78,7 @@ class CheckoutRegressionTests(unittest.TestCase):
     def test_invalid_price_rejects_entire_checkout(self):
         self.catalog.get('tee-sila-i-chest')['price'] = 'bad price'
         payload = copy.deepcopy(self.payload)
-        payload['items'].append({'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1})
+        payload['items'].append({'product_id': 'tee-vzglyad', 'size': 'M', 'quantity': 1})
         self.assertFalse(self.checkout(payload)['ok'])
         self.assertEqual(self.db.stats()['orders'], 0)
 
@@ -119,7 +120,7 @@ class CheckoutRegressionTests(unittest.TestCase):
 
     def test_cancel_invalidates_whole_payment_and_late_payment_needs_refund(self):
         payload = copy.deepcopy(self.payload)
-        payload['items'].append({'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1})
+        payload['items'].append({'product_id': 'tee-vzglyad', 'size': 'M', 'quantity': 1})
         receipt = self.checkout(payload)
         self.bot.cancel_own_order(420, 420, receipt['order_ids'][0])
         self.assertTrue(all(r['status'] == 'cancelled' for r in self.db.orders_for_payment(receipt['payment_id'])))
@@ -159,7 +160,7 @@ class CheckoutRegressionTests(unittest.TestCase):
 
     def test_manual_payment_settles_all_positions(self):
         payload = copy.deepcopy(self.payload)
-        payload['items'].append({'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1})
+        payload['items'].append({'product_id': 'tee-vzglyad', 'size': 'M', 'quantity': 1})
         receipt = self.checkout(payload)
         self.bot.update_order_status(1, receipt['order_ids'][0], 'paid')
         self.assertEqual(self.db.get_payment(receipt['payment_id'])['status'], 'paid')
@@ -191,9 +192,9 @@ class CheckoutRegressionTests(unittest.TestCase):
 
     def test_late_line_failure_rolls_back_payment_receipt_and_outbox(self):
         payload = copy.deepcopy(self.payload)
-        payload['items'].append({'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1})
+        payload['items'].append({'product_id': 'tee-vzglyad', 'size': 'M', 'quantity': 1})
         self.db.connection().executescript("""CREATE TRIGGER reject_hoodie BEFORE INSERT ON orders
-            WHEN NEW.product_id='tag-sila-i-chest' BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END;""")
+            WHEN NEW.product_id='tee-vzglyad' BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END;""")
         import sqlite3
         with self.assertRaises(sqlite3.IntegrityError):
             self.checkout(payload, notify=420)
@@ -949,6 +950,350 @@ class OwnerAccessRegressionTests(unittest.TestCase):
         self.assertIn(f'catalog-{today}.json', names)
         self.assertEqual(len(names), 7)
         self.assertEqual(names[0], 'catalog-2026-01-04.json')
+
+
+class GiftInventoryRegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.settings = make_settings(
+            root / 'gift.sqlite', catalog_path=Path(__file__).with_name('catalog.json'),
+            token='audit-test-token', admin_ids=frozenset({1}), channel_url='https://t.me/test',
+            webapp_url='https://example.com', manager_chat_id=None, brand_name='Test',
+            support_username='', health_port=0, giveaway_min_invites=3, privacy_url='')
+        self.db = Database(self.settings.database_path)
+        self.addCleanup(self.db.close_current)
+        self.api = Mock()
+        self.api.create_invoice_link.return_value = 'https://t.me/invoice/mock'
+        self.catalog = Catalog(self.settings.catalog_path)
+        self.bot = BrandBot(self.settings, self.api, self.db, self.catalog)
+
+    def checkout(self, user_id=420, request_id='gift-checkout'):
+        return self.bot.checkout_web_payload(
+            {'id': user_id, 'first_name': 'Test'},
+            {'request_id': request_id, 'consent': True,
+             'customer': {'phone': '+79990000000', 'city': 'Test'},
+             'items': [{'product_id': 'tee-sila-i-chest', 'size': 'M', 'quantity': 1}]},
+            notify_user=user_id)
+
+    def inventory(self):
+        return self.db.connection().execute(
+            "SELECT total, available FROM inventory WHERE product_id='tag-sila-i-chest'").fetchone()
+
+    def test_gift_is_free_automatic_and_idempotent(self):
+        receipt = self.checkout()
+        self.assertTrue(receipt['ok'])
+        self.assertEqual(receipt['amount_rub'], 4900)
+        self.assertEqual(receipt['gift']['product_id'], 'tag-sila-i-chest')
+        self.assertEqual(receipt['gift']['quantity'], 1)
+        self.assertEqual(self.inventory()['available'], 99)
+        self.assertEqual(self.checkout()['payment_id'], receipt['payment_id'])
+        self.assertEqual(self.inventory()['available'], 99, 'retry must not reserve another gift')
+        payment = self.db.get_payment(receipt['payment_id'])
+        self.assertEqual(payment['gift_name'], 'ЖЕТОН')
+        self.assertEqual(payment['gift_qty'], 1)
+        rejected = self.bot.checkout_web_payload(
+            {'id': 420, 'first_name': 'Test'},
+            {'request_id': 'gift-as-product', 'consent': True,
+             'customer': {'phone': '+79990000000', 'city': 'Test'},
+             'items': [{'product_id': 'tag-sila-i-chest', 'size': 'ONE SIZE', 'quantity': 1}]})
+        self.assertFalse(rejected['ok'])
+        self.assertEqual(self.inventory()['available'], 99)
+
+    def test_pending_cancellation_and_paid_cancellation_release_once(self):
+        for paid in (False, True):
+            with self.subTest(paid=paid):
+                receipt = self.checkout(user_id=420 + int(paid), request_id=f'cancel-{paid}')
+                self.assertEqual(self.inventory()['available'], 99)
+                if paid:
+                    self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'charge')
+                    self.assertIsNone(self.db.get_payment(receipt['payment_id'])['gift_released_at'])
+                self.db.set_order_status(
+                    receipt['order_ids'][0], 'cancelled',
+                    **({} if paid else {'customer_id': 420}))
+                self.assertEqual(self.inventory()['available'], 100)
+                payment = self.db.get_payment(receipt['payment_id'])
+                self.assertIsNotNone(payment['gift_released_at'])
+                self.assertFalse(self.db._release_gift(receipt['payment_id']))
+                self.assertEqual(self.inventory()['available'], 100)
+
+    def test_paid_cart_cancellation_is_one_full_refund_unit(self):
+        receipt = self.bot.checkout_web_payload(
+            {'id': 420, 'first_name': 'Test'},
+            {'request_id': 'paid-cart', 'consent': True,
+             'customer': {'phone': '+79990000000', 'city': 'Test'},
+             'items': [
+                 {'product_id': 'tee-sila-i-chest', 'size': 'M', 'quantity': 1},
+                 {'product_id': 'tee-vzglyad', 'size': 'L', 'quantity': 1},
+             ]}, notify_user=420)
+        self.db.mark_payment_paid(receipt['payment_id'], 'stars', 'charge')
+        self.db.set_order_status(receipt['order_ids'][0], 'cancelled')
+        self.assertTrue(all(row['status'] == 'cancelled' for row in self.db.orders_for_payment(receipt['payment_id'])))
+        payment = self.db.get_payment(receipt['payment_id'])
+        self.assertEqual(payment['status'], 'refund_required')
+        self.assertEqual(payment['refund_amount_rub'], 9800)
+        self.assertEqual(self.inventory()['available'], 100)
+
+    def test_checkout_rollback_restores_gift_reservation(self):
+        with patch.object(self.db, 'enqueue_message', side_effect=RuntimeError('outbox unavailable')):
+            with self.assertRaises(RuntimeError):
+                self.checkout()
+        self.assertEqual(self.inventory(), None, 'failed first reservation rolls back its inventory row too')
+        self.assertTrue(self.checkout()['ok'])
+        self.assertEqual(self.inventory()['available'], 99)
+
+    def test_parallel_checkouts_never_oversell_gift_stock(self):
+        self.catalog.get('tag-sila-i-chest')['gift_stock'] = 3
+        def submit(index):
+            try:
+                return self.checkout(user_id=1000 + index, request_id=f'race-{index}')
+            finally:
+                self.db.close_current()
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(submit, range(8)))
+        self.assertTrue(all(result.get('ok') or result.get('code') == 'gift_unavailable' for result in results))
+        self.assertEqual(sum(bool(result.get('gift')) for result in results), 3)
+        self.assertEqual(self.inventory()['available'], 0)
+        self.assertEqual(self.db.connection().execute(
+            'SELECT COUNT(*) FROM payments WHERE gift_qty=1').fetchone()[0], 3)
+        self.assertEqual(sum(bool(result.get('ok')) for result in results), self.db.connection().execute(
+            'SELECT COUNT(*) FROM payments').fetchone()[0])
+
+    def test_expired_invoice_releases_gift_and_cannot_be_resumed(self):
+        from bot import utc_now
+        receipt = self.checkout()
+        old = '2000-01-01T00:00:00+00:00'
+        self.db.connection().execute(
+            'UPDATE payments SET created_at=? WHERE payment_id=?', (old, receipt['payment_id']))
+        self.assertEqual(self.db.expire_payments(), 1)
+        self.assertEqual(self.db.get_payment(receipt['payment_id'])['status'], 'expired')
+        self.assertEqual(self.db.get_order(receipt['order_ids'][0])['status'], 'cancelled')
+        self.assertEqual(self.inventory()['available'], 100)
+        self.assertFalse(self.bot.resume_payment(420, receipt['payment_id'])['ok'])
+        self.assertEqual(self.db.connection().execute(
+            'SELECT COUNT(*) FROM payment_methods').fetchone()[0], 0)
+
+    def test_empty_support_configuration_never_uses_a_hardcoded_account(self):
+        self.assertNotIn('intellectual_sabotage', self.bot.support_text())
+        self.assertTrue(self.bot.route_callback('cb', 420, 420, 'order_direct:tee-sila-i-chest'))
+        text = self.api.send_message.call_args.args[1]
+        self.assertIn('РАЗМЕР', text)
+        self.assertNotIn('intellectual_sabotage', text)
+
+
+class WebhookIntegrityRegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.settings = make_settings(
+            root / 'webhook.sqlite', catalog_path=Path(__file__).with_name('catalog.json'),
+            token='audit-test-token', admin_ids=frozenset(), channel_url='https://t.me/test',
+            webapp_url='https://example.com', manager_chat_id=None, brand_name='Test',
+            support_username='', health_port=0, giveaway_min_invites=3, privacy_url='')
+        self.db = Database(self.settings.database_path)
+        self.addCleanup(self.db.close_current)
+        self.api = Mock()
+        self.api.create_invoice_link.return_value = 'https://t.me/invoice/mock'
+        self.catalog = Catalog(self.settings.catalog_path)
+        self.bot = BrandBot(self.settings, self.api, self.db, self.catalog)
+        self.server = None
+        receipt = self.bot.checkout_web_payload(
+            {'id': 420, 'first_name': 'Test'},
+            {'request_id': 'signed-webhook', 'consent': True,
+             'customer': {'phone': '+79990000000', 'city': 'Test'},
+             'items': [{'product_id': 'tee-sila-i-chest', 'size': 'M', 'quantity': 1}]})
+        self.assertTrue(receipt['ok'])
+        self.receipt = receipt
+        self.payment_id = receipt['payment_id']
+
+    def enable_lava(self):
+        self.settings = replace(
+            self.settings, lava_shop_id='shop', lava_secret_key='secret', lava_hook_key='hook')
+        self.bot.settings = self.settings
+
+    def enable_crypto(self):
+        self.settings = replace(self.settings, crypto_pay_token='crypto-token')
+        self.bot.settings = self.settings
+
+    def webhook(self, provider, payload, signature_override=None):
+        if self.server is None:
+            self.server = start_health_server(0, self.catalog, self.settings, self.db, self.api)
+            self.addCleanup(self.server.server_close)
+            self.addCleanup(self.server.shutdown)
+        raw = json.dumps(payload, separators=(',', ':')).encode()
+        if provider == 'lava':
+            signature = hmac.new(b'hook', raw, hashlib.sha256).hexdigest()
+            headers = {'Signature': signature_override or signature}
+        else:
+            secret = hashlib.sha256(self.settings.crypto_pay_token.encode()).digest()
+            signature = hmac.new(secret, raw, hashlib.sha256).hexdigest()
+            headers = {'Crypto-Pay-API-Signature': signature_override or signature}
+        request = urllib.request.Request(
+            f'http://127.0.0.1:{self.server.server_port}/api/payments/{provider}',
+            data=raw, method='POST', headers={'Content-Type': 'application/json', **headers})
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.loads(response.read())
+        except urllib.error.HTTPError as exc:
+            with exc:
+                return exc.code, json.loads(exc.read())
+
+    def lava_payload(self, invoice_id='invoice-A', amount=4900, currency='RUB'):
+        return {'order_id': self.payment_id, 'status': 'success', 'invoice_id': invoice_id,
+                'sum': amount, 'currency': currency, 'shopId': 'shop'}
+
+    def test_lava_validates_amount_currency_invoice_and_overpayment(self):
+        self.db.register_invoice(self.payment_id, 'lava', {'id': 'invoice-A'}, 4900)
+        self.enable_lava()
+        for payload, expected in [
+            (self.lava_payload(amount=1), 422),
+            (self.lava_payload(currency='USD'), 422),
+            (self.lava_payload(invoice_id='unissued'), 409),
+            (dict(self.lava_payload(), sum=None), 422),
+        ]:
+            with self.subTest(payload=payload):
+                status, _ = self.webhook('lava', payload)
+                self.assertEqual(status, expected)
+                self.assertEqual(self.db.get_payment(self.payment_id)['status'], 'pending')
+        status, response = self.webhook('lava', self.lava_payload())
+        self.assertEqual((status, response['ok']), (200, True))
+        self.assertEqual(self.db.get_payment(self.payment_id)['status'], 'paid')
+        status, replay = self.webhook('lava', self.lava_payload())
+        self.assertEqual(status, 200)
+        self.assertTrue(replay['duplicate'])
+        self.db.register_invoice(self.payment_id, 'lava', {'id': 'invoice-B'}, 4900)
+        status, second = self.webhook('lava', self.lava_payload(invoice_id='invoice-B'))
+        self.assertEqual(status, 200)
+        self.assertTrue(second['overpayment'])
+        payment = self.db.get_payment(self.payment_id)
+        self.assertEqual(payment['status'], 'paid')
+        self.assertEqual(payment['provider_id'], 'invoice-A')
+        transactions = self.db.provider_transactions(self.payment_id)
+        self.assertEqual([row['status'] for row in transactions], ['paid', 'overpayment'])
+        self.assertEqual(self.db.connection().execute(
+            "SELECT COUNT(*) FROM events WHERE event='payment_paid'").fetchone()[0], 1)
+        self.assertEqual(self.db.connection().execute(
+            "SELECT COUNT(*) FROM events WHERE event='payment_overpayment'").fetchone()[0], 1)
+        self.assertTrue(all(row['status'] == 'paid' for row in self.db.orders_for_payment(self.payment_id)))
+
+    def test_crypto_requires_paid_fiat_rub_invoice(self):
+        self.db.register_invoice(self.payment_id, 'crypto', {'id': '101'}, 4900)
+        self.enable_crypto()
+        def payload(**changes):
+            body = {'update_type': 'invoice_paid', 'payload': {
+                'payload': self.payment_id, 'invoice_id': 101, 'status': 'paid',
+                'currency_type': 'fiat', 'fiat': 'RUB', 'amount': '4900.00',
+                'paid_asset': 'USDT', 'paid_amount': '145.2'}}
+            body['payload'].update(changes)
+            return body
+        for changes in ({'currency_type': 'crypto'}, {'fiat': 'USD'}, {'amount': '1'}, {'status': 'active'}):
+            with self.subTest(changes=changes):
+                self.assertEqual(self.webhook('crypto', payload(**changes))[0], 422)
+                self.assertEqual(self.db.get_payment(self.payment_id)['status'], 'pending')
+        status, response = self.webhook('crypto', payload())
+        self.assertEqual(status, 200)
+        self.assertTrue(response['ok'])
+        self.assertEqual(self.db.get_payment(self.payment_id)['status'], 'paid')
+        self.assertEqual(self.db.provider_transactions(self.payment_id)[0]['amount_rub'], 4900)
+
+    def test_health_check_reports_database_failure(self):
+        self.enable_lava()
+        self.webhook('lava', self.lava_payload(amount=1))
+        with patch.object(self.db, 'connection', side_effect=sqlite3.OperationalError('down')):
+            request = urllib.request.Request(f'http://127.0.0.1:{self.server.server_port}/health')
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                urllib.request.urlopen(request, timeout=5)
+            self.assertEqual(caught.exception.code, 503)
+
+
+class StorageIntegrityRegressionTests(unittest.TestCase):
+    def test_failed_catalog_write_keeps_memory_and_disk_on_same_version(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'catalog.json'
+            shutil.copy(Path(__file__).with_name('catalog.json'), path)
+            catalog = Catalog(path)
+            before_data = copy.deepcopy(catalog.data)
+            before_disk = path.read_bytes()
+            with patch.object(catalog, 'save', side_effect=OSError('disk full')):
+                with self.assertRaises(OSError):
+                    catalog.update_product('tee-sila-i-chest', price='5 900 ₽')
+            self.assertEqual(catalog.data, before_data)
+            self.assertEqual(path.read_bytes(), before_disk)
+            self.assertEqual(Catalog(path).get('tee-sila-i-chest')['price'], '4 900 ₽')
+
+    def test_sqlite_backup_is_consistent_and_retained(self):
+        from bot import utc_now
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'shop.sqlite'
+            db = Database(path)
+            try:
+                db.upsert_user({'id': 420, 'first_name': 'Backup'})
+                backup_dir = path.parent / 'backups'
+                backup_dir.mkdir()
+                for day in range(1, 10):
+                    (backup_dir / f'bot-2026-01-{day:02d}.sqlite3').write_bytes(b'old')
+                target = db.backup_database()
+                self.assertIsNotNone(target)
+                self.assertTrue(target.is_file())
+                restored = sqlite3.connect(target)
+                try:
+                    self.assertEqual(restored.execute('SELECT COUNT(*) FROM users').fetchone()[0], 1)
+                finally:
+                    restored.close()
+                self.assertIsNone(db.backup_database(), 'daily backup must not be rewritten on every maintenance tick')
+                self.assertEqual(len(list(backup_dir.glob('bot-*.sqlite3'))), 7)
+            finally:
+                db.close_current()
+
+    def test_operational_retention_preserves_ledger_and_pending_notifications(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(Path(directory) / 'retention.sqlite')
+            try:
+                now = datetime.now(timezone.utc)
+                old = (now - timedelta(days=120)).isoformat(timespec='seconds')
+                fresh = now.isoformat(timespec='seconds')
+                conn = db.connection()
+                for event, created in [('product_open', old), ('product_open', fresh), ('order_created', old)]:
+                    conn.execute("INSERT INTO events(user_id,event,payload,created_at) VALUES (NULL,?,'{}',?)", (event, created))
+                for key, delivered in [('old', old), ('pending', None)]:
+                    conn.execute("INSERT INTO notifications(notification_id,chat_id,body,delivered_at) VALUES (?,1,'body',?)", (key, delivered))
+                conn.execute("INSERT INTO payment_methods VALUES ('expired','[]',?)", (now.timestamp() - 90000,))
+                conn.execute("INSERT INTO payment_methods VALUES ('valid','[]',?)", (now.timestamp() + 90000,))
+                result = db.prune_operational_data(now)
+                self.assertEqual(result, {'notifications': 1, 'payment_methods': 1, 'events': 1})
+                self.assertEqual(conn.execute('SELECT COUNT(*) FROM events').fetchone()[0], 2)
+                self.assertIsNotNone(conn.execute("SELECT 1 FROM events WHERE event='order_created'").fetchone())
+                self.assertIsNotNone(conn.execute("SELECT 1 FROM notifications WHERE notification_id='pending'").fetchone())
+                self.assertIsNotNone(conn.execute("SELECT 1 FROM payment_methods WHERE payment_id='valid'").fetchone())
+                self.assertIsNone(db.prune_operational_data(now), 'retention must run at most once per day')
+            finally:
+                db.close_current()
+
+    def test_refund_completion_has_a_guarded_one_way_transition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(Path(directory) / 'refund.sqlite')
+            try:
+                db.create_payment('payment', 420, 4900)
+                self.assertFalse(db.mark_payment_refunded('payment', actor_id=1))
+                self.assertEqual(db.get_payment('payment')['status'], 'pending')
+                db.connection().execute("UPDATE payments SET status='paid' WHERE payment_id='payment'")
+                self.assertFalse(db.mark_payment_refunded('payment', actor_id=1))
+                self.assertEqual(db.get_payment('payment')['status'], 'paid')
+                db.connection().execute("UPDATE payments SET status='refund_required', refund_amount_rub=amount_rub WHERE payment_id='payment'")
+                self.assertTrue(db.mark_payment_refunded('payment', actor_id=1, provider_refund_id='refund-1'))
+                self.assertFalse(db.mark_payment_refunded('payment', actor_id=2))
+                payment = db.get_payment('payment')
+                self.assertEqual(payment['status'], 'refunded')
+                self.assertEqual(payment['refund_actor'], 1)
+                self.assertEqual(payment['provider_refund_id'], 'refund-1')
+                self.assertEqual(payment['amount_rub'], 4900)
+                self.assertEqual(payment['refund_amount_rub'], 4900)
+                self.assertIsNotNone(payment['refunded_at'])
+            finally:
+                db.close_current()
 
 
 if __name__ == '__main__':

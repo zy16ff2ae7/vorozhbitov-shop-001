@@ -6,11 +6,11 @@
     brand: { name: "СИЛА И ЧЕСТЬ", descriptor: "Сила и честь", drop: "ВЫПУСК 001" },
     channel_url: "https://t.me/+XufFz8GGR0o3Njky",
     privacy_url: "",
+    media: { welcome_motion: false },
     categories: [], products: [], lookbook: []
   };
 
   const ICONS = {
-    bookmark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5A2.5 2.5 0 0 1 8.5 2h7A2.5 2.5 0 0 1 18 4.5V22l-6-3.8L6 22V4.5Z"/></svg>',
     bag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l1 13H4L5 8Z"/><path d="M8.5 9V6a3.5 3.5 0 0 1 7 0v3"/></svg>',
     sliders: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M15 10v4M10 16v4"/></svg>',
     search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 5 5"/></svg>',
@@ -29,9 +29,7 @@
     stock: "all",
     sizeFilter: "all",
     sort: "featured",
-    view: "all",
     cart: Core.cleanCart(loadJSON("vorozhbitov_cart", [])),
-    saved: Core.stringList(loadJSON("vorozhbitov_saved", [])),
     viewed: Core.stringList(loadJSON("vorozhbitov_viewed", [])),
     profile: Core.cleanProfile(loadJSON("vorozhbitov_profile", {})),
     catalogReady: false,
@@ -104,12 +102,12 @@
   }
 
   function priceNumber(price) {
-    const parsed = Number(String(price || "0").replace(/[^0-9]/g, ""));
-    return Number.isFinite(parsed) ? parsed : 0;
+    return Core.priceNumber(price);
   }
 
   function rubles(value) {
-    return `${Math.round(value).toLocaleString("ru-RU")} ₽`;
+    const amount = Number(value);
+    return Number.isFinite(amount) ? `${Math.round(amount).toLocaleString("ru-RU")} ₽` : "Цена уточняется";
   }
 
   function isLimited(product) {
@@ -156,7 +154,6 @@
     if ($("#profileFill")) $("#profileFill").textContent = `${profileScore(profile)} / 5`;
     $$("#profileDeliver .filter-chip").forEach(node => node.classList.toggle("active", node.dataset.profileDeliver === (profile.deliver || "СДЭК")));
     $$("#profileSizeRow .filter-chip").forEach(node => node.classList.toggle("active", node.dataset.profileSize === profile.size));
-    if ($("#profileSavedN")) $("#profileSavedN").textContent = String(state.saved.length);
     if ($("#profileCartN")) $("#profileCartN").textContent = String(state.cart.reduce((sum, item) => sum + Number(item.qty || 0), 0));
   }
 
@@ -174,6 +171,7 @@
         const label = product ? product.name : "Вещь";
         return item.size ? `${label} · ${item.size}` : label;
       }).filter(Boolean);
+      if (row.gift && row.gift.name) names.push(`Подарок: ${row.gift.name}`);
       const quantity = (row.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
       return {
         id: null,
@@ -213,6 +211,7 @@
         <div class="profile-order-main">
           <strong>${escapeHTML(row.product_name || "Вещь")}${escapeHTML(size)}</strong>
           <small>${escapeHTML(when)}${qty > 1 ? ` · ${qty} шт.` : ""}${row.amount_label ? ` · ${escapeHTML(row.amount_label)}` : ""}</small>
+          ${row.gift ? `<small class="profile-order-gift">Подарок: ${escapeHTML(row.gift.name || "Жетон")} · 0 ₽</small>` : ""}
         </div>
         <div class="profile-order-side">
           <span class="profile-order-status is-${escapeHTML(status)}">${escapeHTML(row.status_label || status)}</span>
@@ -322,7 +321,7 @@
 
   function showToast(message) {
     const toast = $("#toast");
-    toast.innerHTML = '<span class="toast-mark" aria-hidden="true">⚔</span><span>' + escapeHTML(message) + "</span>";
+    toast.innerHTML = '<span class="toast-mark" aria-hidden="true"></span><span>' + escapeHTML(message) + "</span>";
     toast.classList.add("visible");
     clearTimeout(state.toastTimer);
     state.toastTimer = setTimeout(() => toast.classList.remove("visible"), 2800);
@@ -442,7 +441,11 @@
     if (hint) hint.classList.toggle("hidden", mode !== "3d");
     if (dots) dots.classList.toggle("hidden", mode !== "photo");
     $("#spinToggle").classList.toggle("hidden", mode !== "3d");
-    $$("[data-stage]").forEach(button => button.setAttribute("aria-selected", String(button.dataset.stage === mode)));
+    $$("[data-stage]").forEach(button => {
+      const active = button.dataset.stage === mode;
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+    });
     updateMediaPosition();
     if (silent) return;
     if (mode === "3d" && state.currentProduct) start3D(state.currentProduct);
@@ -461,7 +464,7 @@
 
   function renderCategoryChips() {
     const root = $("#categoryChips");
-    const visible = state.data.categories.filter(category => state.data.products.some(product => product.active !== false && product.category === category.id));
+    const visible = state.data.categories.filter(category => state.data.products.some(product => Core.buyable(product) && product.category === category.id));
     const all = [{ id: "all", name: "Все вещи" }, ...visible];
     root.innerHTML = all.map(category => `<button class="category-chip ${state.category === category.id ? "active" : ""}" data-category="${escapeHTML(category.id)}" type="button" aria-pressed="${state.category === category.id}">${escapeHTML(category.name)}</button>`).join("");
   }
@@ -469,8 +472,7 @@
   function filteredProducts() {
     const search = state.search.trim().toLowerCase();
     let list = state.data.products.filter(product => {
-      if (product.active === false) return false;
-      if (state.view === "saved" && !state.saved.includes(product.id)) return false;
+      if (!Core.buyable(product)) return false;
       if (state.category !== "all" && product.category !== state.category) return false;
       if (state.stock === "limited" && !isLimited(product)) return false;
       if (state.stock === "available" && !Core.available(product)) return false;
@@ -485,13 +487,11 @@
   }
 
   function renderProductCard(product, index) {
-    const saved = state.saved.includes(product.id);
     return `<article class="product-card" data-product-id="${escapeHTML(product.id)}" style="--i:${index}">
       <div class="product-image">
         <img src="${escapeHTML(imageFor(product))}" alt="${escapeHTML(product.name)}" loading="lazy">
         <span class="product-badge">${escapeHTML(product.badge || "БАЗА")}</span>
         <span class="badge-3d">360°</span>
-        <button class="product-save ${saved ? "saved" : ""}" data-save-id="${escapeHTML(product.id)}" type="button" aria-label="${saved ? "Удалить из сохранённых" : "Сохранить"}"><span class="icon" data-icon="bookmark"></span></button>
         <span class="product-hover">РАССМОТРЕТЬ <b>↗</b></span>
       </div>
       <div class="product-info">
@@ -509,9 +509,6 @@
     $("#productCount").textContent = Core.productCount(products.length);
     root.innerHTML = products.map(renderProductCard).join("");
     $("#emptyState").classList.toggle("hidden", products.length > 0 || !state.catalogReady);
-    const banner = $("#viewBanner");
-    banner.classList.toggle("hidden", state.view !== "saved");
-    $("#viewBannerTitle").textContent = "СОХРАНЁННЫЕ";
     iconize(root);
     updateCounters();
   }
@@ -527,7 +524,7 @@
       const src = item.image || item.photo_url;
       const caption = item.caption || "ЗАМЕТКА";
       return `<figure class="lookbook-card" tabindex="0" role="button" data-story-index="${index}" data-caption="${escapeHTML(caption)}"><img src="${escapeHTML(src)}" alt="${escapeHTML(caption)}" loading="lazy"><figcaption><strong>${escapeHTML(caption)}</strong></figcaption></figure>`;
-    }).join("") + `<div class="lookbook-note"><span class="red-slash">//</span><p>Кадры выпуска. Посадка, ткань, крой.</p><button class="button button-outline" data-scroll="catalog" type="button">В ВИТРИНУ <span>↗</span></button></div>`;
+    }).join("") + `<div class="lookbook-note"><span class="red-slash">//</span><p>Кадры выпуска. Посадка, ткань, крой.</p><button class="button button-outline" data-scroll="catalog" type="button">В ВИТРИНУ <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button></div>`;
     $("#lookbookGrid").querySelector("[data-scroll]")?.addEventListener("click", () => scrollToId("catalog"));
   }
 
@@ -585,10 +582,13 @@
 
   function updatePurchaseSummary() {
     const product = state.currentProduct;
-    $("#purchaseSummary").textContent = product ? `${product.price} · ${state.selectedSize ? `размер ${state.selectedSize}` : "Выбери размер"}` : "Выбери размер";
-    const blocked = !product || !Core.available(product);
+    const gift = Boolean(product && !Core.buyable(product));
+    $("#purchaseSummary").textContent = gift
+      ? "Добавим бесплатно к первой заявке, пока есть тираж."
+      : product ? `${product.price} · ${state.selectedSize ? `размер ${state.selectedSize}` : "Выбери размер"}` : "Выбери размер";
+    const blocked = !product || !Core.available(product) || gift;
     $("#addToCartButton").disabled = blocked;
-    $("#addToCartButton").innerHTML = blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : state.selectedSize ? 'ДОБАВИТЬ В ЗАЯВКУ <span>+</span>' : 'ВЫБРАТЬ РАЗМЕР <span>↑</span>';
+    $("#addToCartButton").innerHTML = gift ? "ТОЛЬКО В ПОДАРОК" : blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : state.selectedSize ? 'ДОБАВИТЬ В ЗАЯВКУ <span>+</span>' : 'ВЫБРАТЬ РАЗМЕР <span>↑</span>';
   }
 
   function renderSheet(product) {
@@ -607,7 +607,11 @@
     if (sign) {
       sign.textContent = product.signature || "Сила и честь. Бери размер, пока есть.";
     }
-    $("#sheetPrice").textContent = product.price;
+    const gift = !Core.buyable(product);
+    $("#sheetPrice").textContent = gift ? "Бесплатно · в подарок" : product.price;
+    $(".size-block").classList.toggle("hidden", gift);
+    $(".qty-row").classList.toggle("hidden", gift);
+    $("#waitlistButton").classList.toggle("hidden", gift);
     $("#sheetDescription").textContent = product.description;
     $("#sheetFacts").innerHTML = `<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Плотный хлопок")}</span></div><div class="fact-row"><span>Посадка</span><span>${escapeHTML(product.fit || "Свободная")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(product.stock_label || "В наличии")}</span></div>`;
     $("#sizeList").innerHTML = (product.sizes || []).map(size => `<button class="size-button ${state.selectedSize === size ? "selected" : ""}" data-size="${escapeHTML(size)}" aria-pressed="${state.selectedSize === size}" type="button">${escapeHTML(size)}</button>`).join("");
@@ -620,12 +624,7 @@
     const singleSize = (product.sizes || []).length === 1 ? product.sizes[0] : "";
     const letterSizes = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL"];
     $("#sizeGuideButton").classList.toggle("hidden", singleSize !== "" && !letterSizes.includes(singleSize));
-    const tryon = $("#tryonButton");
-    if (tryon) tryon.classList.toggle("hidden", !(product.sizes || []).some(size => letterSizes.includes(size)));
-    const saved = state.saved.includes(product.id);
-    $("#sheetSave").classList.toggle("saved", saved);
-    $("#sheetSave").setAttribute("aria-label", saved ? "Удалить из сохранённых" : "Сохранить");
-    const others = state.data.products.filter(item => item.id !== product.id && item.active !== false);
+    const others = state.data.products.filter(item => item.id !== product.id && Core.buyable(item));
     const related = others.filter(item => item.category === product.category).slice(0, 2);
     if (!related.length) related.push(...others.slice(0, 2));
     $("#related").innerHTML = related.length
@@ -652,35 +651,6 @@
       setGallery(photoIndex);
     } else setStage("3d");
     haptic("light");
-  }
-
-  function toggleSaved(id) {
-    if (state.saved.includes(id)) {
-      state.saved = state.saved.filter(item => item !== id);
-      showToast("Убрано из сохранённых.");
-    } else {
-      state.saved.push(id);
-      showToast("Сохранено. Вернёшься — вещь будет ждать.");
-      haptic("medium");
-    }
-    saveJSON("vorozhbitov_saved", state.saved);
-    renderProducts();
-    if (state.currentProduct && state.currentProduct.id === id) {
-      $("#sheetSave").classList.toggle("saved", state.saved.includes(id));
-      $("#sheetSave").setAttribute("aria-label", state.saved.includes(id) ? "Удалить из сохранённых" : "Сохранить");
-    }
-  }
-
-  function showSaved() {
-    if (!state.saved.length) return showToast("Пока ничего не сохранено.");
-    state.view = "saved";
-    state.category = "all";
-    state.search = "";
-    $("#searchInput").value = "";
-    $("#clearSearch").classList.add("hidden");
-    renderCategoryChips();
-    renderProducts();
-    scrollToId("catalog");
   }
 
   function renderPersonalization(product) {
@@ -729,6 +699,7 @@
     if (state.checkoutPending) return showToast("Подожди подтверждения заявки. Корзина сохранена.");
     const product = state.currentProduct;
     if (!product) return;
+    if (!Core.buyable(product)) return showToast("Жетон не продаётся отдельно — добавим его к заявке бесплатно.");
     if (!state.selectedSize) {
       $("#sizeHint").textContent = "Сначала выбери размер.";
       $(".size-block").scrollIntoView({block:"center", behavior:reducedMotion() ? "instant" : "smooth"});
@@ -787,7 +758,25 @@
   }
 
   function cartTotal() {
-    return cartItems().reduce((sum, pair) => sum + priceNumber(pair.product.price) * pair.item.qty, 0);
+    return cartItems().reduce((sum, { item, product }) => {
+      if (!Core.available(product) || !(product.sizes || []).includes(item.size)) return sum;
+      return sum + priceNumber(product.price) * item.qty;
+    }, 0);
+  }
+
+  function renderCheckoutGift() {
+    const box = $("#checkoutGift");
+    if (!box) return;
+    const gift = state.data.gift;
+    if (!gift) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    const available = Boolean(gift.available && Number(gift.remaining) > 0);
+    box.classList.remove("hidden");
+    box.classList.toggle("is-sold-out", !available);
+    box.innerHTML = `${gift.image ? `<img src="${escapeHTML(gift.image)}" alt="">` : ""}<div><span class="section-kicker">ПОДАРОК К ЗАКАЗУ</span><strong>${escapeHTML(gift.name || "Жетон")}</strong><small>${available ? `Добавим бесплатно · осталось ${Number(gift.remaining)} из ${Number(gift.stock)}` : "Первая сотня подарков уже разобрана"}</small></div><b>${available ? "0 ₽" : "—"}</b>`;
   }
 
   function renderCart() {
@@ -816,6 +805,7 @@
     $$("#cartContent button, #checkoutForm input, #checkoutForm .filter-chip").forEach(node => { node.disabled = state.checkoutPending; });
     $$("#cartContent [data-qty=plus]").forEach(node => { const item = state.cart.find(row => row.key === node.closest("[data-cart-key]").dataset.cartKey); node.disabled = state.checkoutPending || item.qty >= Core.MAX_QUANTITY; });
     $("#checkoutForm").classList.remove("hidden");
+    renderCheckoutGift();
   }
 
   function openCart() {
@@ -871,13 +861,9 @@
 
   function updateCounters() {
     const cartCount = state.cart.reduce((sum, item) => sum + Number(item.qty || 0), 0);
-    const savedCount = state.saved.length;
     [$("#cartCount"), $("#bottomCartCount")].forEach(node => {
       if (node) { node.textContent = cartCount; node.classList.toggle("hidden", cartCount === 0); }
     });
-    const saved = $("#savedCount");
-    if (saved) { saved.textContent = savedCount; saved.classList.toggle("hidden", savedCount === 0); }
-    if ($("#profileSavedN")) $("#profileSavedN").textContent = String(savedCount);
     if ($("#profileCartN")) $("#profileCartN").textContent = String(cartCount);
     syncMainButton();
   }
@@ -965,8 +951,8 @@
         const qty = Number(line.quantity || 1);
         const extra = qty > 1 ? ` · ${qty} шт.` : "";
         return `<li><span>${escapeHTML(line.name || "Вещь")}${line.size ? ` · ${escapeHTML(line.size)}` : ""}</span><span>${escapeHTML(extra)}</span></li>`;
-      }).join("");
-      linesBox.classList.toggle("hidden", !lines.length);
+      }).join("") + (data.gift ? `<li class="pay-gift-line"><span>Подарок: ${escapeHTML(data.gift.name || "Жетон")}</span><span>0 ₽</span></li>` : "");
+      linesBox.classList.toggle("hidden", !lines.length && !data.gift);
     }
     const box = $("#payMethods");
     if (box) {
@@ -1071,7 +1057,7 @@
       const data = await checkoutClient.submit(payload, tg && tg.initData, user ? String(user.id) : "");
       const storedHistory = loadJSON("vorozhbitov_orders", []);
       const history = Array.isArray(storedHistory) ? storedHistory : [];
-      history.unshift({ at: Date.now(), total: data.amount_rub, items: payload.items });
+      history.unshift({ at: Date.now(), total: data.amount_rub, items: payload.items, gift: data.gift || null });
       saveJSON("vorozhbitov_orders", history.slice(0, 12));
       state.cart = [];
       saveJSON("vorozhbitov_cart", state.cart);
@@ -1085,6 +1071,7 @@
         showToast(data.status === "paid" ? "Эта заявка уже оплачена." : "Заявка уже обработана. Проверь её статус.");
       }
     } catch (error) {
+      if (error.code === "gift_unavailable") loadCatalog();
       showToast(error.message || "Нет подтверждения от сервера. Корзина сохранена.");
       haptic("error");
     } finally {
@@ -1148,8 +1135,8 @@
       tg.expand();
       if (typeof tg.disableVerticalSwipes === "function") tg.disableVerticalSwipes();
       if (typeof tg.enableClosingConfirmation === "function") tg.enableClosingConfirmation();
-      if (typeof tg.setHeaderColor === "function") tg.setHeaderColor("#070708");
-      if (typeof tg.setBackgroundColor === "function") tg.setBackgroundColor("#070708");
+      if (typeof tg.setHeaderColor === "function") tg.setHeaderColor("#0c0c0e");
+      if (typeof tg.setBackgroundColor === "function") tg.setBackgroundColor("#0c0c0e");
       if (tg.MainButton) tg.MainButton.hide();
       if (tg.BackButton && typeof tg.BackButton.onClick === "function") {
         tg.BackButton.onClick(() => closeTopModal());
@@ -1240,7 +1227,7 @@
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
     return {
-      welcomeLoop: media.welcome_loop || "assets/video/welcome-final-30s.mp4",
+      welcomeLoop: media.welcome_motion === false ? "" : (media.welcome_loop || "assets/video/welcome-final-30s.mp4"),
       welcomePoster: media.welcome_poster || "assets/drop/hero-sila-chest-v1.jpg",
       teaser: media.teaser || "assets/video/campaign-v6.mp4",
       title: media.teaser_title || "СИЛА И ЧЕСТЬ",
@@ -1268,7 +1255,7 @@
     setupWelcomeVideo(media);
     // Тираж на заставке берём из каталога, а не пишем руками.
     const stock = $("#welcomeStock");
-    const lead = (state.data.products || []).find(p => (p.featured || p.real_photos) && p.stock_label);
+    const lead = (state.data.products || []).find(p => Core.buyable(p) && (p.featured || p.real_photos) && p.stock_label);
     if (stock && lead) stock.textContent = String(lead.stock_label).toUpperCase();
   }
 
@@ -1303,7 +1290,7 @@
     const fallback = $("#welcomeFallback");
     // Фото — только для режима без движения. Во всех остальных случаях фон чёрный,
     // магазин под заставкой не просвечивает (у .welcome сплошной фон).
-    if (fallback) fallback.classList.toggle("hidden", canPlay || !reducedMotion());
+    if (fallback) fallback.classList.toggle("hidden", canPlay || (!reducedMotion() && Boolean(welcomePlayback.source)));
     // Источник ставим сразу, не дожидаясь конца загрузки и гейта воспроизведения:
     // ролик буферизуется уже под бут-штампом и стартует мгновенно.
     if (!saverBlocked && !reducedMotion() && welcomePlayback.source && video.getAttribute("src") !== welcomePlayback.source) {
@@ -1312,7 +1299,7 @@
     }
     if (!canPlay) {
       video.pause();
-      if (saverMode() || reducedMotion()) video.classList.remove("is-playing");
+      if (saverMode() || reducedMotion() || !welcomePlayback.source) video.classList.remove("is-playing");
       return;
     }
     if (!video.paused || welcomePlayback.pending) return;
@@ -1344,10 +1331,14 @@
     // Каталог приходит позже старта и приносит тот же файл с новым ?v-штампом.
     // Уже идущий ролик не трогаем, иначе начало проиграется дважды.
     const playing = video.classList.contains("is-playing") || (!video.paused && video.currentTime > 0);
-    if (welcomePlayback.source !== media.welcomeLoop && !playing) {
+    if (welcomePlayback.source !== media.welcomeLoop && (!playing || !media.welcomeLoop)) {
       video.pause();
       video.classList.remove("is-playing");
       welcomePlayback.source = media.welcomeLoop;
+      if (!media.welcomeLoop) {
+        video.removeAttribute("src");
+        video.load();
+      }
       welcomePlayback.failed = false;
       welcomePlayback.blocked = false;
     }
@@ -1429,7 +1420,6 @@
     state.sizeFilter = "all";
     state.search = "";
     state.category = category;
-    state.view = "all";
     state.sort = "featured";
     $("#searchInput").value = "";
     $("#sortSelect").value = "featured";
@@ -1494,43 +1484,6 @@
     if (!root || root.children.length) return;
     const card = '<article class="product-card skeleton-card" aria-hidden="true"><div class="sk-media"></div><div class="sk-line"></div><div class="sk-line short"></div></article>';
     root.innerHTML = card + card;
-  }
-
-  /* --- Reveal-анимации секций и hero-tilt --- */
-
-  function initMotion() {
-    ["catalog", "store", "lookbook"].forEach(id => {
-      const section = document.getElementById(id);
-      if (section) section.classList.add("reveal");
-    });
-    if ("IntersectionObserver" in window && !reducedMotion()) {
-      const observer = new IntersectionObserver(entries => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) { entry.target.classList.add("in"); observer.unobserve(entry.target); }
-        });
-      }, { threshold: 0.12 });
-      $$(".reveal").forEach(node => observer.observe(node));
-    } else {
-      $$(".reveal").forEach(node => node.classList.add("in"));
-    }
-    const heroMedia = $(".hero-media");
-    const fine = window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches;
-    if (!heroMedia || !fine || reducedMotion()) return;
-    const img = heroMedia.querySelector("img");
-    if (!img) return;
-    heroMedia.addEventListener("mousemove", event => {
-      const rect = heroMedia.getBoundingClientRect();
-      const x = (event.clientX - rect.left) / rect.width - 0.5;
-      const y = (event.clientY - rect.top) / rect.height - 0.5;
-      img.style.setProperty("--tilt-y", (-x * 6).toFixed(2) + "deg");
-      img.style.setProperty("--tilt-x", (y * 6).toFixed(2) + "deg");
-      img.style.setProperty("--tilt-s", "1.04");
-    });
-    heroMedia.addEventListener("mouseleave", () => {
-      img.style.setProperty("--tilt-x", "0deg");
-      img.style.setProperty("--tilt-y", "0deg");
-      img.style.setProperty("--tilt-s", "1");
-    });
   }
 
   /* --- Lookbook-истории --- */
@@ -1641,7 +1594,7 @@
     if (quiz.fit === "Свободно / оверсайз") at += 1;
     const size = QUIZ_SIZES[Math.min(Math.max(at, 0), QUIZ_SIZES.length - 1)];
     $("#quizStep").textContent = "Готово";
-    const picks = (state.data.products || []).filter(item => item.active !== false && (item.sizes || []).includes(size)).slice(0, 3);
+    const picks = (state.data.products || []).filter(item => Core.buyable(item) && (item.sizes || []).includes(size)).slice(0, 3);
     body.innerHTML = `<p class="quiz-q">Твоя посадка —</p><div class="quiz-result-size">${escapeHTML(size)}</div>` +
       `<p class="quiz-result-note">Рост ${escapeHTML(quiz.height.toLowerCase())} · ${escapeHTML(quiz.build.toLowerCase())} · ${escapeHTML(quiz.fit.toLowerCase())}.</p>` +
       `<div class="quiz-options"><button class="button" data-quiz-apply="${escapeHTML(size)}" type="button">ВЗЯТЬ ${escapeHTML(size)}</button></div>` +
@@ -1706,48 +1659,8 @@
     img.src = "assets/spin/tag-sich-01.jpg";
   }
 
-  /* --- Примерка футболки по фото --- */
-
-  const tryon = { photo: null, tee: null, teeReady: false, scale: 0.8, dx: 0, dy: 0, drag: null };
-
-  function openTryon() {
-    openModal("tryonModal");
-    if (!tryon.tee && !tryon.teeReady) {
-      const img = new Image();
-      img.onload = () => { tryon.tee = img; tryon.teeReady = true; drawTryon(); };
-      img.src = "assets/tryon-tee.jpg";
-    } else {
-      drawTryon();
-    }
-  }
-
-  function drawTryon() {
-    const canvas = $("#tryonCanvas");
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const w = canvas.width, h = canvas.height;
-    ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "#141416";
-    ctx.fillRect(0, 0, w, h);
-    if (tryon.photo) {
-      const iw = tryon.photo.naturalWidth, ih = tryon.photo.naturalHeight;
-      const scale = Math.max(w / iw, h / ih);
-      const dw = iw * scale, dh = ih * scale;
-      ctx.drawImage(tryon.photo, (w - dw) / 2, (h - dh) / 2, dw, dh);
-    }
-    if (tryon.photo && tryon.teeReady && tryon.tee) {
-      const tw = w * tryon.scale;
-      const th = tw * (tryon.tee.naturalHeight / tryon.tee.naturalWidth);
-      ctx.globalCompositeOperation = "multiply";
-      ctx.drawImage(tryon.tee, (w - tw) / 2 + tryon.dx, h * 0.10 + tryon.dy, tw, th);
-      ctx.globalCompositeOperation = "source-over";
-    }
-  }
-
   function bindEvents() {
     $("#retryCatalog").addEventListener("click", loadCatalog);
-    initMotion();
     renderSkeletons();
     $("#quizOpenButton").addEventListener("click", openQuiz);
     $("#quizBody").addEventListener("click", event => {
@@ -1773,50 +1686,6 @@
       closeModal("storiesModal");
       if (id) openProduct(id);
     });
-    if ($("#tryonButton")) $("#tryonButton").addEventListener("click", openTryon);
-    if ($("#tryonFile")) $("#tryonFile").addEventListener("change", event => {
-      const file = event.target.files && event.target.files[0];
-      if (!file) return;
-      const img = new Image();
-      img.onload = () => {
-        tryon.photo = img;
-        tryon.dx = 0;
-        tryon.dy = 0;
-        if ($("#tryonUpload")) $("#tryonUpload").classList.add("hidden");
-        if ($("#tryonChange")) $("#tryonChange").classList.remove("hidden");
-        if ($("#tryonDownload")) $("#tryonDownload").disabled = false;
-        drawTryon();
-        haptic("light");
-      };
-      img.src = URL.createObjectURL(file);
-    });
-    if ($("#tryonChange")) $("#tryonChange").addEventListener("click", () => $("#tryonFile").click());
-    if ($("#tryonScale")) $("#tryonScale").addEventListener("input", event => { tryon.scale = Number(event.target.value) / 100; drawTryon(); });
-    if ($("#tryonDownload")) $("#tryonDownload").addEventListener("click", () => {
-      const canvas = $("#tryonCanvas");
-      if (!canvas || !tryon.photo) return;
-      const link = document.createElement("a");
-      link.download = "sila-chest-tryon.png";
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-      haptic("success");
-    });
-    const tryCanvas = $("#tryonCanvas");
-    if (tryCanvas) {
-      tryCanvas.addEventListener("pointerdown", event => {
-        if (!tryon.photo) return;
-        try { tryCanvas.setPointerCapture(event.pointerId); } catch (_) { /* noop */ }
-        tryon.drag = { x: event.clientX - tryon.dx, y: event.clientY - tryon.dy };
-      });
-      tryCanvas.addEventListener("pointermove", event => {
-        if (!tryon.drag) return;
-        tryon.dx = Math.min(Math.max(event.clientX - tryon.drag.x, -180), 180);
-        tryon.dy = Math.min(Math.max(event.clientY - tryon.drag.y, -240), 240);
-        drawTryon();
-      });
-      tryCanvas.addEventListener("pointerup", () => { tryon.drag = null; });
-      tryCanvas.addEventListener("pointercancel", () => { tryon.drag = null; });
-    }
     const personInput = $("#personInput");
     if (personInput) personInput.addEventListener("input", drawPersonPreview);
     $("#heroProductButton").addEventListener("click", () => {
@@ -1880,15 +1749,12 @@
       const button = event.target.closest("[data-category]");
       if (!button) return;
       state.category = button.dataset.category;
-      state.view = "all";
       haptic("light");
       renderCategoryChips();
       renderProducts();
     });
 
     $("#productGrid").addEventListener("click", event => {
-      const saveButton = event.target.closest("[data-save-id]");
-      if (saveButton) { event.stopPropagation(); return toggleSaved(saveButton.dataset.saveId); }
       const card = event.target.closest("[data-product-id]");
       if (card) openProduct(card.dataset.productId);
     });
@@ -1921,12 +1787,10 @@
       if (card) openProduct(card.dataset.related);
     });
 
-    $("#sheetSave").addEventListener("click", () => { if (state.currentProduct) toggleSaved(state.currentProduct.id); });
     $("#addToCartButton").addEventListener("click", addToCart);
     $("#waitlistButton").addEventListener("click", sendWaitlist);
     $("#cartButton").addEventListener("click", openCart);
     $("#bottomCartButton").addEventListener("click", openCart);
-    if ($("#savedButton")) $("#savedButton").addEventListener("click", showSaved);
     if ($("#profileButton")) $("#profileButton").addEventListener("click", openProfile);
     if ($("#bottomProfileButton")) $("#bottomProfileButton").addEventListener("click", openProfile);
     $$("#profileModal input").forEach(input => {
@@ -1951,7 +1815,6 @@
       button.disabled = true;
       cancelProfileOrder(orderId);
     });
-    if ($("#profileSavedBtn")) $("#profileSavedBtn").addEventListener("click", () => { closeModal("profileModal"); showSaved(); });
     if ($("#profileCartBtn")) $("#profileCartBtn").addEventListener("click", () => { closeModal("profileModal"); openCart(); });
     if ($("#profileDeliver")) $("#profileDeliver").addEventListener("click", event => {
       const button = event.target.closest("[data-profile-deliver]");
@@ -1965,7 +1828,6 @@
       state.profile.size = state.profile.size === button.dataset.profileSize ? "" : button.dataset.profileSize;
       $$("#profileSizeRow .filter-chip").forEach(node => node.classList.toggle("active", node.dataset.profileSize === state.profile.size));
     });
-    $("#clearView").addEventListener("click", () => { state.view = "all"; renderProducts(); });
 
     $("#cartContent").addEventListener("click", event => {
       if (event.target.closest("[data-cart-retry]")) { loadCatalog(); return; }
@@ -1986,7 +1848,6 @@
     });
     $("#searchInput").addEventListener("input", event => {
       state.search = event.target.value;
-      state.view = "all";
       $("#clearSearch").classList.toggle("hidden", !state.search);
       renderProducts();
     });
@@ -2081,6 +1942,16 @@
       if (event.target.matches('[data-story-index]') && ["Enter", " "].includes(event.key)) {
         event.preventDefault(); openStories(Number(event.target.dataset.storyIndex) || 0);
       }
+      if (event.target.matches("[data-stage]") && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        const tabs = $$("[data-stage]");
+        const current = tabs.indexOf(event.target);
+        const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1
+          : (current + (event.key === "ArrowLeft" ? -1 : 1) + tabs.length) % tabs.length;
+        setStage(tabs[next].dataset.stage);
+        tabs[next].focus();
+        return;
+      }
       if (top && top.id === "productModal" && state.stage === "photo" && !event.target.matches('input,select,textarea') && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
         event.preventDefault(); stepMedia(event.key === "ArrowLeft" ? -1 : 1);
       }
@@ -2110,7 +1981,7 @@
   configureTelegram();
   bindEvents();
   updateCounters();
-  // Фильм начинаем грузить сразу, не дожидаясь 600мс бута и каталога.
+  // Конфиг по умолчанию не скачивает ролик; каталог может явно включить motion.
   setupWelcomeVideo(mediaConfig());
   startExperience();
   loadCatalog();

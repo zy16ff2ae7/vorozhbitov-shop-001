@@ -129,7 +129,7 @@
       "id": "tag-sila-i-chest",
       "category": "access",
       "name": "ЖЕТОН",
-      "price": "1 900 ₽",
+      "price": "0 ₽",
       "sizes": [
         "ONE SIZE"
       ],
@@ -161,14 +161,9 @@
         "assets/spin/tag-sich-03.jpg",
         "assets/spin/tag-sich-04.jpg"
       ],
-      "personalization": {
-        "label": "НОМЕР ЖЕТОНА",
-        "hint": "Необязательно. Свободные номера подтвердит менеджер.",
-        "placeholder": "например, 00063",
-        "pattern": "^[0-9]{1,5}$",
-        "optional": true
-      },
-      "featured": true
+      "featured": true,
+      "gift": true,
+      "gift_stock": 100
     },
     {
       "id": "honor-hoodie",

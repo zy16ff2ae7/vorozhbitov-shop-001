@@ -3,13 +3,23 @@ const assert = require('node:assert/strict');
 const core = require('./miniapp/shop-core.js');
 
 test('limited editions remain available when they have sizes', () => {
-  assert.equal(core.available({badge:'ЛИМИТ', stock_label:'Осталось мало', sizes:['M']}), true);
-  assert.equal(core.available({sizes:[]}), false);
-  assert.equal(core.available({active:false, sizes:['M']}), false);
+  assert.equal(core.available({badge:'ЛИМИТ', stock_label:'Осталось мало', price:'4 900 ₽', sizes:['M']}), true);
+  assert.equal(core.available({price:'4 900 ₽', sizes:[]}), false);
+  assert.equal(core.available({active:false, price:'4 900 ₽', sizes:['M']}), false);
+  assert.equal(core.available({gift:true, price:'0 ₽', sizes:['ONE SIZE']}), false);
+});
+
+test('browser and server share one whole-ruble price contract', () => {
+  assert.equal(core.priceNumber('4 900 ₽'), 4900);
+  assert.equal(core.priceNumber('4 900.00 ₽'), 4900);
+  assert.equal(core.priceNumber('от 3 200 руб'), 3200);
+  for (const value of ['4 900,50 ₽', '4 900.51 ₽', '4.900 ₽', '1 200 - 1 500 ₽']) {
+    assert.ok(Number.isNaN(core.priceNumber(value)), value);
+  }
 });
 
 test('size filter includes all actual sizes, including XXL and one-size', () => {
-  assert.deepEqual(core.sizesFor([{sizes:['XXL','S','M']},{sizes:['ОДИН','S']},{active:false,sizes:['XS']}]), ['S','M','XXL','ОДИН']);
+  assert.deepEqual(core.sizesFor([{price:'1 ₽',sizes:['XXL','S','M']},{price:'1 ₽',sizes:['ОДИН','S']},{active:false,price:'1 ₽',sizes:['XS']},{gift:true,price:'0 ₽',sizes:['ONE SIZE']}]), ['S','M','XXL','ОДИН']);
 });
 
 test('corrupt persisted data cannot break startup', () => {

@@ -209,6 +209,7 @@ class Settings:
     stars_enabled: bool = True
     stars_rub_per_star: float = 2.0
     trusted_proxy_ips: frozenset[str] = frozenset()
+    gift_product_id: str = "tag-sila-i-chest"
     custom_emoji_pack: str = "sila_chest_merch"
     custom_emoji_ids: dict[str, str] = field(default_factory=dict)
 
@@ -262,6 +263,7 @@ class Settings:
             stars_rub_per_star=stars_rate if stars_rate > 0 else 2.0,
             trusted_proxy_ips=frozenset(str(ipaddress.ip_address(item.strip()))
                                         for item in os.getenv("TRUSTED_PROXY_IPS", "").split(",") if item.strip()),
+            gift_product_id=os.getenv("GIFT_PRODUCT_ID", "tag-sila-i-chest").strip(),
             custom_emoji_pack=os.getenv("CUSTOM_EMOJI_PACK", "sila_chest_merch").strip(),
             custom_emoji_ids=json.loads(os.getenv("CUSTOM_EMOJI_IDS", "{}")) if os.getenv("CUSTOM_EMOJI_IDS", "").strip().startswith("{") else {},
         )
@@ -360,16 +362,39 @@ class Catalog:
     def get_any(self, product_id: str) -> dict[str, Any] | None:
         return self.products_by_id.get(product_id)
 
-    def save(self) -> None:
+    def save(self, data: dict[str, Any] | None = None) -> None:
+        """Atomically persist *data* without changing the in-memory catalog.
+
+        A candidate is serialized and fsynced before ``os.replace``.  The
+        caller swaps ``self.data`` only after this method returns, so a failed
+        write cannot leave memory and disk describing different assortments.
+        Unique temporary names also keep concurrent processes from clobbering
+        each other's partially written temp file.
+        """
         with self.lock:
-            payload = json.dumps(self.data, ensure_ascii=False, indent=2) + "\n"
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        tmp.write_text(payload, encoding="utf-8")
-        # Каталог — это склад. Без fsync обрыв питания может оставить переименование
-        # с пустым файлом внутри, и бот больше не запустится: каталог не прочитается.
-        with open(tmp, "rb") as handle:
-            os.fsync(handle.fileno())
-        os.replace(tmp, self.path)
+            source = self.data if data is None else data
+            payload = json.dumps(source, ensure_ascii=False, indent=2) + "\n"
+            tmp = self.path.with_name(
+                f".{self.path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+            )
+            try:
+                with open(tmp, "w", encoding="utf-8") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp, self.path)
+            finally:
+                tmp.unlink(missing_ok=True)
+            # The rename itself is already durable enough for normal operation;
+            # directory fsync adds crash consistency on filesystems that allow it.
+            try:
+                directory_fd = os.open(self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            except OSError:
+                LOG.debug("Catalog directory fsync is unavailable", exc_info=True)
 
     def unique_id(self, name: str) -> str:
         base = slugify(name)
@@ -381,12 +406,13 @@ class Catalog:
         return candidate
 
     def _commit(self, candidate: dict[str, Any]) -> None:
-        """Проверить кандидата и только потом записать его в память и на диск."""
-        data, products = self.parse(candidate)
-        self.data = data
-        self.products_by_id = products
-        self.save()
-        self.maybe_snapshot()
+        """Persist first, then atomically publish the same parsed candidate."""
+        with self.lock:
+            data, products = self.parse(candidate)
+            self.save(data)
+            self.data = data
+            self.products_by_id = products
+            self.maybe_snapshot()
 
     def maybe_snapshot(self) -> None:
         """Раз в сутки кладём копию каталога в backups и держим последние семь.
@@ -401,7 +427,6 @@ class Catalog:
         with self.lock:
             if self._snap_date == today:
                 return
-            self._snap_date = today
             try:
                 backup_dir = self.path.parent / "backups"
                 backup_dir.mkdir(parents=True, exist_ok=True)
@@ -411,6 +436,9 @@ class Catalog:
                 keep = sorted(backup_dir.glob("catalog-*.json"))
                 for old in keep[:-7]:
                     old.unlink(missing_ok=True)
+                # Set the watermark only after a usable snapshot exists.  A
+                # transient disk error will therefore be retried on next save.
+                self._snap_date = today
             except OSError:
                 LOG.warning("Снапшот каталога не снялся", exc_info=True)
 
@@ -471,12 +499,27 @@ class Catalog:
             return True
 
 
+class PaymentMismatch(ValueError):
+    """Signed callback does not match the immutable order total/currency."""
+
+
+class InvoiceMismatch(ValueError):
+    """Provider invoice is not one of the invoices issued for this payment."""
+
+
+class GiftUnavailable(ValueError):
+    """The automatic gift was sold out between catalog read and checkout."""
+
+
 class Database:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         self.local = threading.local()
         self.invoice_locks = [threading.Lock() for _ in range(64)]
+        self._backup_lock = threading.Lock()
+        self._backup_date = ""
+        self._prune_date = ""
         self._initialize()
 
     def connection(self) -> sqlite3.Connection:
@@ -506,6 +549,97 @@ class Database:
             conn.close()
         except sqlite3.Error:
             LOG.debug("Не удалось закрыть соединение SQLite", exc_info=True)
+
+    def backup_database(self, retention: int = 7) -> Path | None:
+        """Create one consistent online SQLite backup per UTC day.
+
+        The watermark advances only after fsync + atomic rename.  A transient
+        failure is logged and retried by the maintenance loop instead of
+        silently disabling backups for the rest of the day.
+        """
+        today = datetime.now(timezone.utc).date().isoformat()
+        if self._backup_date == today:
+            return None
+        with self._backup_lock:
+            if self._backup_date == today:
+                return None
+            backup_dir = self.path.parent / "backups"
+            target = backup_dir / f"bot-{today}.sqlite3"
+            tmp = backup_dir / f".bot-{today}.{os.getpid()}.{threading.get_ident()}.tmp"
+            try:
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                if not target.exists():
+                    destination = sqlite3.connect(tmp)
+                    try:
+                        self.connection().backup(destination)
+                    finally:
+                        destination.close()
+                    with open(tmp, "rb") as handle:
+                        os.fsync(handle.fileno())
+                    os.chmod(tmp, 0o600)
+                    os.replace(tmp, target)
+                    # Persist the directory entry as well as the file contents.
+                    directory_fd = os.open(backup_dir, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+                copies = sorted(backup_dir.glob("bot-*.sqlite3"))
+                for old in copies[:-max(1, int(retention))]:
+                    old.unlink(missing_ok=True)
+                self._backup_date = today
+                LOG.info("SQLite backup is ready: %s", target)
+                return target
+            except (OSError, sqlite3.Error):
+                LOG.warning("SQLite backup failed; will retry", exc_info=True)
+                return None
+            finally:
+                tmp.unlink(missing_ok=True)
+
+    def prune_operational_data(self, now: datetime | None = None) -> dict[str, int] | None:
+        """Apply bounded retention without deleting financial/audit history.
+
+        High-volume browsing events and delivered notification envelopes are
+        operational data, not order ledger.  Payment, consent, refund, admin,
+        referral and order events deliberately stay untouched.  Undelivered
+        notifications are never discarded: a stuck queue must be fixed/alerted,
+        not silently lost.
+        """
+        moment = now or datetime.now(timezone.utc)
+        today = moment.date().isoformat()
+        if self._prune_date == today:
+            return None
+        cutoff_notifications = (moment - timedelta(days=30)).isoformat(timespec="seconds")
+        cutoff_events = (moment - timedelta(days=90)).isoformat(timespec="seconds")
+        routine_events = (
+            "catalog_open", "category_open", "checkout_step", "interest_set",
+            "lookbook_open", "product_open", "size_guide_open", "start",
+            "support_open", "teaser_open", "webapp_profile", "webapp_waitlist",
+            "waitlist_remove_miss",
+        )
+        placeholders = ",".join("?" for _ in routine_events)
+        try:
+            conn = self.connection()
+            delivered = conn.execute(
+                "DELETE FROM notifications WHERE delivered_at IS NOT NULL AND delivered_at<?",
+                (cutoff_notifications,),
+            ).rowcount
+            methods = conn.execute(
+                "DELETE FROM payment_methods WHERE valid_until<?",
+                (moment.timestamp() - 86400,),
+            ).rowcount
+            events = conn.execute(
+                f"DELETE FROM events WHERE created_at<? AND event IN ({placeholders})",
+                (cutoff_events, *routine_events),
+            ).rowcount
+            self._prune_date = today
+            result = {"notifications": delivered, "payment_methods": methods, "events": events}
+            if any(result.values()):
+                LOG.info("Operational retention applied: %s", result)
+            return result
+        except sqlite3.Error:
+            LOG.warning("Operational retention failed; will retry", exc_info=True)
+            return None
 
     def _initialize(self) -> None:
         conn = self.connection()
@@ -592,6 +726,32 @@ class Database:
                 methods TEXT NOT NULL,
                 valid_until REAL NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS payment_invoices (
+                provider TEXT NOT NULL,
+                invoice_id TEXT NOT NULL,
+                payment_id TEXT NOT NULL,
+                amount_rub INTEGER NOT NULL,
+                currency TEXT NOT NULL DEFAULT 'RUB',
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(provider, invoice_id)
+            );
+            CREATE TABLE IF NOT EXISTS provider_transactions (
+                provider TEXT NOT NULL,
+                provider_tx_id TEXT NOT NULL,
+                payment_id TEXT NOT NULL,
+                amount_rub INTEGER NOT NULL,
+                currency TEXT NOT NULL,
+                payload_hash TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(provider, provider_tx_id)
+            );
+            CREATE TABLE IF NOT EXISTS inventory (
+                product_id TEXT PRIMARY KEY,
+                total INTEGER NOT NULL CHECK(total >= 0),
+                available INTEGER NOT NULL CHECK(available >= 0 AND available <= total),
+                updated_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS notifications (
                 notification_id TEXT PRIMARY KEY,
                 chat_id INTEGER NOT NULL,
@@ -610,6 +770,8 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_events_event ON events(event);
             CREATE INDEX IF NOT EXISTS idx_users_interest ON users(interest);
             CREATE INDEX IF NOT EXISTS idx_payments_user_status ON payments(user_id, status);
+            CREATE INDEX IF NOT EXISTS idx_invoices_payment ON payment_invoices(payment_id, provider);
+            CREATE INDEX IF NOT EXISTS idx_transactions_payment ON provider_transactions(payment_id, created_at);
             """
         )
         order_columns = {row[1] for row in conn.execute("PRAGMA table_info(orders)")}
@@ -625,6 +787,19 @@ class Database:
         if "amount_rub" not in order_columns:
             conn.execute("ALTER TABLE orders ADD COLUMN amount_rub INTEGER NOT NULL DEFAULT 0")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_payment_id ON orders(payment_id)")
+        payment_columns = {row[1] for row in conn.execute("PRAGMA table_info(payments)")}
+        for name, definition in {
+            "gift_product_id": "TEXT NOT NULL DEFAULT ''",
+            "gift_name": "TEXT NOT NULL DEFAULT ''",
+            "gift_qty": "INTEGER NOT NULL DEFAULT 0",
+            "gift_released_at": "TEXT",
+            "refunded_at": "TEXT",
+            "refund_actor": "INTEGER",
+            "provider_refund_id": "TEXT NOT NULL DEFAULT ''",
+            "refund_amount_rub": "INTEGER NOT NULL DEFAULT 0",
+        }.items():
+            if name not in payment_columns:
+                conn.execute(f"ALTER TABLE payments ADD COLUMN {name} {definition}")
         user_columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
         if "referrer_id" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN referrer_id INTEGER")
@@ -869,14 +1044,91 @@ class Database:
                 conn.execute("ROLLBACK")
             raise
 
-    def create_payment(self, payment_id: str, user_id: int, amount_rub: int, amount_stars: int = 0) -> None:
+    def create_payment(
+        self, payment_id: str, user_id: int, amount_rub: int, amount_stars: int = 0,
+        *, gift: dict[str, Any] | None = None,
+    ) -> None:
+        gift = gift or {}
         self.connection().execute(
             """
-            INSERT INTO payments(payment_id, user_id, amount_rub, amount_stars, status, created_at)
-            VALUES (?, ?, ?, ?, 'pending', ?)
+            INSERT INTO payments(
+                payment_id, user_id, amount_rub, amount_stars, status, created_at,
+                gift_product_id, gift_name, gift_qty
+            ) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
             """,
-            (payment_id, user_id, max(0, int(amount_rub)), max(0, int(amount_stars)), utc_now()),
+            (
+                payment_id, user_id, max(0, int(amount_rub)), max(0, int(amount_stars)), utc_now(),
+                str(gift.get("product_id") or ""), str(gift.get("name") or ""),
+                1 if gift.get("product_id") else 0,
+            ),
         )
+
+    def gift_status(self, product: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Public automatic-gift descriptor with the atomically tracked balance."""
+        if not product or not product.get("gift"):
+            return None
+        try:
+            total = max(0, int(product.get("gift_stock", 0)))
+        except (TypeError, ValueError):
+            return None
+        if total <= 0:
+            return None
+        product_id = str(product["id"])
+        row = self.connection().execute(
+            "SELECT total, available FROM inventory WHERE product_id=?", (product_id,)
+        ).fetchone()
+        available = int(row["available"]) if row else total
+        return {
+            "product_id": product_id,
+            "name": str(product["name"]),
+            "image": str(product.get("image") or ""),
+            "stock": total,
+            "remaining": max(0, min(available, total)),
+            "available": available > 0,
+        }
+
+    def _reserve_gift(self, gift: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not gift:
+            return None
+        product_id = str(gift.get("product_id") or "")
+        total = int(gift.get("stock") or 0)
+        if not product_id or total <= 0:
+            return None
+        now = utc_now()
+        conn = self.connection()
+        conn.execute(
+            "INSERT OR IGNORE INTO inventory(product_id, total, available, updated_at) VALUES (?, ?, ?, ?)",
+            (product_id, total, total, now),
+        )
+        cursor = conn.execute(
+            "UPDATE inventory SET available=available-1, updated_at=? "
+            "WHERE product_id=? AND available>0",
+            (now, product_id),
+        )
+        if cursor.rowcount != 1:
+            raise GiftUnavailable("Подарки первого выпуска только что закончились. Обнови витрину — основную вещь всё ещё можно купить.")
+        return {"product_id": product_id, "name": str(gift.get("name") or "Подарок"), "stock": total}
+
+    def _release_gift(self, payment_id: str) -> bool:
+        """Return a reserved gift once; safe to call from any cancellation path."""
+        conn = self.connection()
+        row = conn.execute(
+            "SELECT gift_product_id, gift_qty, gift_released_at FROM payments WHERE payment_id=?",
+            (payment_id,),
+        ).fetchone()
+        if not row or not row["gift_product_id"] or int(row["gift_qty"] or 0) <= 0 or row["gift_released_at"]:
+            return False
+        now = utc_now()
+        conn.execute(
+            "UPDATE inventory SET available=MIN(total, available+?), updated_at=? WHERE product_id=?",
+            (int(row["gift_qty"]), now, row["gift_product_id"]),
+        )
+        conn.execute(
+            "UPDATE payments SET gift_released_at=? WHERE payment_id=? AND gift_released_at IS NULL",
+            (now, payment_id),
+        )
+        self.event(None, "gift_released", {"payment_id": payment_id, "product_id": row["gift_product_id"]})
+        return True
 
     def checkout_receipt(self, user_id: int, request_id: str, fingerprint: str) -> dict[str, Any] | None:
         row = self.connection().execute(
@@ -893,6 +1145,7 @@ class Database:
         self, user_id: int, request_id: str, fingerprint: str,
         lines: list[dict[str, Any]], amount_stars: int,
         queue_notifications: Callable[[dict[str, Any]], None] | None = None,
+        gift: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Commit one immutable receipt, payment and all order lines together."""
         conn = self.connection()
@@ -907,7 +1160,10 @@ class Database:
             payment_id = secrets.token_hex(12)
             total = sum(int(line["amount_rub"]) for line in lines)
             now = utc_now()
-            self.create_payment(payment_id, user_id, total, amount_stars)
+            # Reservation, payment, order lines, receipt and outbox share one
+            # SQLite transaction: a failed checkout cannot consume a gift.
+            reserved_gift = self._reserve_gift(gift)
+            self.create_payment(payment_id, user_id, total, amount_stars, gift=reserved_gift)
             order_ids = []
             for index, line in enumerate(lines):
                 cursor = conn.execute(
@@ -927,6 +1183,8 @@ class Database:
                 "payment_id": payment_id, "amount_rub": total, "amount_label": format_rub(total),
                 "amount_stars": amount_stars, "order_ids": order_ids,
                 "lines": [{key: line[key] for key in ("name", "size", "quantity", "person", "person_label")} for line in lines],
+                "gift": ({"product_id": reserved_gift["product_id"], "name": reserved_gift["name"], "quantity": 1}
+                         if reserved_gift else None),
             }
             conn.execute("INSERT INTO checkouts VALUES (?, ?, ?, ?, ?)",
                          (user_id, request_id, fingerprint, compact_json(receipt), now))
@@ -937,6 +1195,49 @@ class Database:
             return receipt, True
         except Exception:
             if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+
+    def expire_payments(self, ttl_seconds: int = 3600) -> int:
+        """Expire stale pending invoices and return their gift reservations."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=max(60, int(ttl_seconds)))).isoformat()
+        conn = self.connection()
+        expired = 0
+        owns_transaction = not conn.in_transaction
+        try:
+            if owns_transaction:
+                conn.execute("BEGIN IMMEDIATE")
+            rows = list(conn.execute(
+                "SELECT payment_id, user_id FROM payments WHERE status='pending' AND created_at<?",
+                (cutoff,),
+            ))
+            for row in rows:
+                invalid = conn.execute(
+                    "SELECT COUNT(*) FROM orders WHERE payment_id=? AND status!='awaiting_payment'",
+                    (row["payment_id"],),
+                ).fetchone()[0]
+                if invalid:
+                    continue
+                now = utc_now()
+                changed = conn.execute(
+                    "UPDATE payments SET status='expired' WHERE payment_id=? AND status='pending'",
+                    (row["payment_id"],),
+                )
+                if changed.rowcount != 1:
+                    continue
+                conn.execute(
+                    "UPDATE orders SET status='cancelled' WHERE payment_id=? AND status='awaiting_payment'",
+                    (row["payment_id"],),
+                )
+                conn.execute("DELETE FROM payment_methods WHERE payment_id=?", (row["payment_id"],))
+                self._release_gift(str(row["payment_id"]))
+                self.event(int(row["user_id"]), "payment_expired", {"payment_id": row["payment_id"]})
+                expired += 1
+            if owns_transaction:
+                conn.execute("COMMIT")
+            return expired
+        except Exception:
+            if owns_transaction and conn.in_transaction:
                 conn.execute("ROLLBACK")
             raise
 
@@ -957,6 +1258,7 @@ class Database:
         Возвращает ``(payment_id, amount_rub)`` только если счёт ещё можно
         оплатить: отменённые и уже оплаченные покупки в меню не поднимаются.
         """
+        self.expire_payments()
         rows = self.connection().execute(
             """SELECT payment_id, amount_rub FROM payments
                WHERE user_id=? AND status='pending'
@@ -997,6 +1299,105 @@ class Database:
             "SELECT * FROM payments WHERE payment_id=?", (payment_id,)
         ).fetchone()
 
+    def register_invoice(self, payment_id: str, provider: str, invoice: dict[str, str], amount_rub: int) -> None:
+        """Bind every issued provider invoice to the immutable local payment."""
+        invoice_id = str(invoice.get("id") or "").strip()
+        if not invoice_id:
+            raise RuntimeError(f"{provider} returned an invoice without an id")
+        payment = self.get_payment(payment_id)
+        if not payment or int(payment["amount_rub"]) != int(amount_rub):
+            raise PaymentMismatch("Счёт не совпадает с сохранённой покупкой.")
+        self.connection().execute(
+            "INSERT INTO payment_invoices(provider, invoice_id, payment_id, amount_rub, currency, created_at) "
+            "VALUES (?, ?, ?, ?, 'RUB', ?)",
+            (provider[:32], invoice_id[:80], payment_id, int(amount_rub), utc_now()),
+        )
+
+    def record_provider_payment(
+        self, payment_id: str, provider: str, provider_tx_id: str,
+        amount_rub: int, currency: str, payload_hash: str, *,
+        queue_notifications: Callable[[str], None] | None = None,
+        queue_overpayment: Callable[[str, str], None] | None = None,
+    ) -> str:
+        """Record one signed provider transaction and settle it at most once.
+
+        Unlike a single mutable ``payments.provider_id``, this ledger survives
+        two different invoices paid for the same checkout.  A replay is a
+        duplicate; a new transaction after settlement is an overpayment and
+        never advances fulfilment for a second time.
+        """
+        if not provider_tx_id:
+            raise PaymentMismatch("В подтверждении оплаты нет номера счёта.")
+        if currency.upper() != "RUB" or amount_rub <= 0:
+            raise PaymentMismatch("Валюта или сумма оплаты не поддерживается.")
+        conn = self.connection()
+        now = utc_now()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute(
+                "SELECT * FROM provider_transactions WHERE provider=? AND provider_tx_id=?",
+                (provider, provider_tx_id),
+            ).fetchone()
+            if existing:
+                if (str(existing["payment_id"]) != payment_id
+                        or int(existing["amount_rub"]) != amount_rub
+                        or str(existing["currency"]) != currency.upper()):
+                    raise PaymentMismatch("Номер транзакции уже привязан к другой оплате.")
+                conn.execute("COMMIT")
+                return "duplicate"
+            payment = conn.execute("SELECT * FROM payments WHERE payment_id=?", (payment_id,)).fetchone()
+            if not payment:
+                conn.execute("COMMIT")
+                return "unknown"
+            expected_invoices = {
+                str(row[0]) for row in conn.execute(
+                    "SELECT invoice_id FROM payment_invoices WHERE payment_id=? AND provider=?",
+                    (payment_id, provider),
+                )
+            }
+            if expected_invoices and provider_tx_id not in expected_invoices:
+                raise InvoiceMismatch("Провайдер подтвердил счёт, который не выдавался для этой покупки.")
+            if int(payment["amount_rub"]) != amount_rub:
+                raise PaymentMismatch("Сумма подтверждения не совпадает с покупкой.")
+            if str(payment["status"]) in {"paid", "refund_required", "refunded"}:
+                conn.execute(
+                    "INSERT INTO provider_transactions VALUES (?, ?, ?, ?, ?, ?, 'overpayment', ?)",
+                    (provider, provider_tx_id, payment_id, amount_rub, currency.upper(), payload_hash, now),
+                )
+                self.event(
+                    int(payment["user_id"]), "payment_overpayment",
+                    {"payment_id": payment_id, "provider": provider, "provider_tx_id": provider_tx_id,
+                     "amount_rub": amount_rub, "currency": currency.upper()},
+                )
+                if queue_overpayment:
+                    queue_overpayment(payment_id, provider_tx_id)
+                conn.execute("COMMIT")
+                return "overpayment"
+            conn.execute(
+                "INSERT INTO provider_transactions VALUES (?, ?, ?, ?, ?, ?, 'processing', ?)",
+                (provider, provider_tx_id, payment_id, amount_rub, currency.upper(), payload_hash, now),
+            )
+            changed = self.mark_payment_paid(
+                payment_id, provider, provider_tx_id, queue_notifications=queue_notifications,
+            )
+            status = str(self.get_payment(payment_id)["status"])
+            conn.execute(
+                "UPDATE provider_transactions SET status=? WHERE provider=? AND provider_tx_id=?",
+                (status, provider, provider_tx_id),
+            )
+            conn.execute("COMMIT")
+            return status if changed else "duplicate"
+        except Exception:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+
+    def provider_transactions(self, payment_id: str) -> list[sqlite3.Row]:
+        return list(self.connection().execute(
+            "SELECT * FROM provider_transactions WHERE payment_id=? ORDER BY created_at, provider_tx_id",
+            (payment_id,),
+        ))
+
     def orders_for_payment(self, payment_id: str) -> list[sqlite3.Row]:
         return list(
             self.connection().execute(
@@ -1024,10 +1425,12 @@ class Database:
                 conn.execute(
                     """
                     UPDATE payments
-                    SET status=?, method=?, provider_id=?, paid_at=?
+                    SET status=?, method=?, provider_id=?, paid_at=?,
+                        refund_amount_rub=CASE WHEN ?='refund_required' THEN amount_rub ELSE refund_amount_rub END
                     WHERE payment_id=?
                     """,
-                    (target_status, str(method or row["method"] or "")[:32], str(provider_id or "")[:80], now, payment_id),
+                    (target_status, str(method or row["method"] or "")[:32], str(provider_id or "")[:80], now,
+                     target_status, payment_id),
                 )
             for order in conn.execute(
                 "SELECT id, user_id, status FROM orders WHERE payment_id=?", (payment_id,)
@@ -1222,7 +1625,7 @@ class Database:
     def refunds_open(self) -> list[dict[str, Any]]:
         with self.connection() as conn:
             rows = conn.execute(
-                "SELECT p.payment_id, p.amount_rub, p.created_at, o.id AS order_id, "
+                "SELECT p.payment_id, p.amount_rub, p.refund_amount_rub, p.created_at, o.id AS order_id, "
                 "o.product_name, o.size, o.user_id FROM payments p "
                 "JOIN orders o ON o.payment_id = p.payment_id "
                 "WHERE p.status='refund_required' ORDER BY p.created_at"
@@ -1232,7 +1635,7 @@ class Database:
     def refunds_done(self, limit: int = 5) -> list[dict[str, Any]]:
         with self.connection() as conn:
             rows = conn.execute(
-                "SELECT p.payment_id, p.amount_rub, p.paid_at, o.id AS order_id, "
+                "SELECT p.payment_id, p.amount_rub, p.refund_amount_rub, p.paid_at, o.id AS order_id, "
                 "o.product_name, o.user_id FROM payments p "
                 "JOIN orders o ON o.payment_id = p.payment_id "
                 "WHERE p.status='refunded' ORDER BY p.created_at DESC LIMIT ?",
@@ -1254,9 +1657,38 @@ class Database:
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def mark_payment_refunded(self, payment_id: str) -> None:
-        self.connection().execute(
-            "UPDATE payments SET status='refunded' WHERE payment_id=?", (payment_id,))
+    def mark_payment_refunded(
+        self, payment_id: str, actor_id: int | None = None, provider_refund_id: str = "",
+    ) -> bool:
+        """Complete only an actually required refund, exactly once."""
+        conn = self.connection()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            cursor = conn.execute(
+                "UPDATE payments SET status='refunded', refunded_at=?, refund_actor=?, provider_refund_id=? "
+                "WHERE payment_id=? AND status='refund_required'",
+                (utc_now(), actor_id, str(provider_refund_id or "")[:80], payment_id),
+            )
+            if cursor.rowcount != 1:
+                conn.execute("COMMIT")
+                return False
+            payment = self.get_payment(payment_id)
+            if payment:
+                self.event(
+                    int(payment["user_id"]), "payment_refunded",
+                    {"payment_id": payment_id, "actor_id": actor_id, "provider_refund_id": provider_refund_id},
+                )
+                remaining = conn.execute(
+                    "SELECT COUNT(*) FROM orders WHERE payment_id=? AND status!='cancelled'", (payment_id,)
+                ).fetchone()[0]
+                if not remaining:
+                    self._release_gift(payment_id)
+            conn.execute("COMMIT")
+            return True
+        except Exception:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
 
     def kv_get(self, key: str) -> str:
         row = self.connection().execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
@@ -1379,8 +1811,25 @@ class Database:
                                 self.event(row["user_id"], "order_status_changed", {"order_id": item["id"], "status": "cancelled"})
                         conn.execute("UPDATE payments SET status='cancelled' WHERE payment_id=?", (row["payment_id"],))
                     elif payment["status"] == "paid":
-                        conn.execute("UPDATE payments SET status='refund_required' WHERE payment_id=?", (row["payment_id"],))
-                        self.event(row["user_id"], "payment_refund_required", {"payment_id": row["payment_id"]})
+                        # One payment is one fulfilment/refund unit.  Cancelling
+                        # a single line of a paid cart must not create an
+                        # ambiguous partial refund while sibling lines stay paid.
+                        siblings = list(conn.execute(
+                            "SELECT id, status FROM orders WHERE payment_id=?", (row["payment_id"],)
+                        ))
+                        if any(item["status"] in {"completed", "cancelled"} for item in siblings):
+                            raise ValueError("Общая оплата уже частично закрыта. Для частичного возврата нужна ручная сверка с менеджером.")
+                        for item in siblings:
+                            if item["id"] != order_id:
+                                conn.execute("UPDATE orders SET status='cancelled' WHERE id=?", (item["id"],))
+                                self.event(row["user_id"], "order_status_changed",
+                                           {"order_id": item["id"], "status": "cancelled"})
+                        conn.execute(
+                            "UPDATE payments SET status='refund_required', refund_amount_rub=amount_rub WHERE payment_id=?",
+                            (row["payment_id"],),
+                        )
+                        self.event(row["user_id"], "payment_refund_required",
+                                   {"payment_id": row["payment_id"], "amount_rub": int(payment["amount_rub"]), "scope": "full"})
                         if queue_paid:
                             queue_paid(row["payment_id"])
                     conn.execute("DELETE FROM payment_methods WHERE payment_id=?", (row["payment_id"],))
@@ -1389,6 +1838,13 @@ class Database:
                 "INSERT INTO events(user_id, event, payload, created_at) VALUES (?, ?, ?, ?)",
                 (row["user_id"], "order_status_changed", compact_json({"order_id": order_id, "status": status}), utc_now()),
             )
+            if status == "cancelled" and row["payment_id"]:
+                remaining = conn.execute(
+                    "SELECT COUNT(*) FROM orders WHERE payment_id=? AND status!='cancelled'",
+                    (row["payment_id"],),
+                ).fetchone()[0]
+                if not remaining:
+                    self._release_gift(str(row["payment_id"]))
             conn.execute("COMMIT")
         except Exception:
             if conn.in_transaction:
@@ -2138,6 +2594,10 @@ def payment_state_line(status: str, payment: Any, amount_rub: int) -> str:
         return "требует возврата — менеджер свяжется"
     if state == "cancelled":
         return "отменена"
+    if state == "expired":
+        return "счёт истёк"
+    if state == "refunded":
+        return "возврат отмечен"
     if status in {"new", "awaiting_payment"}:
         return f"ждёт оплаты · {amount}" if amount else "ждёт оплаты"
     if status in {"paid", "confirmed", "completed"}:
@@ -2795,19 +3255,24 @@ class BrandBot:
         rows: list[list[tuple[str, str]]] = [
             [(icon("question", str(item.get("label"))[:24]), f"faq:{item.get('key')}")
              for item in self.faq_items()[:4]],
-            [(icon("orders", "Вопрос по покупке"), "ask")],
-            [(icon("question", "Как это работает"), "help")],
         ]
+        if self.settings.manager_chat_id or self.settings.support_username:
+            rows.append([(icon("orders", "Вопрос по покупке"), "ask")])
+        rows.append([(icon("question", "Как это работает"), "help")])
         if self.settings.support_username:
             rows.append([(f"Написать менеджеру {ICON['outside']}", f"https://t.me/{self.settings.support_username}")])
         rows.extend(nav_rows(("Главное меню", "menu")))
         return inline_keyboard(rows)
 
     def support_text(self) -> str:
-        lines = ["<b>ПОДДЕРЖКА</b>", "", "Отвечаем в этом чате."]
-        lines.append("Номер покупки называть не нужно — выбери её кнопкой, контекст уйдёт вместе с вопросом.")
-        if self.settings.support_username:
-            lines.append(f"\nСрочное: @{esc(self.settings.support_username)}")
+        lines = ["<b>ПОДДЕРЖКА</b>", ""]
+        if self.settings.manager_chat_id:
+            lines.append("Отвечаем в этом чате.")
+            lines.append("Номер покупки называть не нужно — выбери её кнопкой, контекст уйдёт вместе с вопросом.")
+        elif self.settings.support_username:
+            lines.append(f"Менеджер: @{esc(self.settings.support_username)}")
+        else:
+            lines.append("Прямая связь с менеджером пока не подключена. Короткие ответы — в разделах ниже.")
         return "\n".join(lines)
 
     # ------------------------------------------------------------------ flows
@@ -2924,7 +3389,7 @@ class BrandBot:
                 inline_keyboard(self.channel_rows() + nav_rows(("Витрина", "catalog"))),
             )
             return
-        rows = [[(f"{p['name']} · {p['price']}", f"product:{p['id']}")] for p in products]
+        rows = [[(f"{p['name']} · {'подарок' if p.get('gift') else p['price']}", f"product:{p['id']}")] for p in products]
         rows.extend(nav_rows(("Витрина", "catalog")))
         self.api.send_message(
             chat_id,
@@ -2940,12 +3405,16 @@ class BrandBot:
         а не разбирается в ней заново на каждом товаре.
         """
         lines = [f"<b>{esc(str(product['name']).upper())}</b>"]
-        price = f"<b>{esc(str(product['price']))}</b>"
+        price = f"<b>{'БЕСПЛАТНО' if product.get('gift') else esc(str(product['price']))}</b>"
         badge = str(product.get("badge") or "").strip()
         if badge:
             price += f" · {esc(badge)}"
         lines.append(price)
-        if not self.price_is_payable(product):
+        if product.get("gift"):
+            gift = self.db.gift_status(product)
+            if gift:
+                lines.append(f"Автоматически добавим к заказу · осталось {gift['remaining']} из {gift['stock']}.")
+        elif not self.price_is_payable(product):
             # Цену в каталоге записали диапазоном или припиской: счёт по ней не
             # выставить. Говорим сразу, а не после согласия и номера телефона.
             lines.append("Цену сейчас не посчитать — оформим вручную через поддержку.")
@@ -3011,11 +3480,12 @@ class BrandBot:
             "Каталог",
         )
         text = self.product_card_text(product)
-        manager = self.settings.support_username or "intellectual_sabotage"
         verb = "предзаказ" if product.get("badge") == "ПРЕДЗАКАЗ" or "предзаказ" in str(product.get("stock_label", "")).lower() else "заказ"
         order_label = "🛍 Оформить предзаказ" if verb == "предзаказ" else "🛍 Оформить заказ"
 
-        if self.price_is_payable(product):
+        if product.get("gift"):
+            rows = [[(icon("catalog", "Выбрать вещь из выпуска"), "cat:drop")]]
+        elif self.price_is_payable(product):
             rows = [
                 [(order_label, f"order_direct:{product_id}")],
                 [("Выбрать размер →", f"want:{product_id}")],
@@ -3057,6 +3527,9 @@ class BrandBot:
         if not product:
             self.product_missing(chat_id, "Её сняли с продажи или уже разобрали.")
             return
+        if product.get("gift"):
+            self.show_product(chat_id, user_id, product_id)
+            return
         sizes = [str(size) for size in product["sizes"]]
         rows = [[(size, f"size:{product_id}:{size}") for size in sizes[index:index + 4]] for index in range(0, len(sizes), 4)]
         rows.append([(icon("size", "Подобрать размер"), f"size_guide:want:{product_id}")])
@@ -3087,6 +3560,13 @@ class BrandBot:
         product = self.catalog.get(product_id)
         if not product or size not in [str(item) for item in product["sizes"]]:
             self.product_missing(chat_id, "Этот вариант уже разобрали.")
+            return
+        if product.get("gift"):
+            self.api.send_message(
+                chat_id,
+                "Этот жетон не продаётся отдельно. Добавим его бесплатно к заказу, пока есть номера из первой сотни.",
+                inline_keyboard(nav_rows((str(product["name"]), f"product:{product_id}"))),
+            )
             return
         if not self.price_is_payable(product):
             self.api.send_message(
@@ -3170,7 +3650,12 @@ class BrandBot:
     def pay_title(self) -> str:
         return (self.settings.brand_name or "ВОРОЖБИТОВ")[:32]
 
+    def gift_for_checkout(self) -> dict[str, Any] | None:
+        gift = self.db.gift_status(self.catalog.get(self.settings.gift_product_id))
+        return gift if gift and gift["available"] else None
+
     def build_pay_methods(self, payment_id: str, amount_rub: int, description: str) -> list[dict[str, str]]:
+        self.db.expire_payments()
         lock = self.db.invoice_locks[hash(payment_id) % len(self.db.invoice_locks)]
         with lock:
             if not self.db.payment_is_payable(payment_id):
@@ -3217,6 +3702,7 @@ class BrandBot:
                     hook_url=hook_lava,
                     success_url=success,
                 )
+                self.db.register_invoice(payment_id, "lava", invoice, amount_rub)
                 methods.append({
                     "id": "lava",
                     "title": "Карта / СБП",
@@ -3236,6 +3722,7 @@ class BrandBot:
                     payment_id,
                     paid_btn_url=paid_url,
                 )
+                self.db.register_invoice(payment_id, "crypto", invoice, amount_rub)
                 methods.append({
                     "id": "crypto",
                     "title": "Крипта",
@@ -3359,6 +3846,8 @@ class BrandBot:
             f"• {esc(row['product_name'])} · {esc(row['size'])} · {int(row['quantity'] or 1)} шт."
             for row in orders
         ]
+        if payment["gift_product_id"] and not payment["gift_released_at"]:
+            lines.append(f"• Подарок: {esc(payment['gift_name'])} · {int(payment['gift_qty'] or 1)} шт. · 0 ₽")
         text = (
             "<b>ОПЛАТА ПРОШЛА</b>\n\n"
             + ("\n".join(lines) if lines else "Покупка оплачена.")
@@ -3389,7 +3878,32 @@ class BrandBot:
         if not queue_only:
             self.flush_notifications()
 
+    def notify_overpayment(self, payment_id: str, provider_tx_id: str, *, queue_only: bool = False) -> None:
+        payment = self.db.get_payment(payment_id)
+        if not payment:
+            return
+        user_id = int(payment["user_id"])
+        amount = format_rub(int(payment["amount_rub"]))
+        self.deliver_message(
+            f"overpayment:{payment_id}:{provider_tx_id}:customer", user_id,
+            "<b>ПОХОЖЕ, ОПЛАТА ПОВТОРИЛАСЬ</b>\n\n"
+            f"По покупке пришло ещё одно подтверждение на {esc(amount)}. "
+            "Заказ не дублируем. Менеджер сверит обе транзакции и свяжется по поводу возврата лишней суммы.",
+            self.main_menu(user_id), queue_only=True,
+        )
+        if self.settings.manager_chat_id:
+            self.deliver_message(
+                f"overpayment:{payment_id}:{provider_tx_id}:manager", self.settings.manager_chat_id,
+                f"<b>ПЕРЕПЛАТА · {esc(payment_id)}</b>\nКлиент: {user_id}\n"
+                f"Новая транзакция: <code>{esc(provider_tx_id)}</code>\nСумма: {esc(amount)}\n"
+                "Заказ повторно не выполнен. Нужна сверка и возврат лишней транзакции.",
+                queue_only=True,
+            )
+        if not queue_only:
+            self.flush_notifications()
+
     def handle_pre_checkout(self, query: dict[str, Any]) -> None:
+        self.db.expire_payments()
         query_id = str(query.get("id", ""))
         payload = str(query.get("invoice_payload", ""))
         currency = str(query.get("currency", ""))
@@ -3503,6 +4017,9 @@ class BrandBot:
         phone: str,
         request_id: str,
     ) -> None:
+        if product.get("gift"):
+            self.show_product(chat_id, user_id, str(product["id"]))
+            return
         legacy = self.db.connection().execute(
             "SELECT id FROM orders WHERE user_id=? AND request_id=?", (user_id, request_id),
         ).fetchone()
@@ -3521,13 +4038,18 @@ class BrandBot:
             return
         self.api.send_message(chat_id, "Покупка собрана. Осталось оплатить.", remove_keyboard())
         fingerprint = hashlib.sha256(compact_json([product["id"], size, phone]).encode()).hexdigest()
-        receipt, created = self.db.create_checkout(
-            user_id, f"bot:{request_id}", fingerprint,
-            [{"product_id": product["id"], "name": product["name"], "size": size, "phone": phone,
-              "quantity": 1, "note": "", "amount_rub": amount, "person": "", "person_label": ""}],
-            stars_amount(amount, self.settings.stars_rub_per_star) if self.settings.stars_enabled else 0,
-            queue_notifications=lambda receipt: self.queue_checkout_notifications(receipt, user_id, phone, "", chat_id, "бота"),
-        )
+        try:
+            receipt, created = self.db.create_checkout(
+                user_id, f"bot:{request_id}", fingerprint,
+                [{"product_id": product["id"], "name": product["name"], "size": size, "phone": phone,
+                  "quantity": 1, "note": "", "amount_rub": amount, "person": "", "person_label": ""}],
+                stars_amount(amount, self.settings.stars_rub_per_star) if self.settings.stars_enabled else 0,
+                queue_notifications=lambda receipt: self.queue_checkout_notifications(receipt, user_id, phone, "", chat_id, "бота"),
+                gift=self.gift_for_checkout(),
+            )
+        except GiftUnavailable as exc:
+            self.api.send_message(chat_id, esc(str(exc)), self.main_menu(chat_id))
+            return
         self.flush_notifications()
         order_id = receipt["order_ids"][0]
         payment_id = receipt["payment_id"]
@@ -3542,7 +4064,10 @@ class BrandBot:
             return
         self.db.event(user_id, "checkout_step", {"step": "payment", "payment_id": payment_id})
         line = f"• {esc(product['name'])} · {esc(size)} · 1 шт."
-        self.offer_payment(chat_id, payment_id, amount, [line], source="бота")
+        lines = [line]
+        if receipt.get("gift"):
+            lines.append(f"• Подарок: {esc(receipt['gift']['name'])} · 1 шт. · 0 ₽")
+        self.offer_payment(chat_id, payment_id, amount, lines, source="бота")
 
     def request_profile(self, chat_id: int, user_id: int) -> None:
         self.ask_phone(chat_id, user_id, "awaiting_profile_phone", {})
@@ -3818,8 +4343,10 @@ class BrandBot:
         lines = [
             f"<b>ПОКУПКА №{int(row['id'])}</b>",
             f"{esc(row['product_name'])} · размер {esc(row['size'])} · {int(row['quantity'] or 1)} шт.",
-            "",
         ]
+        if payment is not None and payment["gift_product_id"] and not payment["gift_released_at"]:
+            lines.append(f"Подарок в общей заявке: {esc(payment['gift_name'])} · 0 ₽")
+        lines.append("")
         lines.extend(order_state_lines(str(row["status"]), payment, amount))
         note = str(row["note"] or "").strip()
         if note:
@@ -3899,6 +4426,8 @@ class BrandBot:
                 f"• {esc(row['product_name'])} · {esc(row['size'])} · {int(row['quantity'] or 1)} шт."
                 + (f" · {format_rub(amount)}" if amount else "")
             )
+        if payment["gift_product_id"] and not payment["gift_released_at"]:
+            lines.append(f"• Подарок: {esc(payment['gift_name'])} · {int(payment['gift_qty'] or 1)} шт. · 0 ₽")
         lines.extend(["", f"Итого: <b>{esc(format_rub(total))}</b>"])
         first = orders[0] if orders else None
         keyboard = (
@@ -3910,6 +4439,7 @@ class BrandBot:
 
     def open_draft(self, chat_id: int, user_id: int, payment_id: str) -> None:
         """Продолжить оплату: тот же счёт, без нового, и с проверкой актуальности."""
+        self.db.expire_payments()
         payment = self.db.get_payment(payment_id)
         if not payment or int(payment["user_id"]) != user_id:
             self.api.send_message(
@@ -4096,8 +4626,9 @@ class BrandBot:
                 chat_id,
                 f"<b>ПОКУПКА №{order_id}</b>\n\n"
                 + "\n".join(order_state_lines(str(order["status"]), payment, int(order["amount_rub"] or 0)))
-                + f"\n\nОтдельного канала поддержки сейчас нет — напиши {esc(contact)}, "
-                "номер покупки уже перед тобой.",
+                + (f"\n\nНапиши {esc(contact)} — номер покупки уже перед тобой."
+                   if self.settings.support_username else
+                   "\n\nПрямая связь с менеджером пока не подключена. Номер покупки сохранён; попробуй открыть поддержку позже."),
                 inline_keyboard(nav_rows(("Поддержка", "support"))),
             )
             return
@@ -4384,8 +4915,10 @@ class BrandBot:
             f"<b>ПОКУПКА №{int(row['id'])} · {esc(ORDER_STATUS_LABELS.get(status, status)).upper()}</b>",
             f"{esc(row['product_name'])} · размер {esc(row['size'])} · {int(row['quantity'] or 1)} шт.",
             f"{ICON['account']} Клиент: {esc(who or str(row['user_id']))} · {esc(row['phone'] or 'номер не указан')}",
-            "",
         ]
+        if payment is not None and payment["gift_product_id"] and not payment["gift_released_at"]:
+            lines.append(f"Подарок: {esc(payment['gift_name'])} · {int(payment['gift_qty'] or 1)} шт. · 0 ₽")
+        lines.append("")
         lines.extend(order_state_lines(status, payment, int(row["amount_rub"] or 0)))
         note = str(row["note"] or "").strip()
         if note:
@@ -4606,8 +5139,12 @@ class BrandBot:
             return
         sizes = ", ".join(str(size) for size in product.get("sizes") or []) or "размеры уточним"
         description = " ".join(str(product.get("description") or "").split())[:160]
+        try:
+            price_label = "БЕСПЛАТНО · в подарок" if product.get("gift") else format_rub(parse_price_strict(product.get("price")))
+        except PriceError:
+            price_label = str(product.get("price") or "цена уточняется")
         text = (f"Новинка: {product.get('name')}\n"
-                f"{product.get('price')} ₽\n"
+                f"{price_label}\n"
                 f"Размеры: {sizes}\n"
                 + (f"{description}\n" if description else "")
                 + "\nСмотри в витрине — тираж маленький.")
@@ -4626,7 +5163,7 @@ class BrandBot:
             reason = self.db.kv_get(f"rreason:{pid}")
             lines.append(
                 f"\n{ICON['cancel']} Покупка №{int(row['order_id'])} · "
-                f"{esc(str(row['product_name'])[:24])} · {format_rub(int(row['amount_rub']))}"
+                f"{esc(str(row['product_name'])[:24])} · {format_rub(int(row['refund_amount_rub'] or row['amount_rub']))}"
                 + (f"\n{ICON['tools']} Причина: {esc(reason)}" if reason
                    else "\nПричина не указана — выбери кнопкой.")
             )
@@ -4642,7 +5179,7 @@ class BrandBot:
                 pid = str(row["payment_id"])
                 reason = self.db.kv_get(f"rreason:{pid}") or "без причины"
                 lines.append(f"№{int(row['order_id'])} · "
-                             f"{format_rub(int(row['amount_rub']))} · {esc(reason)}")
+                             f"{format_rub(int(row['refund_amount_rub'] or row['amount_rub']))} · {esc(reason)}")
         self.api.send_message(chat_id, "\n".join(lines),
                               inline_keyboard(rows + staff_nav_rows()))
 
@@ -5446,6 +5983,8 @@ class BrandBot:
         order_lines = [f"• {esc(line['name'])} · {esc(line['size'])} · {line['quantity']} шт."
                        + (f" · {esc(line['person_label'])} {esc(line['person'])}" if line['person'] else "")
                        for line in receipt["lines"]]
+        if receipt.get("gift"):
+            order_lines.append(f"• Подарок: {esc(receipt['gift']['name'])} · 1 шт. · 0 ₽")
         if notify_user:
             self.offer_payment(notify_user, payment_id, receipt["amount_rub"], order_lines, source, queue_only=True)
         if self.settings.manager_chat_id:
@@ -5492,6 +6031,7 @@ class BrandBot:
         receipt, created = self.db.create_checkout(
             user_id, request_base, fingerprint, lines, stars,
             queue_notifications=lambda receipt: self.queue_checkout_notifications(receipt, user_id, phone, note, notify_user),
+            gift=self.gift_for_checkout(),
         )
         payment_id = receipt["payment_id"]
         total = receipt["amount_rub"]
@@ -5510,6 +6050,7 @@ class BrandBot:
         return raw, fingerprint
 
     def resume_payment(self, user_id: int, payment_id: str) -> dict[str, Any]:
+        self.db.expire_payments()
         payment = self.db.get_payment(payment_id)
         if not payment or int(payment["user_id"]) != int(user_id):
             return {"ok": False, "error": "Оплата не найдена."}
@@ -5527,6 +6068,8 @@ class BrandBot:
             "amount_stars": int(payment["amount_stars"] or 0),
             "methods": methods,
             "status": "awaiting_payment",
+            "gift": ({"product_id": payment["gift_product_id"], "name": payment["gift_name"], "quantity": int(payment["gift_qty"] or 1)}
+                     if payment["gift_product_id"] and not payment["gift_released_at"] else None),
             "lines": [
                 {
                     "name": str(row["product_name"]),
@@ -5555,6 +6098,8 @@ class BrandBot:
             if legacy:
                 return {"ok": False, "error": "Эта покупка уже принята ранее. Открой «Мои покупки» для оплаты или связи с менеджером."}
             return self._checkout_web_payload(user, payload, notify_user)
+        except GiftUnavailable as exc:
+            return {"ok": False, "error": str(exc), "code": "gift_unavailable"}
         except (ValueError, PriceError) as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -5579,7 +6124,7 @@ class BrandBot:
                 return {"ok": False, "error": "Некорректная позиция в заявке. Обнови корзину и попробуй снова."}
             product = self.catalog.get(str(raw_item.get("product_id", "")))
             size = str(raw_item.get("size", ""))
-            if not product or size not in {str(item) for item in product.get("sizes", [])}:
+            if not product or product.get("gift") or size not in {str(item) for item in product.get("sizes", [])}:
                 return {"ok": False, "error": "Одна из вещей или размеров уже недоступна. Обнови корзину: заявка не создана."}
             quantity = raw_item.get("quantity", 1)
             if isinstance(quantity, bool) or not isinstance(quantity, int) or not 1 <= quantity <= 20:
@@ -5743,10 +6288,12 @@ class BrandBot:
             prod = self.catalog.get(pid) or {}
             name = prod.get("name", "СИЛА И ЧЕСТЬ")
             verb = "предзаказ" if prod.get("badge") == "ПРЕДЗАКАЗ" or "предзаказ" in str(prod.get("stock_label", "")).lower() else "заказ"
-            manager = self.settings.support_username or "intellectual_sabotage"
-            msg_template = f"Здравствуйте, хочу оформить {verb} футболки «{name}»"
-            order_url = f"https://t.me/{manager}?text={urllib.parse.quote(msg_template)}"
             self.api.answer_callback(callback_id)
+            if not self.settings.support_username:
+                self.choose_size(chat_id, user_id, pid)
+                return True
+            msg_template = f"Здравствуйте, хочу оформить {verb} футболки «{name}»"
+            order_url = f"https://t.me/{self.settings.support_username}?text={urllib.parse.quote(msg_template)}"
             self.api.send_message(
                 chat_id,
                 f"<b>ОФОРМЛЕНИЕ ЗАКАЗА</b>\n\nДля заказа футболки «{esc(name)}» перейди к менеджеру в Telegram:\n\n👉 <a href=\"{order_url}\">Перейти к менеджеру</a>",
@@ -5895,9 +6442,14 @@ class BrandBot:
             return True
         elif data.startswith("rdone:") and self.is_admin(user_id):
             pid = data.split(":", 1)[1]
-            self.db.mark_payment_refunded(pid)
-            self.db.event(chat_id, "payment_refunded", {"payment_id": pid})
-            self.admin_refunds(chat_id)
+            if self.db.mark_payment_refunded(pid, actor_id=user_id):
+                self.admin_refunds(chat_id)
+            else:
+                self.api.send_message(
+                    chat_id,
+                    "Возврат не отмечен: оплата либо уже закрыта, либо не требовала возврата. Обновляю список.",
+                )
+                self.admin_refunds(chat_id)
             return True
         elif data.startswith("wnotify:") and self.is_admin(user_id):
             parts = data.split(":", 2)
@@ -6317,8 +6869,10 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return
         if not self._rate_ok(READ_LIMITER, "my-orders", user):
             return
+        self.db.expire_payments()
         rows = self.db.orders_for_user(int(user["id"]), 20)
         orders = []
+        seen_gift_payments: set[str] = set()
         for row in rows:
             order = public_order_payload(row)
             if row["payment_id"]:
@@ -6328,6 +6882,11 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                 if payment and payment["status"] == "refund_required":
                     order["status_label"] += " · требуется возврат"
                     order["can_cancel"] = False
+                if (payment and payment["gift_product_id"] and not payment["gift_released_at"]
+                        and row["payment_id"] not in seen_gift_payments):
+                    order["gift"] = {"product_id": payment["gift_product_id"], "name": payment["gift_name"],
+                                     "quantity": int(payment["gift_qty"] or 1)}
+                    seen_gift_payments.add(str(row["payment_id"]))
             orders.append(order)
         self._json({"orders": orders, "source": "bot"})
 
@@ -6383,15 +6942,44 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return None
         return self.rfile.read(length) if length else b""
 
-    def _mark_paid(self, payment_id: str, method: str, provider_id: str = "") -> bool:
+    def _mark_paid(
+        self, payment_id: str, method: str, provider_id: str,
+        amount_rub: int, currency: str, raw_body: bytes,
+    ) -> str:
         if not self.db or not payment_id:
-            return False
-        if not self.db.get_payment(payment_id):
-            return False
+            return "unknown"
         bot = self._bot()
-        self.db.mark_payment_paid(payment_id, method, provider_id,
-                                  queue_notifications=(lambda pid: bot.notify_paid(pid, queue_only=True)) if bot else None)
-        return True
+        result = self.db.record_provider_payment(
+            payment_id, method, provider_id, amount_rub, currency,
+            hashlib.sha256(raw_body).hexdigest(),
+            queue_notifications=(lambda pid: bot.notify_paid(pid, queue_only=True)) if bot else None,
+            queue_overpayment=(lambda pid, tx: bot.notify_overpayment(pid, tx, queue_only=True)) if bot else None,
+        )
+        if bot and result != "duplicate":
+            bot.flush_notifications()
+        return result
+
+    def _provider_webhook_response(
+        self, payment_id: str, provider: str, invoice_id: str,
+        amount_rub: int, currency: str, raw_body: bytes,
+    ) -> None:
+        try:
+            result = self._mark_paid(payment_id, provider, invoice_id, amount_rub, currency, raw_body)
+        except InvoiceMismatch as exc:
+            LOG.warning("Rejected mismatched %s invoice for %s: %s", provider, payment_id, exc)
+            self._json({"error": "invoice mismatch"}, 409)
+            return
+        except PaymentMismatch as exc:
+            LOG.warning("Rejected mismatched %s payment for %s: %s", provider, payment_id, exc)
+            self._json({"error": "amount or currency mismatch"}, 422)
+            return
+        if result == "unknown":
+            self._json({"error": "unknown payment"}, 404)
+            return
+        response: dict[str, Any] = {"ok": True}
+        if result in {"duplicate", "overpayment"}:
+            response[result] = True
+        self._json(response)
 
     def _resume_pay(self) -> None:
         if not self.db or not self.settings or not self.settings.token:
@@ -6455,7 +7043,10 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return
         result = bot.checkout_web_payload(user, payload, notify_user=int(user["id"]))
         if not result.get("ok"):
-            self._json({"error": result.get("error") or "Не получилось принять заявку."}, 400)
+            self._json(
+                {"error": result.get("error") or "Не получилось принять заявку.", "code": result.get("code", "")},
+                409 if result.get("code") == "gift_unavailable" else 400,
+            )
             return
         self._json(result)
 
@@ -6488,16 +7079,26 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if not isinstance(payload, dict):
             self._json({"error": "bad json"}, 400)
             return
-        status = str(payload.get("status") or payload.get("invoice_status") or "").lower()
+        inner = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        status = str(inner.get("status") or inner.get("invoice_status") or payload.get("status") or "").lower()
         if status not in {"success", "paid", "completed", "successed"}:
             self._json({"ok": True, "ignored": True})
             return
-        payment_id = str(payload.get("order_id") or payload.get("orderId") or payload.get("custom_id") or "")
-        invoice_id = str(payload.get("invoice_id") or payload.get("id") or "")
-        if not self._mark_paid(payment_id, "lava", invoice_id):
-            self._json({"error": "unknown payment"}, 404)
+        payment_id = str(inner.get("order_id") or inner.get("orderId") or inner.get("custom_id") or "")
+        invoice_id = str(inner.get("invoice_id") or inner.get("invoiceId") or inner.get("id") or "")
+        shop_id = str(inner.get("shop_id") or inner.get("shopId") or "")
+        if shop_id and shop_id != settings.lava_shop_id:
+            self._json({"error": "shop mismatch"}, 422)
             return
-        self._json({"ok": True})
+        # Lava invoices are created in RUB.  If a callback explicitly names a
+        # currency it must agree; an absent legacy field means the invoice's RUB.
+        currency = str(inner.get("currency") or inner.get("fiat") or "RUB").upper()
+        try:
+            amount_rub = parse_price_strict(inner.get("sum") if inner.get("sum") is not None else inner.get("amount"))
+        except PriceError:
+            self._json({"error": "valid invoice amount required"}, 422)
+            return
+        self._provider_webhook_response(payment_id, "lava", invoice_id, amount_rub, currency, raw)
 
     def _crypto_webhook(self) -> None:
         settings = self.settings
@@ -6527,15 +7128,48 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return
         payment_id = str(inner.get("payload") or inner.get("order_id") or "")
         invoice_id = str(inner.get("invoice_id") or "")
-        if not self._mark_paid(payment_id, "crypto", invoice_id):
-            self._json({"error": "unknown payment"}, 404)
+        invoice_status = str(inner.get("status") or "paid").lower()
+        currency_type = str(inner.get("currency_type") or "").lower()
+        currency = str(inner.get("fiat") or "").upper()
+        if invoice_status != "paid" or currency_type != "fiat" or currency != "RUB":
+            self._json({"error": "paid fiat RUB invoice required"}, 422)
             return
-        self._json({"ok": True})
+        try:
+            # ``amount`` is the fiat invoice amount. ``paid_amount`` is the
+            # crypto asset amount and must never be compared with RUB.
+            amount_rub = parse_price_strict(inner.get("amount"))
+        except PriceError:
+            self._json({"error": "valid invoice amount required"}, 422)
+            return
+        self._provider_webhook_response(payment_id, "crypto", invoice_id, amount_rub, currency, raw)
 
     def do_GET(self) -> None:
         path = urllib.parse.urlparse(self.path).path
         if path == "/health":
-            self._write(b'{"status":"ok","service":"vorozhbitov-shop"}', "application/json; charset=utf-8")
+            checks: dict[str, str] = {}
+            healthy = True
+            if self.db:
+                try:
+                    self.db.connection().execute("SELECT 1").fetchone()
+                    checks["database"] = "ok"
+                except sqlite3.Error:
+                    healthy = False
+                    checks["database"] = "error"
+                    LOG.warning("Health check: SQLite is unavailable", exc_info=True)
+            if self.catalog:
+                try:
+                    with self.catalog.lock:
+                        loaded = isinstance(self.catalog.data.get("products"), list)
+                    checks["catalog"] = "ok" if loaded else "error"
+                    healthy = healthy and loaded
+                except (KeyError, TypeError, AttributeError):
+                    healthy = False
+                    checks["catalog"] = "error"
+                    LOG.warning("Health check: catalog is unavailable", exc_info=True)
+            self._json(
+                {"status": "ok" if healthy else "error", "service": "vorozhbitov-shop", "checks": checks},
+                200 if healthy else 503,
+            )
             return
         if path == "/api/my-orders":
             self._my_orders()
@@ -6582,6 +7216,15 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                     "lookbook": catalog.data.get("lookbook", []),
                     "media": self._stamp_media(catalog.data.get("media", {})),
                 }
+                gift_product = catalog.get(settings.gift_product_id) if settings else None
+                gift = self.db.gift_status(gift_product) if self.db else None
+                if gift is None and gift_product and gift_product.get("gift"):
+                    gift = {
+                        "product_id": gift_product["id"], "name": gift_product["name"],
+                        "image": gift_product.get("image", ""), "stock": int(gift_product.get("gift_stock", 0)),
+                        "remaining": int(gift_product.get("gift_stock", 0)), "available": True,
+                    }
+                payload["gift"] = gift
             self._write(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
 
@@ -6641,6 +7284,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         """
         stamped: dict[str, Any] = {}
         for key, value in media.items():
+            # В media лежат не только URL, но и настройки вроде
+            # welcome_motion=False. Их нельзя превращать в строку с ?v=.
             if not isinstance(value, str) or not value or "?" in value or "://" in value:
                 stamped[key] = value
                 continue
@@ -6656,7 +7301,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
     def _stamp_assets(self, body: bytes) -> bytes:
         """Версионировать клиентский код и CSS вместе с его шрифтами."""
         text = body.decode("utf-8", "replace")
-        for name in ("app.js", "checkout.js", "shop-core.js", "viewer3d.js", "styles.css", "refinement.css"):
+        for name in ("app.js", "checkout.js", "shop-core.js", "viewer3d.js", "styles.css"):
             asset = self.static_root / name
             try:
                 version = self._asset_version(asset)
@@ -6832,6 +7477,9 @@ def notification_loop(bot: BrandBot) -> None:
     try:
         while not STOP_EVENT.is_set():
             try:
+                bot.db.expire_payments()
+                bot.db.backup_database()
+                bot.db.prune_operational_data()
                 bot.flush_notifications()
             except Exception:
                 LOG.exception("Notification retry failed")

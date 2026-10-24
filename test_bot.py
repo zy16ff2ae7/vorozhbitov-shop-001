@@ -409,7 +409,8 @@ class BotTests(unittest.TestCase):
             # Карточка вещи уходит отдельным сообщением вместе с кнопками.
             card, keyboard = api.messages[-1]
             self.assertIn("ЖЕТОН", card)
-            self.assertIn("1 900 ₽", card)
+            self.assertIn("БЕСПЛАТНО", card)
+            self.assertIn("осталось 100 из 100", card)
             self.assertTrue(keyboard["inline_keyboard"][-1][-1]["callback_data"] == "menu")
 
     def test_webapp_order_is_validated_against_catalog_and_stored(self):
@@ -822,8 +823,8 @@ class BotTests(unittest.TestCase):
             ("от 4900", 4900),
             ("3 200 руб", 3200),
             ("1 000 000 ₽", 1000000),
-            ("4 900,50 ₽", 4900),  # копейки округляются до рубля
-            ("4 900.49 ₽", 4900),
+            ("4 900,00 ₽", 4900),
+            ("4 900.00 ₽", 4900),
         ]:
             with self.subTest(raw=raw):
                 self.assertEqual(parse_price_strict(raw), expected)
@@ -834,6 +835,8 @@ class BotTests(unittest.TestCase):
             "1 200 - 1 500 ₽",
             "4900 (со скидкой 3900)",
             "4.900 ₽",
+            "4 900,50 ₽",
+            "4 900.49 ₽",
             "цена по запросу",
             "",
             "99999999999",
@@ -866,7 +869,9 @@ class BotTests(unittest.TestCase):
         self.assertIsNotNone(tee)
         self.assertIsNotNone(tag)
         self.assertEqual(parse_price_strict(tee["price"]), 4900)
-        self.assertEqual(parse_price_strict(tag["price"]), 1900)
+        self.assertEqual(parse_price_strict(tag["price"]), 0)
+        self.assertTrue(tag["gift"])
+        self.assertEqual(tag["gift_stock"], 100)
         self.assertIn("XXL", tee["sizes"])
         self.assertEqual(tag["sizes"], ["ONE SIZE"])
         root = Path(__file__).with_name("miniapp")
@@ -982,6 +987,19 @@ class BotTests(unittest.TestCase):
                 everything = [product["image"], *product["images"], *product["spin"]]
                 self.assertFalse([a for a in everything if "pack" in a], "упаковка попала в карточку")
 
+    def test_real_lifestyle_photos_are_upright(self):
+        """Исходные кадры не должны приходить в витрину повёрнутыми на 90 градусов."""
+        try:
+            from PIL import Image
+        except ImportError:  # pragma: no cover
+            self.skipTest("нужен Pillow")
+        root = Path(__file__).parent / "miniapp/assets/drop"
+        shots = sorted(root.glob("tee-real-*.jpg"))
+        self.assertTrue(shots)
+        for path in shots:
+            with self.subTest(photo=path.name), Image.open(path) as image:
+                self.assertGreater(image.height, image.width, f"{path.name} лежит на боку")
+
     def test_product_photos_are_sharp_enough_to_sell(self):
         """Heuristic detail check at a common display size; visual review is still required."""
         try:
@@ -1034,6 +1052,32 @@ class BotTests(unittest.TestCase):
         self.assertNotIn("Пропустить", index)
         self.assertNotIn(".welcome-close", styles)
 
+    def test_miniapp_has_one_stylesheet_and_no_retired_bookmarks_or_tryon(self):
+        miniapp = Path(__file__).with_name("miniapp")
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        app = (miniapp / "app.js").read_text(encoding="utf-8")
+        styles = (miniapp / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('href="styles.css"', index)
+        self.assertIn('content="#0c0c0e"', index)
+        self.assertIn('setHeaderColor("#0c0c0e")', app)
+        self.assertIn('setBackgroundColor("#0c0c0e")', app)
+        self.assertIn("--bg: #0c0c0e", styles)
+        self.assertIn("color-scheme: dark", styles)
+        self.assertNotIn("color-scheme: light", styles)
+        self.assertNotIn("refinement.css", index)
+        self.assertFalse((miniapp / "refinement.css").exists())
+        for marker in ("data-save-id", 'id="sheetSave"', 'id="profileSavedBtn"', "toggleSaved", "openTryon", "tryonCanvas"):
+            self.assertNotIn(marker, index + app)
+
+    def test_teaser_has_russian_descriptive_captions(self):
+        miniapp = Path(__file__).with_name("miniapp")
+        index = (miniapp / "index.html").read_text(encoding="utf-8")
+        self.assertIn('kind="captions"', index)
+        self.assertIn('src="assets/video/campaign-v11.ru.vtt"', index)
+        captions = (miniapp / "assets/video/campaign-v11.ru.vtt").read_text(encoding="utf-8")
+        self.assertTrue(captions.startswith("WEBVTT"))
+        self.assertIn("00:14.000 --> 00:18.000", captions)
+
     def test_teaser_has_no_photo_lead(self):
         """Фильм выпуска начинается сразу с видео: фото-заставки нет ни на карточке, ни в модалке."""
         miniapp = Path(__file__).with_name("miniapp")
@@ -1048,43 +1092,42 @@ class BotTests(unittest.TestCase):
         self.assertNotIn("TEASER_SKIP_SECONDS", app)
         self.assertNotIn("cueTeaserStart", app)
 
-    def test_welcome_video_has_no_poster_flash(self):
-        """Фоновое видео стартует с чёрного/титра: у video нет постера, подложка-фото скрыта при загрузке и прячется при воспроизведении."""
+    def test_welcome_poster_fallback_and_motion_flag(self):
+        """Без видео остаётся постер; welcome_motion:false не подменяется роликом по умолчанию."""
         miniapp = Path(__file__).with_name("miniapp")
         lines = (miniapp / "index.html").read_text(encoding="utf-8").splitlines()
         at = next(i for i, line in enumerate(lines) if 'id="welcomeVideo"' in line)
         self.assertNotIn("poster=", "\n".join(lines[at:at + 3]))
         app = (miniapp / "app.js").read_text(encoding="utf-8")
         self.assertNotIn("video.poster = media.welcomePoster", app)
-        self.assertIn('fallback.classList.toggle("hidden", canPlay || !reducedMotion())', app)
+        self.assertIn('media.welcome_motion === false ? ""', app)
+        self.assertIn('fallback.classList.toggle("hidden", canPlay || (!reducedMotion() && Boolean(welcomePlayback.source)))', app)
         atf = next(i for i, line in enumerate(lines) if 'id="welcomeFallback"' in line)
         self.assertIn("hidden", lines[atf])
 
-    def test_welcome_video_starts_loading_immediately(self):
-        """Фильм грузится сразу: preload, мгновенная установка src и повторные попытки запуска."""
+    def test_welcome_video_setup_preserves_autoplay_recovery(self):
+        """Для разрешённого ролика сохраняются preload, повторный запуск и восстановление после жеста."""
         miniapp = Path(__file__).with_name("miniapp")
         index = (miniapp / "index.html").read_text(encoding="utf-8")
         video = next(line for line in index.splitlines() if 'id="welcomeVideo"' in line)
         self.assertIn('preload="auto"', video)
         app = (miniapp / "app.js").read_text(encoding="utf-8")
-        # Запуск не ждёт каталог: сетап при инициализации, на показе и по данным каталога.
         self.assertNotIn("if (state.catalogReady) setupWelcomeVideo", app)
         self.assertGreaterEqual(app.count("setupWelcomeVideo(mediaConfig())"), 2)
         self.assertIn("setupWelcomeVideo(media)", app)
-        # Источник ставится до гейта воспроизведения и явно прогружается.
         self.assertIn("video.src = welcomePlayback.source", app)
         self.assertIn("video.load();", app)
-        # WebView может резать автоплей: жест, возврат во вкладку и сторожевой таймер.
         self.assertIn('"pointerdown"', app)
         self.assertIn('"visibilitychange"', app)
         self.assertIn("welcomePlayback.watchdog", app)
         self.assertIn("}, 4000);", app)
 
     def test_welcome_video_keeps_playing_when_catalog_restamps(self):
-        """Каталог приносит тот же файл с новым ?v-штампом — идущий ролик не перезапускается."""
+        """Тот же файл не перезапускается; отключение motion останавливает и очищает источник."""
         app = (Path(__file__).with_name("miniapp") / "app.js").read_text(encoding="utf-8")
         self.assertIn('video.classList.contains("is-playing") || (!video.paused && video.currentTime > 0)', app)
-        self.assertIn("welcomePlayback.source !== media.welcomeLoop && !playing", app)
+        self.assertIn("welcomePlayback.source !== media.welcomeLoop && (!playing || !media.welcomeLoop)", app)
+        self.assertIn('video.removeAttribute("src")', app)
 
     def test_welcome_video_autostarts_itself(self):
         """Фоновое видео включается само: атрибут autoplay в разметке, беззвучие задано и свойством
@@ -1169,6 +1212,7 @@ class BotTests(unittest.TestCase):
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/catalog", timeout=5) as response:
                 media = json.loads(response.read().decode("utf-8"))["media"]
+            self.assertIs(media.get("welcome_motion"), False)
             for key in ("teaser", "teaser_poster", "welcome_loop", "welcome_poster"):
                 with self.subTest(key=key):
                     self.assertRegex(media[key], r"\?v=\d+$", f"{key} без версии — попадёт в кеш")
@@ -1246,6 +1290,16 @@ class BotTests(unittest.TestCase):
         lava_sign = hmac.new(b"hook", body, hashlib.sha256).hexdigest()
         self.assertTrue(verify_lava_webhook(body, lava_sign, "hook"))
         self.assertFalse(verify_lava_webhook(body, lava_sign, "other"))
+        # Official Lava PHP SDK vector: ksort top-level fields before HMAC.
+        official_body = json.dumps({
+            "invoice_id": "18cf0c0b-6539-4d7c-b3e9-479e4922b87c", "status": "success",
+            "pay_time": "2022-11-08 11:26:46", "amount": "1.00", "order_id": "636a3c2f3e82b",
+            "pay_service": "card", "payer_details": "553691******8079", "custom_fields": "test",
+            "type": 1, "credited": "1.00",
+        }, separators=(",", ":")).encode()
+        self.assertTrue(verify_lava_webhook(
+            official_body, "b0b011552beb994cc04401e088db7b296796a07fc76976b632518fe146ffa330",
+            "f4b91efb9b8da35737fcd97ab123c74566f9a654"))
         token = "crypto-token"
         secret = hashlib.sha256(token.encode()).digest()
         crypto_sign = hmac.new(secret, body, hashlib.sha256).hexdigest()
@@ -1373,7 +1427,7 @@ class BotTests(unittest.TestCase):
                 self.assertEqual(order["status"], "awaiting_payment")
                 self.assertEqual(order["payment_id"], payment_id)
 
-                body = json.dumps({"order_id": payment_id, "status": "success", "invoice_id": "lava-1"}).encode("utf-8")
+                body = json.dumps({"order_id": payment_id, "status": "success", "invoice_id": "inv", "sum": payload["amount_rub"], "currency": "RUB"}).encode("utf-8")
                 signature = hmac.new(b"hook", body, hashlib.sha256).hexdigest()
                 status, paid = request_json(
                     f"http://127.0.0.1:{port}/api/payments/lava",
@@ -2704,7 +2758,7 @@ class NativeMenuTests(unittest.TestCase):
             db.upsert_user(self.USER)
             db.upsert_user({"id": 1, "username": "owner", "first_name": "Owner"})
             waiting = self._purchase(db, product_id="tee-sila-i-chest", size="L")
-            working = self._purchase(db, product_id="tag-sila-i-chest", size="ONE SIZE")
+            working = self._purchase(db, product_id="tee-vzglyad", size="M")
             db.mark_payment_paid(working["payment_id"], "stars", "charge")
             db.set_order_status(working["order_ids"][0], "confirmed")
             waiting_id = waiting["order_ids"][0]

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate catalog and media files before a release is published."""
 from __future__ import annotations
-import argparse, json, shutil, subprocess
+import argparse, json, shutil, subprocess, sys
 from pathlib import Path
 
 def main() -> int:
@@ -22,6 +22,32 @@ def main() -> int:
         catalog = {}
     if not isinstance(catalog.get('categories'), list) or not isinstance(catalog.get('products'), list):
         errors.append('catalog must contain categories and products arrays')
+    # Use the same structural validator as the backend, then enforce the
+    # stricter monetary contract needed for a release (Catalog itself keeps a
+    # broken paid item visible for manual repair instead of dropping startup).
+    sys.path.insert(0, str(root))
+    try:
+        from bot import Catalog
+        from payments import PriceError, parse_price_strict
+        if not errors:
+            Catalog(catalog_path)
+        for product in catalog.get('products', []):
+            if not isinstance(product, dict) or not product.get('active', True):
+                continue
+            product_id = product.get('id', '<unknown>')
+            try:
+                amount = parse_price_strict(product.get('price'))
+                if product.get('gift'):
+                    if amount != 0:
+                        errors.append(f'gift {product_id} must have zero price')
+                    if not isinstance(product.get('gift_stock'), int) or isinstance(product.get('gift_stock'), bool) or product.get('gift_stock', 0) <= 0:
+                        errors.append(f'gift {product_id} must have a positive integer gift_stock')
+                elif amount <= 0:
+                    errors.append(f'paid product {product_id} must have a positive price')
+            except PriceError as exc:
+                errors.append(f'product {product_id} price: {exc}')
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        errors.append(f'catalog backend validation failed: {exc}')
     media = catalog.get('media', {}) if isinstance(catalog, dict) else {}
     if not isinstance(media, dict):
         errors.append('catalog media must be an object')
