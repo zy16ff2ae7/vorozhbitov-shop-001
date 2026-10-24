@@ -17,17 +17,17 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
 (async()=>{
  browser=await chromium.launch({headless:true,channel:'chrome'});
  const {page,context}=await make();await enter(page);
- await check('2 products and mobile primary action',async()=>{
-  assert.equal(await page.locator('.product-card').count(),2);
-  assert.equal(await page.locator('#productCount').textContent(),'02 ВЕЩИ');
+ await check('3 products and mobile primary action',async()=>{
+  assert.equal(await page.locator('.product-card').count(),3);
+  assert.equal(await page.locator('#productCount').textContent(),'03 ВЕЩИ');
   const box=await page.locator('#heroProductButton').boundingBox();assert.ok(box.y+box.height<780);
   assert.equal(await page.locator('#welcomeVideo').getAttribute('src'),null);await shot(page,'mobile-home');
  });
  await check('available limited stock and XXL filter',async()=>{
   await page.locator('[data-scroll="catalog"]').first().click();await page.locator('#filterToggle').click();await page.locator('[data-stock="available"]').click();
   assert.equal(await page.locator('[data-product-id="tee-sila-i-chest"]').count(),1);
-  await page.locator('[data-size-filter="XXL"]').click();assert.equal(await page.locator('.product-card').count(),1);
-  await page.locator('#resetFilters').click();assert.equal(await page.locator('.product-card').count(),2);await page.locator('#filterToggle').click();
+  await page.locator('[data-size-filter="XXL"]').click();assert.equal(await page.locator('.product-card').count(),3);
+  await page.locator('#resetFilters').click();assert.equal(await page.locator('.product-card').count(),3);await page.locator('#filterToggle').click();
   await page.locator('#catalog').screenshot({path:path.join(out,'mobile-catalog.png')});
  });
  await check('360 controls, nested photo zoom and keyboard focus',async()=>{
@@ -39,20 +39,39 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
   await page.locator('#lightboxZoom').click();await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'lightboxViewport');
   await page.keyboard.press('ArrowRight');await page.waitForFunction(()=>document.querySelector('#lightboxViewport').scrollLeft>0);
   await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.id),'zoomProduct');await page.locator('#spinToggle').click();await page.locator('#stagePhoto').click();
-  assert.equal(await page.locator('#galleryDots button').count(),7);await page.locator('[data-gallery="1"]').click();assert.match(await page.locator('#sheetImage').getAttribute('src'),/tee-sich-05/);
-  await page.locator('[data-gallery="6"]').click();await shot(page,'mobile-detail');await page.locator('#addToCartButton').click();await page.locator('[data-size="XXL"]').click();
-  assert.equal(await page.locator('[data-size="XXL"]').getAttribute('aria-pressed'),'true');await page.locator('#sizeGuideButton').click();await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.id),'sizeGuideButton');
+  assert.equal(await page.locator('#galleryDots button').count(),5);await page.locator('[data-gallery="1"]').click();assert.match(await page.locator('#sheetImage').getAttribute('src'),/tee-sich-03/);
+  await page.locator('[data-gallery="4"]').click();await shot(page,'mobile-detail');
+  await page.locator('#stageVideo').click();await page.waitForFunction(()=>document.querySelector('#sheetVideo').readyState>=1);assert.match(await page.locator('#sheetVideo').getAttribute('src'),/tee-sila-i-chest-360-v4\.mp4\?v=/);assert.ok(Math.abs(await page.locator('#sheetVideo').evaluate(video=>video.duration)-4)<0.05);await page.locator('#stagePhoto').click();
+  await page.locator('#addToCartButton').click();await page.locator('[data-size="XXL"]').click();
+  assert.equal(await page.locator('[data-size="XXL"]').getAttribute('aria-pressed'),'true');
  });
  await check('cart and preview checkout retain contents',async()=>{
   await page.locator('#addToCartButton').click();await page.locator('#cartModal:not(.hidden)').waitFor();await page.locator('#cartContent [data-qty="plus"]').click();assert.equal((await page.locator('#cartTotal').textContent()).replace(/\s/g,' '),'9 800 ₽');
   await page.locator('#checkoutName').fill('Тест');await page.locator('#checkoutPhone').fill('+79990000000');await page.locator('#checkoutCity').fill('Москва');await page.locator('#checkoutAddress').fill('Тестовый адрес');await page.locator('#checkoutConsent').check();await page.locator('#submitOrder').click();
   await page.waitForFunction(()=>!VorozhbitovShop.state.checkoutPending);assert.equal(await page.evaluate(()=>VorozhbitovShop.state.cart[0].qty),2);assert.match(await page.locator('#toast').textContent(),/бот|Telegram/);await shot(page,'mobile-cart');await page.locator('[data-close="cartModal"]').click();
  });
- await check('saved, search and profile',async()=>{
-  await page.locator('[data-save-id="tee-sila-i-chest"]').click();await page.locator('#savedButton').click();assert.equal(await page.locator('.product-card').count(),1);await page.locator('#clearView').click();
-  await page.locator('#searchToggle').click();await page.locator('#searchInput').fill('жетон');assert.equal(await page.locator('.product-card').count(),1);await page.keyboard.press('Escape');await page.locator('#profileButton').click();assert.equal(await page.locator('#profileAddress').inputValue(),'Тестовый адрес');await page.keyboard.press('Escape');
+ await check('search and profile',async()=>{
+  await page.locator('#searchToggle').click();await page.locator('#searchInput').fill('один в поле');assert.equal(await page.locator('.product-card').count(),1);assert.equal(await page.locator('[data-product-id="tee-odin-v-pole-voin"]').count(),1);await page.keyboard.press('Escape');await page.locator('#profileButton').click();assert.equal(await page.locator('#profileAddress').inputValue(),'Тестовый адрес');await page.keyboard.press('Escape');
  });
  await context.close();
+ await check('white tee gallery, video, 360 and preview checkout',async()=>{
+  const{page,context}=await make();await enter(page);
+  await page.locator('[data-product-id="tee-odin-v-pole-voin"] .product-open').click();
+  assert.equal(await page.locator('#sheetTitle').textContent(),'ОДИН В ПОЛЕ ВОИН');
+  assert.equal(await page.evaluate(()=>VorozhbitovShop.state.viewer.frames.length),8);
+  await page.locator('#stagePhoto').click();assert.equal(await page.locator('#galleryDots button').count(),5);
+  await page.locator('[data-gallery="4"]').click();assert.match(await page.locator('#sheetImage').getAttribute('src'),/odin-voin-detail-v3/);
+  await page.locator('#stageVideo').click();await page.waitForFunction(()=>document.querySelector('#sheetVideo').readyState>=1);
+  assert.match(await page.locator('#sheetVideo').getAttribute('src'),/tee-odin-v-pole-voin-360-v3\.mp4\?v=/);
+  assert.ok(Math.abs(await page.locator('#sheetVideo').evaluate(video=>video.duration)-4)<0.05);
+  await page.locator('#stage3d').click();await shot(page,'mobile-white-product');
+  await page.locator('#addToCartButton').click();await page.locator('[data-size="M"]').click();await page.locator('#addToCartButton').click();
+  await page.locator('#cartModal:not(.hidden)').waitFor();assert.match(await page.locator('#cartContent').textContent(),/ОДИН В ПОЛЕ ВОИН/);
+  assert.equal((await page.locator('#cartTotal').textContent()).replace(/\s/g,' '),'4 900 ₽');
+  await page.locator('#checkoutName').fill('Тест');await page.locator('#checkoutPhone').fill('+79990000000');await page.locator('#checkoutCity').fill('Москва');await page.locator('#checkoutAddress').fill('Тестовый адрес');await page.locator('#checkoutConsent').check();await page.locator('#submitOrder').click();
+  await page.waitForFunction(()=>!VorozhbitovShop.state.checkoutPending);assert.match(await page.locator('#toast').textContent(),/бот|Telegram/);await shot(page,'mobile-white-checkout');
+  await context.close();
+ });
  for(const width of [320,360,768,1440]){
   const{page,context}=await make(width);await enter(page);await check('layout '+width+'px',async()=>{
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);await shot(page,'home-'+width);if(width===1440)await shot(page,'desktop-full',{fullPage:true});
@@ -61,7 +80,7 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
  }
  await check('catalog outage retry has no fabricated products',async()=>{
   const{page,context}=await make();let calls=0;await page.route('**/api/catalog',r=>++calls===1?r.fulfill({status:503,body:'{}'}):r.continue());await enter(page);
-  assert.equal(await page.locator('.product-card').count(),0);assert.equal(await page.locator('#catalogError').isVisible(),true);await page.locator('#retryCatalog').click();await page.waitForFunction(()=>VorozhbitovShop.state.catalogReady);assert.equal(await page.locator('.product-card').count(),2);await context.close();
+  assert.equal(await page.locator('.product-card').count(),0);assert.equal(await page.locator('#catalogError').isVisible(),true);await page.locator('#retryCatalog').click();await page.waitForFunction(()=>VorozhbitovShop.state.catalogReady);assert.equal(await page.locator('.product-card').count(),3);await context.close();
  });
  await check('slow catalog refreshes open cart and protects unavailable items',async()=>{
   const{page,context}=await make();let release;const ready=new Promise(r=>release=r);

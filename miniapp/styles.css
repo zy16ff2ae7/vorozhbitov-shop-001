@@ -310,7 +310,7 @@ main > section { scroll-margin-top: calc(62px + var(--safe-top)); }
 .brand-lockup, .footer-brand { display: inline-flex; align-items: center; gap: 10px; }
 .brand-mark {
   width: 32px; height: 32px; display: inline-block;
-  background: url("assets/sila-chest-seal-v2.jpg") center/cover no-repeat;
+  background: url("assets/sila-chest-seal-v3.jpg") center/cover no-repeat;
   border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
   font-size: 0; color: transparent; transform: none;
@@ -894,7 +894,8 @@ h1, h2 {
 }
 .sheet-photo[src*="/tee-flatlay-v2.jpg"],
 .sheet-photo[src*="/tee-back-v3.jpg"],
-.sheet-photo[src*="/tee-detail-v5.jpg"] { object-fit: contain; }
+.sheet-photo[src*="/tee-detail-v6.jpg"],
+.sheet-photo[src*="/odin-voin-detail-v3.jpg"] { object-fit: contain; }
 @media (max-width: 859px) {
   .spin-frame[src*="/tee-sich-"] { object-fit: cover; }
 }
@@ -991,7 +992,7 @@ h1, h2 {
 }
 .profile-avatar {
   width: 52px; height: 52px; display: grid; place-items: center;
-  background: url("assets/sila-chest-seal-v2.jpg") center/cover no-repeat;
+  background: url("assets/sila-chest-seal-v3.jpg") center/cover no-repeat;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);

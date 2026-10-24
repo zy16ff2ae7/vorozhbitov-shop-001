@@ -16,7 +16,7 @@ import tempfile
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 try:
     from .update_product_logos import replace_logo
@@ -26,12 +26,13 @@ except ImportError:  # direct ``python tools/update_white_product.py`` execution
 ROOT = Path(__file__).resolve().parents[1]
 MINIAPP = ROOT / "miniapp"
 DROP = MINIAPP / "assets/drop"
+SPIN = MINIAPP / "assets/spin"
 SOURCE = DROP / "odin-v-pole-voin.jpg"
-TARGET = DROP / "odin-v-pole-voin-v2.jpg"
+TARGET = DROP / "odin-v-pole-voin-v3.jpg"
 FONT_REGULAR = MINIAPP / "fonts/sila-chest-400.woff2"
 FONT_BOLD = MINIAPP / "fonts/sila-chest-700.woff2"
 TEXT_LINES = [("ОДИН В ПОЛЕ", 0.30), ("ВОИН", 0.70)]
-REVIEW_DIR = ROOT / "approval/brand-logo-review-2026-10-25"
+REVIEW_DIR = ROOT / "approval/brand-logo-review-2026-10-25-v2"
 FRAME_DIR = REVIEW_DIR / "white-frames"
 SOURCE_VIDEO = ROOT / "task_materials/chat_export/video_files/0818.mp4"
 REVIEW_VIDEO = REVIEW_DIR / "odin-v-pole-voin-review.mp4"
@@ -215,6 +216,16 @@ def build_white_review_frames() -> None:
     sheet.save(REVIEW_DIR / "odin-v-pole-voin-frames.jpg", quality=95, subsampling=0)
     shutil.copy2(FRAME_DIR / "odin-voin-01.jpg", REVIEW_DIR / "odin-v-pole-voin-poster.jpg")
 
+    # Eight storefront angles, matching the other products.  Frames 01/03/05/07
+    # become front / side / back / other side in the five-photo gallery.
+    spin_map = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 8, 8: 10}
+    SPIN.mkdir(parents=True, exist_ok=True)
+    for target_frame, source_frame in spin_map.items():
+        shutil.copy2(
+            FRAME_DIR / f"odin-voin-{source_frame:02d}.jpg",
+            SPIN / f"odin-voin-{target_frame:02d}-v3.jpg",
+        )
+
 
 def build_white_review_video() -> None:
     """Ten-second montage from corrected stills; not a new live recording."""
@@ -259,8 +270,24 @@ def main() -> None:
     image.convert("RGB").save(TARGET, quality=96, subsampling=0)
 
     # Separate clean views are useful in the approval sheet and video review.
-    image.crop((0, 0, 700, 700)).convert("RGB").save(DROP / "odin-voin-front-v2.jpg", quality=96, subsampling=0)
-    image.crop((700, 0, 1402, 700)).convert("RGB").save(DROP / "odin-voin-back-v2.jpg", quality=96, subsampling=0)
+    image.crop((0, 0, 700, 700)).convert("RGB").save(DROP / "odin-voin-front-v3.jpg", quality=96, subsampling=0)
+    image.crop((700, 0, 1402, 700)).convert("RGB").save(DROP / "odin-voin-back-v3.jpg", quality=96, subsampling=0)
+
+    # Four close-ups in the same 1080×720 detail format as the other tees.
+    detail = Image.new("RGB", (1080, 720), (222, 222, 218))
+    detail_cells = [
+        (0, 700, 286, 1013),
+        (286, 700, 558, 1013),
+        (558, 700, 843, 1013),
+        (843, 700, 1128, 1013),
+    ]
+    for index, bounds in enumerate(detail_cells):
+        crop = image.crop(bounds).convert("RGB")
+        fitted = ImageOps.contain(crop, (536, 356), Image.Resampling.LANCZOS)
+        cell = ImageOps.fit(crop, (540, 360), Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(12))
+        cell.paste(fitted, ((540 - fitted.width) // 2, (360 - fitted.height) // 2))
+        detail.paste(cell, ((index % 2) * 540, (index // 2) * 360))
+    detail.save(DROP / "odin-voin-detail-v3.jpg", quality=96, subsampling=0)
 
     REVIEW_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copy2(TARGET, REVIEW_DIR / "odin-v-pole-voin-board.jpg")

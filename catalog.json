@@ -40,13 +40,13 @@
       "description": "Чёрная футболка первого тиража. Надпись «СИЛА И ЧЕСТЬ» на груди, фирменная чёрная нашивка слева у подола. На спине — постоянная деталь с монограммой у горловины и длинный узкий клинок с потёртой фактурой.",
       "signature": "Первый тираж. Один раз и без повторов.",
       "photo_url": "",
-      "image": "assets/spin/tee-sich-01-v3.jpg",
+      "image": "assets/spin/tee-sich-01-v4.jpg",
       "images": [
-        "assets/spin/tee-sich-01-v3.jpg",
-        "assets/spin/tee-sich-03-v3.jpg",
-        "assets/spin/tee-sich-05-v3.jpg",
-        "assets/spin/tee-sich-07-v3.jpg",
-        "assets/drop/tee-detail-v5.jpg"
+        "assets/spin/tee-sich-01-v4.jpg",
+        "assets/spin/tee-sich-03-v4.jpg",
+        "assets/spin/tee-sich-05-v4.jpg",
+        "assets/spin/tee-sich-07-v4.jpg",
+        "assets/drop/tee-detail-v6.jpg"
       ],
       "badge": "ВЫПУСК 001",
       "material": "100% хлопок · 240 г/м²",
@@ -64,14 +64,14 @@
       "stock_label": "Первый тираж",
       "active": true,
       "spin": [
-        "assets/spin/tee-sich-01-v3.jpg",
-        "assets/spin/tee-sich-02-v3.jpg",
-        "assets/spin/tee-sich-03-v3.jpg",
-        "assets/spin/tee-sich-04-v3.jpg",
-        "assets/spin/tee-sich-05-v3.jpg",
-        "assets/spin/tee-sich-06-v3.jpg",
-        "assets/spin/tee-sich-07-v3.jpg",
-        "assets/spin/tee-sich-08-v3.jpg"
+        "assets/spin/tee-sich-01-v4.jpg",
+        "assets/spin/tee-sich-02-v4.jpg",
+        "assets/spin/tee-sich-03-v4.jpg",
+        "assets/spin/tee-sich-04-v4.jpg",
+        "assets/spin/tee-sich-05-v4.jpg",
+        "assets/spin/tee-sich-06-v4.jpg",
+        "assets/spin/tee-sich-07-v4.jpg",
+        "assets/spin/tee-sich-08-v4.jpg"
       ],
       "image_labels": [
         "Спереди · предметный рендер",
@@ -82,7 +82,7 @@
       ],
       "featured": true,
       "media_note": "Фото, 360° и видео подготовлены к согласованию. Производственную размерную сетку уточняет менеджер.",
-      "video": "assets/video/tee-sila-i-chest-360-v3.mp4"
+      "video": "assets/video/tee-sila-i-chest-360-v4.mp4"
     },
     {
       "id": "tee-vzglyad",
@@ -99,13 +99,13 @@
       "description": "Футболка «ВЗГЛЯД» из первого дропа бренда «СИЛА И ЧЕСТЬ». Символ стойкости и характера. Доступна по предзаказу.",
       "signature": "Первый дроп. По предзаказу.",
       "photo_url": "",
-      "image": "assets/spin/tee-vzglyad-01-v2.jpg",
+      "image": "assets/spin/tee-vzglyad-01-v3.jpg",
       "images": [
-        "assets/spin/tee-vzglyad-01-v2.jpg",
-        "assets/spin/tee-vzglyad-03-v2.jpg",
-        "assets/spin/tee-vzglyad-05-v2.jpg",
-        "assets/spin/tee-vzglyad-07-v2.jpg",
-        "assets/drop/tee-vzglyad-detail-v2.jpg"
+        "assets/spin/tee-vzglyad-01-v3.jpg",
+        "assets/spin/tee-vzglyad-03-v3.jpg",
+        "assets/spin/tee-vzglyad-05-v3.jpg",
+        "assets/spin/tee-vzglyad-07-v3.jpg",
+        "assets/drop/tee-vzglyad-detail-v3.jpg"
       ],
       "badge": "ПРЕДЗАКАЗ",
       "material": "100% хлопок · 240-260 г/м²",
@@ -120,14 +120,14 @@
       "stock_label": "Предзаказ",
       "active": true,
       "spin": [
-        "assets/spin/tee-vzglyad-01-v2.jpg",
-        "assets/spin/tee-vzglyad-02-v2.jpg",
-        "assets/spin/tee-vzglyad-03-v2.jpg",
-        "assets/spin/tee-vzglyad-04-v2.jpg",
-        "assets/spin/tee-vzglyad-05-v2.jpg",
-        "assets/spin/tee-vzglyad-06-v2.jpg",
-        "assets/spin/tee-vzglyad-07-v2.jpg",
-        "assets/spin/tee-vzglyad-08-v2.jpg"
+        "assets/spin/tee-vzglyad-01-v3.jpg",
+        "assets/spin/tee-vzglyad-02-v3.jpg",
+        "assets/spin/tee-vzglyad-03-v3.jpg",
+        "assets/spin/tee-vzglyad-04-v3.jpg",
+        "assets/spin/tee-vzglyad-05-v3.jpg",
+        "assets/spin/tee-vzglyad-06-v3.jpg",
+        "assets/spin/tee-vzglyad-07-v3.jpg",
+        "assets/spin/tee-vzglyad-08-v3.jpg"
       ],
       "image_labels": [
         "Спереди · предметный рендер",
@@ -138,7 +138,62 @@
       ],
       "featured": false,
       "media_note": "Фото, 360° и видео подготовлены к согласованию. Производственную размерную сетку уточняет менеджер.",
-      "video": "assets/video/tee-vzglyad-360-v3.mp4"
+      "video": "assets/video/tee-vzglyad-360-v4.mp4"
+    },
+    {
+      "id": "tee-odin-v-pole-voin",
+      "category": "drop",
+      "name": "ОДИН В ПОЛЕ ВОИН",
+      "price": "4 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL",
+        "XXL"
+      ],
+      "description": "Белая футболка «ОДИН В ПОЛЕ ВОИН». Тёмная фактурная монограмма на груди, фирменная надпись на спине и нашивки на рукаве и у подола. Предзаказ первого выпуска.",
+      "signature": "Белый вариант. По предзаказу.",
+      "photo_url": "",
+      "image": "assets/spin/odin-voin-01-v3.jpg",
+      "images": [
+        "assets/spin/odin-voin-01-v3.jpg",
+        "assets/spin/odin-voin-03-v3.jpg",
+        "assets/spin/odin-voin-05-v3.jpg",
+        "assets/spin/odin-voin-07-v3.jpg",
+        "assets/drop/odin-voin-detail-v3.jpg"
+      ],
+      "badge": "ПРЕДЗАКАЗ",
+      "material": "100% хлопок · 240–260 г/м²",
+      "fit": "Прямой крой",
+      "details": [
+        "Фактурный тёмный знак с мечом на груди",
+        "Надпись «ОДИН В ПОЛЕ ВОИН» на спине",
+        "Фирменные нашивки на рукаве и у подола",
+        "Белый цвет · плотный хлопок"
+      ],
+      "stock_label": "Предзаказ",
+      "active": true,
+      "spin": [
+        "assets/spin/odin-voin-01-v3.jpg",
+        "assets/spin/odin-voin-02-v3.jpg",
+        "assets/spin/odin-voin-03-v3.jpg",
+        "assets/spin/odin-voin-04-v3.jpg",
+        "assets/spin/odin-voin-05-v3.jpg",
+        "assets/spin/odin-voin-06-v3.jpg",
+        "assets/spin/odin-voin-07-v3.jpg",
+        "assets/spin/odin-voin-08-v3.jpg"
+      ],
+      "image_labels": [
+        "01 / Спереди · фактурная монограмма",
+        "02 / Сбоку · рукавная нашивка",
+        "03 / Сзади · фирменная надпись",
+        "04 / Другой бок · силуэт",
+        "05 / Детали · знак, надпись и нашивки"
+      ],
+      "featured": false,
+      "media_note": "Монтаж исправленных визуализаций для согласования. Вращение 360° — 8 ракурсов, не новая живая съёмка.",
+      "video": "assets/video/tee-odin-v-pole-voin-360-v3.mp4"
     },
     {
       "id": "tag-sila-i-chest",
@@ -151,12 +206,12 @@
       "description": "Армейский жетон из нержавеющей стали с монограммой и мечом. Идёт в подарок к каждому заказу первого дропа.",
       "signature": "В подарок к первому дропу",
       "photo_url": "",
-      "image": "assets/spin/tag-sich-01-v2.jpg",
+      "image": "assets/spin/tag-sich-01-v3.jpg",
       "images": [
-        "assets/spin/tag-sich-01-v2.jpg",
-        "assets/spin/tag-sich-02-v2.jpg",
-        "assets/spin/tag-sich-03-v2.jpg",
-        "assets/spin/tag-sich-04-v2.jpg"
+        "assets/spin/tag-sich-01-v3.jpg",
+        "assets/spin/tag-sich-02-v3.jpg",
+        "assets/spin/tag-sich-03-v3.jpg",
+        "assets/spin/tag-sich-04-v3.jpg"
       ],
       "badge": "В ПОДАРОК",
       "material": "Нержавеющая сталь · лазерная гравировка",
@@ -171,10 +226,10 @@
       "stock_label": "Тираж 100 шт.",
       "active": true,
       "spin": [
-        "assets/spin/tag-sich-01-v2.jpg",
-        "assets/spin/tag-sich-02-v2.jpg",
-        "assets/spin/tag-sich-03-v2.jpg",
-        "assets/spin/tag-sich-04-v2.jpg"
+        "assets/spin/tag-sich-01-v3.jpg",
+        "assets/spin/tag-sich-02-v3.jpg",
+        "assets/spin/tag-sich-03-v3.jpg",
+        "assets/spin/tag-sich-04-v3.jpg"
       ],
       "featured": true,
       "gift": true,
@@ -522,7 +577,7 @@
       "caption": "СВОЙ ЗНАК"
     },
     {
-      "image": "assets/drop/tee-detail-v5.jpg",
+      "image": "assets/drop/tee-detail-v6.jpg",
       "caption": "ХАРАКТЕР В ДЕТАЛЯХ"
     },
     {
@@ -530,7 +585,7 @@
       "caption": "ТКАНЬ. ПРИНТ. ПОСАДКА"
     },
     {
-      "image": "assets/spin/tag-sich-01-v2.jpg",
+      "image": "assets/spin/tag-sich-01-v3.jpg",
       "caption": "ЛИЧНЫЙ ЗНАК"
     },
     {
@@ -541,12 +596,12 @@
   "media": {
     "welcome_loop": "assets/video/welcome-no-intro-22s.mp4",
     "welcome_poster": "assets/welcome-sword-logo.jpg",
-    "teaser": "assets/video/drop-vzglyad-18s-v2.mp4",
-    "teaser_poster": "assets/video/drop-vzglyad-18s-v2-thumb.jpg",
+    "teaser": "assets/video/drop-vzglyad-18s-v3.mp4",
+    "teaser_poster": "assets/video/drop-vzglyad-18s-v3-thumb.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",
     "teaser_caption": "Фильм выпуска · 18 сек",
     "teaser_story_url": "",
-    "teaser_thumbnail": "assets/video/drop-vzglyad-18s-v2-thumb.jpg",
+    "teaser_thumbnail": "assets/video/drop-vzglyad-18s-v3-thumb.jpg",
     "hero_image": "assets/drop/hero-sila-chest-v2.jpg",
     "welcome_motion": true,
     "welcome_image": "assets/welcome-sword-logo.jpg"

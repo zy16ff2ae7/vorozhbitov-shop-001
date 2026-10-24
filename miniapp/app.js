@@ -1494,7 +1494,7 @@
     if (personArt.ready) { render(); return; }
     const img = new Image();
     img.onload = () => { personArt.img = img; personArt.ready = true; render(); };
-    img.src = "assets/spin/tag-sich-01-v2.jpg";
+    img.src = "assets/spin/tag-sich-01-v3.jpg";
   }
 
   function bindEvents() {

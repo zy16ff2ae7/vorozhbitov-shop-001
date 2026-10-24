@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Replace the old monogram in product review renders with the supplied mark.
 
-The customer reference is preserved in ``task_materials/chat_export/photos``.
-The extraction source is the existing, visually matching
-``miniapp/assets/welcome-sword-logo.jpg``; its silhouette and distress are
-recoloured, not redrawn.  Every edited image gets a new filename; customer
-sources and earlier review versions remain untouched.  These are still review
-renders, not approved production artwork.
+The extraction source is a verbatim runtime copy of the actual customer
+reference in ``miniapp/assets/brand/customer-sword-reference.jpg``.  Its
+silhouette and camouflage distress are recoloured, not redrawn.  Both alpha and
+ink luminance carry the texture.
+Every edited image gets a new filename; customer sources and earlier review
+versions remain untouched.  These are still review renders, not approved
+production artwork.
 
 Requires Pillow, NumPy and OpenCV (``opencv-python-headless``).
 """
@@ -21,25 +22,38 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 MINIAPP = ROOT / "miniapp"
-SOURCE_LOGO = MINIAPP / "assets/welcome-sword-logo.jpg"
+# Verbatim runtime copy of the customer reference; works in sparse CI too.
+SOURCE_LOGO = MINIAPP / "assets/brand/customer-sword-reference.jpg"
 SPIN = MINIAPP / "assets/spin"
 DROP = MINIAPP / "assets/drop"
 BRAND = MINIAPP / "assets/brand"
 
 
 def make_logo(variant: str) -> Image.Image:
-    """Extract the exact distressed silhouette and recolour it light/dark."""
+    """Extract the customer silhouette and preserve distress in alpha + ink."""
     source = np.asarray(Image.open(SOURCE_LOGO).convert("RGB"))
     luminance = cv2.cvtColor(source, cv2.COLOR_RGB2GRAY).astype(np.float32)
     ys, xs = np.where(luminance > 10)
     if not len(xs):
         raise RuntimeError(f"No logo found in {SOURCE_LOGO}")
     luminance = luminance[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
-    # Black in the supplied JPEG becomes transparency.  The variable alpha
-    # retains the authentic worn/camouflage texture after recolouring.
-    alpha = np.clip((luminance - 3) / 38, 0, 1) ** 0.62
-    colour = 242 if variant == "light" else 18
-    rgb = np.full((*luminance.shape, 3), colour, dtype=np.uint8)
+
+    old_alpha = np.clip((luminance - 3) / 38, 0, 1) ** 0.62
+    raw_shape = (luminance > 8).astype(np.uint8) * 255
+    # Close only small camouflage pits.  Large intentional counters and the
+    # space around the diamonds remain transparent.
+    shape = cv2.morphologyEx(raw_shape, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
+    shape = cv2.GaussianBlur(shape, (0, 0), 0.65).astype(np.float32) / 255
+    alpha = np.maximum(old_alpha, shape * 0.96)
+
+    tonal = np.clip((luminance - 3) / 145, 0, 1) ** 0.85
+    if variant == "light":
+        ink = 135 + tonal * 120
+    elif variant == "dark":
+        ink = 5 + tonal * 65
+    else:
+        raise ValueError(variant)
+    rgb = np.repeat(np.clip(ink, 0, 255).astype(np.uint8)[..., None], 3, axis=2)
     return Image.fromarray(np.dstack((rgb, (alpha * 255).astype(np.uint8))), "RGBA")
 
 
@@ -132,7 +146,7 @@ def copy_or_edit(source: Path, target: Path, edits: list[dict]) -> None:
 def main() -> None:
     BRAND.mkdir(exist_ok=True)
     for variant, logo in LOGOS.items():
-        logo.save(BRAND / f"sword-monogram-{variant}.png")
+        logo.save(BRAND / f"sword-monogram-{variant}-v2.png")
 
     sich = {
         1: [(635, 475, 25, 42, 0)],
@@ -146,7 +160,7 @@ def main() -> None:
     }
     for frame, regions in sich.items():
         edits = [dict(box=box, rotate=angle, old="print") for *box, angle in regions]
-        copy_or_edit(SPIN / f"tee-sich-{frame:02d}-v2.jpg", SPIN / f"tee-sich-{frame:02d}-v3.jpg", edits)
+        copy_or_edit(SPIN / f"tee-sich-{frame:02d}-v2.jpg", SPIN / f"tee-sich-{frame:02d}-v4.jpg", edits)
 
     hem = {
         1: (635, 475, 25, 42),
@@ -178,13 +192,13 @@ def main() -> None:
             # Angled backs need a tight old-print ROI so the value ring is not
             # mistaken for the monogram and inpainted with it.
             edits.append(dict(box=back[frame], old_box=back_old.get(frame)))
-        copy_or_edit(SPIN / f"tee-vzglyad-{frame:02d}.jpg", SPIN / f"tee-vzglyad-{frame:02d}-v2.jpg", edits)
+        copy_or_edit(SPIN / f"tee-vzglyad-{frame:02d}.jpg", SPIN / f"tee-vzglyad-{frame:02d}-v3.jpg", edits)
 
-    replace_logo(DROP / "tee-detail-v4.jpg", DROP / "tee-detail-v5.jpg", (450, 220, 105, 160), old="print")
-    replace_logo(DROP / "tee-vzglyad-detail.jpg", DROP / "tee-vzglyad-detail-v2.jpg", (500, 480, 80, 105))
-    replace_logo(SPIN / "tag-sich-01.jpg", SPIN / "tag-sich-01-v2.jpg", (466, 190, 150, 290), variant="dark", old="shape")
+    replace_logo(DROP / "tee-detail-v4.jpg", DROP / "tee-detail-v6.jpg", (450, 220, 105, 160), old="print")
+    replace_logo(DROP / "tee-vzglyad-detail.jpg", DROP / "tee-vzglyad-detail-v3.jpg", (500, 480, 80, 105))
+    replace_logo(SPIN / "tag-sich-01.jpg", SPIN / "tag-sich-01-v3.jpg", (466, 190, 150, 290), variant="dark", old="shape")
     for frame in (2, 3, 4):
-        shutil.copy2(SPIN / f"tag-sich-{frame:02d}.jpg", SPIN / f"tag-sich-{frame:02d}-v2.jpg")
+        shutil.copy2(SPIN / f"tag-sich-{frame:02d}.jpg", SPIN / f"tag-sich-{frame:02d}-v3.jpg")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import tempfile
 
-from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 MINIAPP = ROOT / "miniapp"
@@ -40,7 +40,13 @@ def ffmpeg_executable() -> str:
 def contain_on_dark(path: Path, size: tuple[int, int]) -> Image.Image:
     source = Image.open(path).convert("RGB")
     image = ImageOps.contain(source, size, Image.Resampling.LANCZOS)
-    cell = Image.new("RGB", size, BG)
+    if source.height > source.width * 1.2:
+        # Portrait rotation sources need a full-bleed cell without cropping the
+        # garment: a soft enlargement fills the sides, the sharp frame stays whole.
+        cell = ImageOps.fit(source, size, Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(18))
+        cell = Image.blend(cell, Image.new("RGB", size, BG), 0.48)
+    else:
+        cell = Image.new("RGB", size, BG)
     cell.paste(image, ((size[0] - image.width) // 2, (size[1] - image.height) // 2))
     return cell
 
@@ -95,7 +101,12 @@ def product_sheet(product: dict, output_name: str) -> None:
     draw.text((x, y + 280), "06 / 360° ВИДЕО", font=font(23, True), fill=RED)
 
     draw.line((48, 860, 1520, 860), fill=(50, 48, 46), width=1)
-    draw.text((48, 884), "Проверить: новый знак, сохранение клинка, кольца ценностей, текста и нашивок.", font=font(21), fill=MUTED)
+    review_note = (
+        "Проверить: фактурный знак, надпись на спине, рукавную и нижнюю нашивки."
+        if product["id"] == "tee-odin-v-pole-voin"
+        else "Проверить: новый знак, сохранение клинка, кольца ценностей, текста и нашивок."
+    )
+    draw.text((48, 884), review_note, font=font(21), fill=MUTED)
     draw.text((48, 922), "Статус: подготовлено к согласованию. Исходные кадры и прежние версии сохранены.", font=font(21), fill=MUTED)
     canvas.save(APPROVAL / output_name, quality=94, subsampling=0, optimize=True)
 
@@ -114,7 +125,7 @@ def tag_sheet(product: dict) -> None:
         draw.text((x, y + 340), label, font=font(21, True), fill=INK)
     draw.line((42, 948, 1158, 948), fill=(50, 48, 46), width=1)
     draw.text((42, 970), "Старый тонкий знак заменён только на лицевой гравировке; металл и другие ракурсы сохранены.", font=font(19), fill=MUTED)
-    canvas.save(APPROVAL / "tag-sila-i-chest-logo-v2-contact-sheet.jpg", quality=94, subsampling=0, optimize=True)
+    canvas.save(APPROVAL / "tag-sila-i-chest-logo-v3-contact-sheet.jpg", quality=94, subsampling=0, optimize=True)
 
 
 def main() -> None:
@@ -122,8 +133,9 @@ def main() -> None:
     catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
     products = {product["id"]: product for product in catalog["products"]}
     for product_id, sheet_name in (
-        ("tee-sila-i-chest", "tee-sila-i-chest-logo-v3-contact-sheet.jpg"),
-        ("tee-vzglyad", "tee-vzglyad-logo-v2-contact-sheet.jpg"),
+        ("tee-sila-i-chest", "tee-sila-i-chest-logo-v4-contact-sheet.jpg"),
+        ("tee-vzglyad", "tee-vzglyad-logo-v3-contact-sheet.jpg"),
+        ("tee-odin-v-pole-voin", "tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg"),
     ):
         product = products[product_id]
         build_video(product)

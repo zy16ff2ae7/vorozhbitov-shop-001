@@ -96,10 +96,10 @@ class BotTests(unittest.TestCase):
         self.assertEqual(catalog.get("tee-sila-i-chest")["category"], "drop")
         self.assertEqual(catalog.lookbook, [])
 
-    def test_both_drop_tees_have_full_photo_and_spin_sets(self):
+    def test_all_drop_tees_have_full_photo_and_spin_sets(self):
         catalog = Catalog(Path(__file__).with_name("catalog.json"))
         miniapp = Path(__file__).with_name("miniapp")
-        for product_id in ("tee-sila-i-chest", "tee-vzglyad"):
+        for product_id in ("tee-sila-i-chest", "tee-vzglyad", "tee-odin-v-pole-voin"):
             with self.subTest(product_id=product_id):
                 product = catalog.get(product_id)
                 self.assertEqual(len(product["spin"]), 8)
@@ -118,10 +118,27 @@ class BotTests(unittest.TestCase):
         # The original combined design remains an untouched source material.
         self.assertTrue((miniapp / "assets/drop/tee-vzglyad-graphic.jpg").is_file())
 
+    def test_white_field_tee_is_an_active_buyable_product(self):
+        catalog = Catalog(Path(__file__).with_name("catalog.json"))
+        product = catalog.get("tee-odin-v-pole-voin")
+        self.assertEqual(product["name"], "ОДИН В ПОЛЕ ВОИН")
+        self.assertEqual(product["category"], "drop")
+        self.assertEqual(product["price"], "4 900 ₽")
+        self.assertEqual(product["sizes"], ["S", "M", "L", "XL", "XXL"])
+        self.assertIs(product["active"], True)
+        self.assertNotIn("gift", product)
+        self.assertEqual(product["stock_label"], "Предзаказ")
+        self.assertTrue(product["images"][-1].endswith("odin-voin-detail-v3.jpg"))
+        self.assertIn("не новая живая съёмка", product["media_note"])
+        # The old placeholder remains untouched and inactive; it is not the SKU.
+        legacy = next(item for item in catalog.data["products"] if item["id"] == "field-tee-001")
+        self.assertIs(legacy["active"], False)
+        self.assertIsNone(catalog.get("field-tee-001"))
+
     def test_product_videos_are_local_mp4_and_pause_outside_the_video_stage(self):
         catalog = Catalog(Path(__file__).with_name("catalog.json"))
         miniapp = Path(__file__).with_name("miniapp")
-        for product_id in ("tee-sila-i-chest", "tee-vzglyad"):
+        for product_id in ("tee-sila-i-chest", "tee-vzglyad", "tee-odin-v-pole-voin"):
             video = miniapp / catalog.get(product_id)["video"]
             self.assertEqual(video.suffix, ".mp4")
             self.assertGreater(video.stat().st_size, 10_000)
@@ -153,7 +170,7 @@ class BotTests(unittest.TestCase):
         approval = (root / "approval/README.md").read_text(encoding="utf-8")
         self.assertIn("Футболка «ВЗГЛЯД»", approval)
         self.assertNotIn("ГЛАЗА", approval)
-        self.assertIn("drop-vzglyad-18s-v2.mp4", catalog.data["media"]["teaser"])
+        self.assertIn("drop-vzglyad-18s-v3.mp4", catalog.data["media"]["teaser"])
 
     def test_reference_typography_is_local_and_active_media_use_new_cuts(self):
         root = Path(__file__).parent
@@ -188,18 +205,20 @@ class BotTests(unittest.TestCase):
 
         catalog = Catalog(root / "catalog.json")
         media = catalog.data["media"]
-        self.assertEqual(media["teaser"], "assets/video/drop-vzglyad-18s-v2.mp4")
-        self.assertEqual(media["teaser_poster"], "assets/video/drop-vzglyad-18s-v2-thumb.jpg")
-        self.assertEqual(media["teaser_thumbnail"], "assets/video/drop-vzglyad-18s-v2-thumb.jpg")
+        self.assertEqual(media["teaser"], "assets/video/drop-vzglyad-18s-v3.mp4")
+        self.assertEqual(media["teaser_poster"], "assets/video/drop-vzglyad-18s-v3-thumb.jpg")
+        self.assertEqual(media["teaser_thumbnail"], "assets/video/drop-vzglyad-18s-v3-thumb.jpg")
         self.assertAlmostEqual(mp4_duration_seconds(miniapp / media["teaser"]), 18.0, places=2)
-        for product_id, old_name in (
-            ("tee-sila-i-chest", "tee-sila-i-chest-360.mp4"),
-            ("tee-vzglyad", "tee-vzglyad-360.mp4"),
+        for product_id, version, old_name in (
+            ("tee-sila-i-chest", "-360-v4.mp4", "tee-sila-i-chest-360.mp4"),
+            ("tee-vzglyad", "-360-v4.mp4", "tee-vzglyad-360.mp4"),
+            ("tee-odin-v-pole-voin", "-360-v3.mp4", None),
         ):
-            self.assertTrue(catalog.get(product_id)["video"].endswith("-360-v3.mp4"))
-            self.assertTrue((miniapp / "assets/video" / old_name).is_file(), "старый исходник удалён")
+            self.assertTrue(catalog.get(product_id)["video"].endswith(version))
+            if old_name:
+                self.assertTrue((miniapp / "assets/video" / old_name).is_file(), "старый исходник удалён")
         self.assertTrue((miniapp / "assets/video/campaign-v11.mp4").is_file(), "старый фильм удалён")
-        for previous in ("drop-typography-18s.mp4", "drop-glaza-18s.mp4", "drop-vzglyad-18s.mp4"):
+        for previous in ("drop-typography-18s.mp4", "drop-glaza-18s.mp4", "drop-vzglyad-18s.mp4", "drop-vzglyad-18s-v2.mp4"):
             self.assertTrue((miniapp / "assets/video" / previous).is_file(), f"прежний teaser удалён: {previous}")
 
     def test_typography_approval_pack_links_resolve(self):
@@ -207,13 +226,15 @@ class BotTests(unittest.TestCase):
         approval = root / "approval"
         readme = (approval / "README.md").read_text(encoding="utf-8")
         for name in (
-            "tee-sila-i-chest-logo-v3-contact-sheet.jpg",
-            "tee-vzglyad-logo-v2-contact-sheet.jpg",
-            "tag-sila-i-chest-logo-v2-contact-sheet.jpg",
-            "drop-vzglyad-logo-v2-18s-contact-sheet.jpg",
-            "tee-sila-i-chest-360-v3.mp4",
-            "tee-vzglyad-360-v3.mp4",
-            "drop-vzglyad-18s-v2.mp4",
+            "tee-sila-i-chest-logo-v4-contact-sheet.jpg",
+            "tee-vzglyad-logo-v3-contact-sheet.jpg",
+            "tag-sila-i-chest-logo-v3-contact-sheet.jpg",
+            "tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg",
+            "drop-vzglyad-logo-v3-18s-contact-sheet.jpg",
+            "tee-sila-i-chest-360-v4.mp4",
+            "tee-vzglyad-360-v4.mp4",
+            "tee-odin-v-pole-voin-360-v3.mp4",
+            "drop-vzglyad-18s-v3.mp4",
             "odin-v-pole-voin-board.jpg",
             "odin-v-pole-voin-frames.jpg",
             "odin-v-pole-voin-review.mp4",
@@ -234,9 +255,10 @@ class BotTests(unittest.TestCase):
         miniapp = root / "miniapp"
         catalog = Catalog(root / "catalog.json")
         for product_id, suffix in (
-            ("tee-sila-i-chest", "-v3.jpg"),
-            ("tee-vzglyad", "-v2.jpg"),
-            ("tag-sila-i-chest", "-v2.jpg"),
+            ("tee-sila-i-chest", "-v4.jpg"),
+            ("tee-vzglyad", "-v3.jpg"),
+            ("tee-odin-v-pole-voin", "-v3.jpg"),
+            ("tag-sila-i-chest", "-v3.jpg"),
         ):
             product = catalog.get(product_id)
             self.assertTrue(product["active"])
@@ -244,30 +266,42 @@ class BotTests(unittest.TestCase):
                 with self.subTest(product=product_id, asset=asset):
                     self.assertTrue(asset.endswith(suffix))
                     self.assertTrue((miniapp / asset).is_file())
-        self.assertTrue(catalog.get("tee-sila-i-chest")["images"][-1].endswith("tee-detail-v5.jpg"))
-        self.assertTrue(catalog.get("tee-vzglyad")["images"][-1].endswith("tee-vzglyad-detail-v2.jpg"))
+        self.assertTrue(catalog.get("tee-sila-i-chest")["images"][-1].endswith("tee-detail-v6.jpg"))
+        self.assertTrue(catalog.get("tee-vzglyad")["images"][-1].endswith("tee-vzglyad-detail-v3.jpg"))
+        self.assertTrue(catalog.get("tee-odin-v-pole-voin")["images"][-1].endswith("odin-voin-detail-v3.jpg"))
         for previous in (
             "assets/spin/tee-sich-01-v2.jpg",
+            "assets/spin/tee-sich-01-v3.jpg",
             "assets/spin/tee-vzglyad-01.jpg",
+            "assets/spin/tee-vzglyad-01-v2.jpg",
             "assets/spin/tag-sich-01.jpg",
+            "assets/spin/tag-sich-01-v2.jpg",
             "assets/drop/tee-detail-v4.jpg",
+            "assets/drop/tee-detail-v5.jpg",
             "assets/drop/tee-vzglyad-detail.jpg",
+            "assets/drop/tee-vzglyad-detail-v2.jpg",
         ):
             self.assertTrue((miniapp / previous).is_file(), f"исходник удалён: {previous}")
 
-        # The missing white design is prepared for approval, not silently sold.
-        self.assertNotIn("odin-v-pole-voin", {product["id"] for product in catalog.data["products"]})
-        review = root / "approval/brand-logo-review-2026-10-25"
+        # The white design now uses the same storefront and checkout as others.
+        white = catalog.get("tee-odin-v-pole-voin")
+        self.assertTrue(white["active"])
+        review = root / "approval/brand-logo-review-2026-10-25-v2"
         self.assertTrue((review / "odin-v-pole-voin-board.jpg").is_file())
         self.assertEqual(len(list((review / "white-frames").glob("odin-voin-*.jpg"))), 10)
         self.assertAlmostEqual(mp4_duration_seconds(review / "odin-v-pole-voin-review.mp4"), 10.0, places=2)
-        # CI intentionally sparse-checks out runtime/review assets, not the
-        # multi-gigabyte customer source archive.  Verify the source wherever
-        # that archive is present without making CI download it.
+        self.assertTrue((root / "approval/brand-logo-review-2026-10-25/odin-v-pole-voin-board.jpg").is_file())
+
+        # The generator input is a verbatim runtime copy, so sparse CI does not
+        # need the multi-gigabyte customer archive to rebuild any active media.
+        runtime_source = miniapp / "assets/brand/customer-sword-reference.jpg"
+        self.assertTrue(runtime_source.is_file())
         source_archive = root / "task_materials"
         if source_archive.is_dir():
+            original = source_archive / "chat_export/photos/photo_16@24-10-2026_18-37-50.jpg"
+            self.assertEqual(hashlib.sha256(runtime_source.read_bytes()).digest(), hashlib.sha256(original.read_bytes()).digest())
             self.assertTrue((source_archive / "chat_export/video_files/0818.mp4").is_file())
-        self.assertIn("assets/sila-chest-seal-v2.jpg", (miniapp / "styles.css").read_text(encoding="utf-8"))
+        self.assertIn("assets/sila-chest-seal-v3.jpg", (miniapp / "styles.css").read_text(encoding="utf-8"))
         self.assertTrue((miniapp / "assets/sila-chest-seal.jpg").is_file())
 
     def test_catalog_seed_is_copied_once_to_mutable_storage(self):
@@ -1453,7 +1487,7 @@ class BotTests(unittest.TestCase):
             # Подписи в media — не адреса, версией их портить нельзя.
             self.assertNotIn("?v=", media.get("teaser_title", ""))
             product_videos = [product["video"] for product in payload["products"] if product.get("video")]
-            self.assertEqual(len(product_videos), 2)
+            self.assertEqual(len(product_videos), 3)
             for video in product_videos:
                 self.assertRegex(video, r"\?v=\d+$", "товарное видео без версии попадёт в суточный кеш")
             # Адрес с версией обязан вести к настоящему файлу, а не в 404.
@@ -1656,12 +1690,12 @@ class BotTests(unittest.TestCase):
                         "request_id": "web-pay-1",
                         "consent": True,
                         "customer": {"name": "Buyer", "phone": "8 (999) 123-45-67", "city": "Могилёв"},
-                        "items": [{"product_id": "tee-sila-i-chest", "size": "M", "quantity": 1}],
+                        "items": [{"product_id": "tee-odin-v-pole-voin", "size": "M", "quantity": 1}],
                     },
                 )
                 self.assertEqual(status, 200)
                 self.assertTrue(payload["ok"])
-                self.assertGreater(payload["amount_rub"], 0)
+                self.assertEqual(payload["amount_rub"], 4900)
                 self.assertEqual(payload["status"], "awaiting_payment")
                 self.assertTrue(any(item["id"] == "stars" for item in payload["methods"]))
                 payment_id = payload["payment_id"]

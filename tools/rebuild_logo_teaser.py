@@ -21,9 +21,9 @@ APPROVAL = ROOT / "approval"
 REGULAR = MINIAPP / "fonts/sila-chest-400.woff2"
 BOLD = MINIAPP / "fonts/sila-chest-700.woff2"
 SOURCE_VIDEO = ASSETS / "video/drop-vzglyad-18s.mp4"
-OUTPUT_VIDEO = ASSETS / "video/drop-vzglyad-18s-v2.mp4"
-OUTPUT_THUMB = ASSETS / "video/drop-vzglyad-18s-v2-thumb.jpg"
-OUTPUT_SHEET = APPROVAL / "drop-vzglyad-logo-v2-18s-contact-sheet.jpg"
+OUTPUT_VIDEO = ASSETS / "video/drop-vzglyad-18s-v3.mp4"
+OUTPUT_THUMB = ASSETS / "video/drop-vzglyad-18s-v3-thumb.jpg"
+OUTPUT_SHEET = APPROVAL / "drop-vzglyad-logo-v3-18s-contact-sheet.jpg"
 BG = (9, 9, 11)
 INK = (244, 238, 230)
 MUTED = (165, 159, 151)
@@ -43,7 +43,7 @@ def ffmpeg_executable() -> str:
 
 def dual_shirt() -> Image.Image:
     canvas = Image.new("RGB", (1080, 590), (18, 18, 18))
-    for index, name in enumerate(("tee-sich-01-v3.jpg", "tee-sich-05-v3.jpg")):
+    for index, name in enumerate(("tee-sich-01-v4.jpg", "tee-sich-05-v4.jpg")):
         image = Image.open(ASSETS / "spin" / name).convert("RGB")
         image = image.crop((300, 0, 780, 590)).resize((480, 590), Image.Resampling.LANCZOS)
         canvas.paste(image, (60 + index * 480, 0))
@@ -118,12 +118,12 @@ def build_sheet(scenes: list[Image.Image]) -> None:
 def main() -> None:
     specifications = [
         ("drop/tee-gym-retouched-final.jpg", "СИЛА И ЧЕСТЬ", "ОДЕЖДА С ХАРАКТЕРОМ", True, True),
-        ("spin/tee-sich-01-v3.jpg", "СИЛА И ЧЕСТЬ", "ФУТБОЛКА · ПЕРВЫЙ ТИРАЖ", False, False),
-        ("spin/tee-sich-05-v3.jpg", "УЗКИЙ КЛИНОК", "МОНОГРАММА · ПОТЁРТАЯ ФАКТУРА", False, False),
-        ("drop/tee-detail-v5.jpg", "ДЕТАЛИ", "ФИРМЕННАЯ НАШИВКА", False, False),
-        ("spin/tee-vzglyad-01-v2.jpg", "ВЗГЛЯД", "ФУТБОЛКА · ПРЕДЗАКАЗ", False, False),
-        ("drop/tee-vzglyad-detail-v2.jpg", "СИЛА И ЧЕСТЬ", "ГРАФИКА · ЗНАК · МОНОГРАММА", False, False),
-        ("spin/tee-vzglyad-05-v2.jpg", "КРУГ ЦЕННОСТЕЙ", "СИЛА · ЧЕСТЬ · ВЕРНОСТЬ", False, False),
+        ("spin/tee-sich-01-v4.jpg", "СИЛА И ЧЕСТЬ", "ФУТБОЛКА · ПЕРВЫЙ ТИРАЖ", False, False),
+        ("spin/tee-sich-05-v4.jpg", "УЗКИЙ КЛИНОК", "МОНОГРАММА · ПОТЁРТАЯ ФАКТУРА", False, False),
+        ("drop/tee-detail-v6.jpg", "ДЕТАЛИ", "ФИРМЕННАЯ НАШИВКА", False, False),
+        ("spin/tee-vzglyad-01-v3.jpg", "ВЗГЛЯД", "ФУТБОЛКА · ПРЕДЗАКАЗ", False, False),
+        ("drop/tee-vzglyad-detail-v3.jpg", "СИЛА И ЧЕСТЬ", "ГРАФИКА · ЗНАК · МОНОГРАММА", False, False),
+        ("spin/tee-vzglyad-05-v3.jpg", "КРУГ ЦЕННОСТЕЙ", "СИЛА · ЧЕСТЬ · ВЕРНОСТЬ", False, False),
         ("dual", "ДВЕ ФУТБОЛКИ", "ОДИН ДРОП · ОДИН ЗНАК", False, False),
         ("drop/hero-sila-chest-v2.jpg", "СИЛА И ЧЕСТЬ", "ПЕРВЫЙ ДРОП · 001", True, True),
     ]

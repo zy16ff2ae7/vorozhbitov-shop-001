@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "miniapp/assets"
-LOGO = ASSETS / "brand/sword-monogram-light.png"
+LOGO = ASSETS / "brand/sword-monogram-light-v2.png"
 FONT = ROOT / "miniapp/fonts/sila-chest-400.woff2"
 
 
@@ -52,10 +52,10 @@ def emblem(size: int = 1254) -> Image.Image:
 
 def main() -> None:
     outputs = {
-        "sila-chest-seal-v2.jpg": seal(512),
-        "bot-avatar-v2.jpg": seal(256),
-        "bot-mark-v2.jpg": seal(128),
-        "sila-chest-emblem-v2.jpg": emblem(),
+        "sila-chest-seal-v3.jpg": seal(512),
+        "bot-avatar-v3.jpg": seal(256),
+        "bot-mark-v3.jpg": seal(128),
+        "sila-chest-emblem-v3.jpg": emblem(),
     }
     for name, image in outputs.items():
         image.save(ASSETS / name, quality=96, subsampling=0)
