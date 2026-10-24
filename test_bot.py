@@ -2914,6 +2914,7 @@ class NativeMenuTests(unittest.TestCase):
             db.upsert_user(user)
 
             # 1. Fallback без установленного ID
+            bot.settings.custom_emoji_ids.clear()
             self.assertEqual(bot.emoji("sword"), "⚔️")
             self.assertEqual(bot.emoji("account"), "🪪")
 

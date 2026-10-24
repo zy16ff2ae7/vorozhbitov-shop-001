@@ -188,6 +188,26 @@ def slugify(value: str, fallback: str = "item") -> str:
     return slug or fallback
 
 
+DEFAULT_CUSTOM_EMOJI_IDS: dict[str, str] = {
+    "sword": "5397587797198548248",
+    "seal": "5397773979735860878",
+    "drop": "5397890321809975052",
+    "orders": "5398051142565409387",
+    "account": "5397592036331272320",
+    "support": "5397723367841247818",
+    "cart": "5397789480272833723",
+    "ruler": "5398090325552048708",
+    "pay": "5397616552004592288",
+    "looks": "5397818424057447266",
+    "channel": "5397772717015479661",
+    "back": "5397775272521019200",
+    "catalog": "5397587797198548248",
+    "size": "5398090325552048708",
+    "patch": "5398090325552048708",
+    "tag": "5397592036331272320",
+}
+
+
 @dataclass(frozen=True)
 class Settings:
     token: str
@@ -211,7 +231,7 @@ class Settings:
     trusted_proxy_ips: frozenset[str] = frozenset()
     gift_product_id: str = "tag-sila-i-chest"
     custom_emoji_pack: str = "sila_chest_merch"
-    custom_emoji_ids: dict[str, str] = field(default_factory=dict)
+    custom_emoji_ids: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_CUSTOM_EMOJI_IDS))
 
     def public_origin(self) -> str:
         parsed = urllib.parse.urlparse(self.webapp_url)
@@ -265,7 +285,7 @@ class Settings:
                                         for item in os.getenv("TRUSTED_PROXY_IPS", "").split(",") if item.strip()),
             gift_product_id=os.getenv("GIFT_PRODUCT_ID", "tag-sila-i-chest").strip(),
             custom_emoji_pack=os.getenv("CUSTOM_EMOJI_PACK", "sila_chest_merch").strip(),
-            custom_emoji_ids=json.loads(os.getenv("CUSTOM_EMOJI_IDS", "{}")) if os.getenv("CUSTOM_EMOJI_IDS", "").strip().startswith("{") else {},
+            custom_emoji_ids=json.loads(os.getenv("CUSTOM_EMOJI_IDS", "{}")) if os.getenv("CUSTOM_EMOJI_IDS", "").strip().startswith("{") else dict(DEFAULT_CUSTOM_EMOJI_IDS),
         )
 
 
