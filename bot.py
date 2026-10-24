@@ -32,7 +32,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -209,6 +209,8 @@ class Settings:
     stars_enabled: bool = True
     stars_rub_per_star: float = 2.0
     trusted_proxy_ips: frozenset[str] = frozenset()
+    custom_emoji_pack: str = "sila_chest_merch"
+    custom_emoji_ids: dict[str, str] = field(default_factory=dict)
 
     def public_origin(self) -> str:
         parsed = urllib.parse.urlparse(self.webapp_url)
@@ -260,6 +262,8 @@ class Settings:
             stars_rub_per_star=stars_rate if stars_rate > 0 else 2.0,
             trusted_proxy_ips=frozenset(str(ipaddress.ip_address(item.strip()))
                                         for item in os.getenv("TRUSTED_PROXY_IPS", "").split(",") if item.strip()),
+            custom_emoji_pack=os.getenv("CUSTOM_EMOJI_PACK", "sila_chest_merch").strip(),
+            custom_emoji_ids=json.loads(os.getenv("CUSTOM_EMOJI_IDS", "{}")) if os.getenv("CUSTOM_EMOJI_IDS", "").strip().startswith("{") else {},
         )
 
 
@@ -1881,20 +1885,27 @@ def remove_keyboard() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 ICON = {
-    "catalog": "🛍",
-    "looks": "📷",
+    "catalog": "⚔️",   # 01_sword.png — Клинок бренда «СИЛА И ЧЕСТЬ»
+    "sword": "⚔️",     # 01_sword.png
+    "seal": "🛡️",      # 02_seal.png — Нагрудная печать
+    "drop": "👕",      # 03_drop.png — Оверсайз футболка дропа
+    "orders": "📦",    # 04_orders.png — Бокс первого дропа / Снабжение
+    "account": "🪪",   # 05_profile.png — Стальной армейский жетон
+    "tag": "🪪",       # 05_profile.png
+    "support": "💬",   # 06_support.png — Штаб-связь
+    "cart": "🛒",      # 07_cart.png — Кофр заказа
+    "ruler": "🏷️",     # 08_ruler.png — Тканый шеврон у подола / Замеры
+    "size": "🏷️",      # 08_ruler.png
+    "patch": "🏷️",     # 08_ruler.png
+    "pay": "💳",       # 09_card.png — Титан-карта
+    "looks": "🗡️",     # 10_lookbook.png — Спина с клинком
+    "channel": "📢",   # 11_channel.png — Тактический сигнал канала
+    "back": "⬅️",      # 12_back.png — Уставной шеврон возврата
     "film": "🎬",
-    "orders": "📦",
-    "account": "👤",
-    "support": "💬",
-    "pay": "💳",
-    "size": "📐",
     "wait": "⏳",
-    "channel": "📣",
     "fabric": "🧵",
     "cut": "✂️",
-    "ruler": "📏",
-    "stock": "🏷",
+    "stock": "🏷️",
     "delivery": "🚚",
     "receipt": "🧾",
     "question": "❓",
@@ -1907,7 +1918,6 @@ ICON = {
     "reload": "🔄",
     "tools": "🛠",
     "home": "🏠",
-    "back": "←",
     "outside": "↗",
     "ok": "✅",
     "cancel": "✖",
@@ -2357,6 +2367,49 @@ class BrandBot:
         # первое сообщение экрана и правит то сообщение, чью кнопку нажали.
         self._screen_edit: tuple[int, int] | None = None
         self.api = ScreenSender(api, self.take_screen_edit)
+
+    def emoji(self, kind: str, fallback: str = "") -> str:
+        """Возвращает кастомный эмодзи Telegram (<tg-emoji>) или стандартный символ."""
+        emoji_id = self.settings.custom_emoji_ids.get(kind)
+        if not emoji_id:
+            raw_ids = self.db.kv_get("custom_emoji_ids")
+            if raw_ids:
+                try:
+                    ids = json.loads(raw_ids)
+                    if isinstance(ids, dict):
+                        emoji_id = ids.get(kind)
+                except Exception:
+                    pass
+        fb = fallback or ICON.get(kind, "")
+        if emoji_id:
+            return f'<tg-emoji emoji-id="{emoji_id}">{fb}</tg-emoji>'
+        return fb
+
+    def show_emoji_pack(self, chat_id: int) -> None:
+        """Инструкция и ссылка на фирменный тактический эмодзи-пак бренда."""
+        pack_link = f"https://t.me/addemoji/{self.settings.custom_emoji_pack}"
+        text = (
+            f"<b>{self.emoji('sword', '⚔️')} ЭМОДЗИ-ПАК «{esc(self.settings.brand_name)}»</b>\n\n"
+            "Фирменный пак из 12 аутентичных иконок 100×100 PNG по дизайну вещей и ассетов марки:\n\n"
+            f"{self.emoji('sword', '⚔️')} <b>Клинок</b> · главный логотип бренда\n"
+            f"{self.emoji('seal', '🛡️')} <b>Печать</b> · нагрудный герб\n"
+            f"{self.emoji('drop', '👕')} <b>Дроп 001</b> · оверсайз футболка\n"
+            f"{self.emoji('orders', '📦')} <b>Бокс дропа</b> · снабжение и доставка\n"
+            f"{self.emoji('account', '🪪')} <b>Стальной жетон</b> · жетон на цепочке с гербом\n"
+            f"{self.emoji('support', '💬')} <b>Штаб-связь</b> · связь с менеджером\n"
+            f"{self.emoji('cart', '🛒')} <b>Кофр заказа</b> · тактический баул заказа\n"
+            f"{self.emoji('ruler', '🏷️')} <b>Патч подола</b> · тканый жаккардовый шеврон\n"
+            f"{self.emoji('pay', '💳')} <b>Титан-карта</b> · оплата дропа\n"
+            f"{self.emoji('looks', '🗡️')} <b>Спина с клинком</b> · лукбук первого дропа\n"
+            f"{self.emoji('channel', '📢')} <b>Сигнал канала</b> · новости и анонсы\n"
+            f"{self.emoji('back', '⬅️')} <b>Шеврон отхода</b> · возврат в меню\n\n"
+            f"Добавить в Telegram в один клик:\n👉 <a href=\"{pack_link}\">{pack_link}</a>"
+        )
+        markup = inline_keyboard([
+            [(f"Установить эмодзи-пак {ICON['outside']}", pack_link)],
+            [(f"{ICON['back']} Главное меню", "menu")]
+        ])
+        self.api.send_message(chat_id, text, markup)
 
     # ------------------------------------------------------------------ utils
 
@@ -5955,6 +6008,12 @@ class BrandBot:
             self.show_support(chat_id, user_id)
             return True
 
+        # 7.1 Эмодзи-пак
+        if clean in {"эмодзи", "эмодзи-пак", "пак", "стикеры"}:
+            self.db.clear_state(user_id)
+            self.show_emoji_pack(chat_id)
+            return True
+
         # 8. Управление магазином (админ)
         if clean in {"управление магазином", "управление", "админка", "панель"} and self.is_admin(user_id):
             self.db.clear_state(user_id)
@@ -6100,6 +6159,8 @@ class BrandBot:
             self.api.send_message(chat_id, self.account_text(user_id), self.account_menu(user_id))
         elif command == "/support":
             self.show_support(chat_id, user_id)
+        elif command in {"/emoji", "/emojipack", "/stickers"}:
+            self.show_emoji_pack(chat_id)
         elif command == "/help":
             self.api.send_message(
                 chat_id, self.help_text(), inline_keyboard(nav_rows(("Поддержка", "support")))
@@ -6463,6 +6524,28 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/my-orders":
             self._my_orders()
+            return
+        if path == "/api/emoji-pack":
+            pack_name = self.settings.custom_emoji_pack if self.settings else "sila_chest_merch"
+            payload = {
+                "pack": pack_name,
+                "link": f"https://t.me/addemoji/{pack_name}",
+                "icons": [
+                    {"key": "sword", "file": "01_sword.png", "emoji": "⚔️", "label": "Клинок"},
+                    {"key": "seal", "file": "02_seal.png", "emoji": "🛡️", "label": "Печать"},
+                    {"key": "drop", "file": "03_drop.png", "emoji": "👕", "label": "Дроп 001"},
+                    {"key": "orders", "file": "04_orders.png", "emoji": "📦", "label": "Бокс дропа"},
+                    {"key": "profile", "file": "05_profile.png", "emoji": "🪪", "label": "Стальной жетон"},
+                    {"key": "support", "file": "06_support.png", "emoji": "💬", "label": "Штаб-связь"},
+                    {"key": "cart", "file": "07_cart.png", "emoji": "🛒", "label": "Кофр заказа"},
+                    {"key": "ruler", "file": "08_ruler.png", "emoji": "🏷️", "label": "Патч подола"},
+                    {"key": "card", "file": "09_card.png", "emoji": "💳", "label": "Титан-карта"},
+                    {"key": "lookbook", "file": "10_lookbook.png", "emoji": "🗡️", "label": "Спина с клинком"},
+                    {"key": "channel", "file": "11_channel.png", "emoji": "📢", "label": "Сигнал канала"},
+                    {"key": "back", "file": "12_back.png", "emoji": "⬅️", "label": "Шеврон назад"}
+                ]
+            }
+            self._write(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
         if path == "/api/catalog":
             catalog = self.catalog
