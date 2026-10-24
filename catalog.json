@@ -87,7 +87,7 @@
     {
       "id": "tee-vzglyad",
       "category": "drop",
-      "name": "ВЗГЛЯД",
+      "name": "ГЛАЗА",
       "price": "4 900 ₽",
       "sizes": [
         "S",
@@ -96,7 +96,7 @@
         "XL",
         "XXL"
       ],
-      "description": "Футболка «ВЗГЛЯД» из первого дропа бренда «СИЛА И ЧЕСТЬ». Символ стойкости и характера. Доступна по предзаказу.",
+      "description": "Футболка «ГЛАЗА» из первого дропа бренда «СИЛА И ЧЕСТЬ». Символ стойкости и характера. Доступна по предзаказу.",
       "signature": "Первый дроп. По предзаказу.",
       "photo_url": "",
       "image": "assets/spin/tee-vzglyad-01.jpg",
@@ -539,16 +539,16 @@
     }
   ],
   "media": {
-    "welcome_loop": "assets/video/welcome-final-30s.mp4",
+    "welcome_loop": "assets/video/welcome-no-intro-22s.mp4",
     "welcome_poster": "assets/welcome-sword-logo.jpg",
-    "teaser": "assets/video/drop-typography-18s.mp4",
-    "teaser_poster": "assets/video/drop-typography-18s-thumb.jpg",
+    "teaser": "assets/video/drop-glaza-18s.mp4",
+    "teaser_poster": "assets/video/drop-glaza-18s-thumb.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",
     "teaser_caption": "Фильм выпуска · 18 сек",
     "teaser_story_url": "",
-    "teaser_thumbnail": "assets/video/drop-typography-18s-thumb.jpg",
-    "hero_image": "assets/drop/hero-sila-chest-v1.jpg",
-    "welcome_motion": false,
+    "teaser_thumbnail": "assets/video/drop-glaza-18s-thumb.jpg",
+    "hero_image": "assets/drop/hero-sila-chest-v2.jpg",
+    "welcome_motion": true,
     "welcome_image": "assets/welcome-sword-logo.jpg"
   }
 }

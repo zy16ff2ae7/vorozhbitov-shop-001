@@ -7,6 +7,7 @@ inferred: every sheet keeps the explicit review status.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -75,7 +76,7 @@ def teaser_sheet() -> None:
     ffmpeg = os.environ.get("FFMPEG") or shutil.which("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("FFMPEG is required for the teaser review sheet")
-    video = MINIAPP / "assets/video/drop-typography-18s.mp4"
+    video = MINIAPP / "assets/video/drop-glaza-18s.mp4"
     with tempfile.TemporaryDirectory(prefix="typography-review-") as directory:
         pattern = str(Path(directory) / "frame-%02d.jpg")
         subprocess.run(
@@ -96,13 +97,14 @@ def teaser_sheet() -> None:
             draw.text((x, y + 389), f"{index * 2:02d}–{index * 2 + 2:02d} СЕК", font=font(18, True), fill=INK)
         draw.line((48, 1442, 744, 1442), fill=(50, 48, 46), width=1)
         draw.text((48, 1460), "Статус: на согласование. Предметные рендеры, не заявленная живая съёмка.", font=font(18), fill=MUTED)
-        canvas.save(APPROVAL / "drop-typography-18s-contact-sheet.jpg", quality=94, subsampling=0, optimize=True)
+        canvas.save(APPROVAL / "drop-glaza-18s-contact-sheet.jpg", quality=94, subsampling=0, optimize=True)
 
 
 def main() -> None:
     APPROVAL.mkdir(exist_ok=True)
-    product_sheet("tee-sila-i-chest", "СИЛА И ЧЕСТЬ", "tee-sich-", "drop/tee-detail-v4.jpg", "tee-sila-i-chest-360-v2.mp4")
-    product_sheet("tee-vzglyad", "ВЗГЛЯД", "tee-vzglyad-", "drop/tee-vzglyad-detail.jpg", "tee-vzglyad-360-v2.mp4")
+    products = {p["id"]: p for p in json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))["products"]}
+    product_sheet("tee-sila-i-chest", products["tee-sila-i-chest"]["name"], "tee-sich-", "drop/tee-detail-v4.jpg", "tee-sila-i-chest-360-v2.mp4")
+    product_sheet("tee-vzglyad", products["tee-vzglyad"]["name"], "tee-vzglyad-", "drop/tee-vzglyad-detail.jpg", "tee-vzglyad-360-v2.mp4")
     teaser_sheet()
 
 

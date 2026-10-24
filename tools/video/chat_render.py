@@ -1199,7 +1199,7 @@ def sample_frame(path: str | Path) -> None:
         return message
 
     t = 0.2
-    add(False, render_media_bubble("photo", ["assets/drop/hero-sila-chest-v1.jpg"],
+    add(False, render_media_bubble("photo", ["assets/drop/hero-sila-chest-v2.jpg"],
                                    "<b>ВОРОЖБИТОВ</b>\nНикита, ты на закрытой территории.",
                                    None, clock), t)
     t += 0.2

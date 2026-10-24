@@ -1182,13 +1182,20 @@
   function startExperience() {
     const boot = $("#boot");
     const welcome = $("#welcome");
-    syncModalLayers();
     if (boot) boot.classList.add("hidden");
-    if (welcome) {
-      welcome.classList.remove("hidden");
-      setupWelcomeVideo(mediaConfig());
+    if (!welcome) {
+      syncModalLayers();
+      return;
     }
-    enterShop();
+    // Заставка остаётся до явного действия пользователя. Каталог и видео
+    // загружаются под ней, но больше не пропускают приветствие автоматически.
+    document.body.classList.add("welcoming");
+    document.body.classList.remove("booting");
+    welcome.classList.remove("hidden", "is-leaving");
+    setupWelcomeVideo(mediaConfig());
+    syncModalLayers();
+    syncMainButton();
+    $("#enterShop")?.focus({ preventScroll: true });
   }
 
   async function loadCatalog() {
@@ -1238,8 +1245,8 @@
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
     return {
-      welcomeLoop: media.welcome_motion === false ? "" : (media.welcome_loop || "assets/video/welcome-final-30s.mp4"),
-      welcomePoster: media.welcome_poster || "assets/drop/hero-sila-chest-v1.jpg"
+      welcomeLoop: media.welcome_motion === false ? "" : (media.welcome_loop || "assets/video/welcome-no-intro-22s.mp4"),
+      welcomePoster: media.welcome_poster || "assets/drop/hero-sila-chest-v2.jpg"
     };
   }
 
@@ -1267,7 +1274,7 @@
   const welcomePlayback = { source: "", ready: false, paused: false, blocked: false, saverOk: false, failed: false, bound: false, pending: false, watchdog: 0 };
 
   function welcomeSaverBlocked() {
-    // Экономия трафика: ролик молча не грузим, пока человек сам не нажмёт «ФИЛЬМ · 25 СЕК».
+    // Экономия трафика: ролик молча не грузим, пока человек сам не нажмёт «ФИЛЬМ · 22 СЕК».
     return saverMode() && !welcomePlayback.saverOk;
   }
 
@@ -1353,7 +1360,7 @@
       welcomePlayback.bound = true;
       $("#welcomeMotion").addEventListener("click", () => {
         if (welcomeSaverBlocked()) {
-          // Тап по «ФИЛЬМ · 25 СЕК» в экономии трафика — согласие загрузить ролик.
+          // Тап по «ФИЛЬМ · 22 СЕК» в экономии трафика — согласие загрузить ролик.
           welcomePlayback.saverOk = true;
           welcomePlayback.paused = false;
           welcomePlayback.blocked = false;
@@ -1365,6 +1372,12 @@
           welcomePlayback.paused = !welcomePlayback.paused;
         }
         syncWelcomeVideo();
+      });
+      video.addEventListener("loadedmetadata", () => {
+        const seconds = Math.round(video.duration);
+        if (Number.isFinite(seconds) && seconds > 0) {
+          $("#welcomeFrameCount").textContent = `ФИЛЬМ · ${seconds} СЕК`;
+        }
       });
       video.addEventListener("playing", () => {
         if (welcomeCanPlay()) video.classList.add("is-playing");
