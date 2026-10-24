@@ -1468,7 +1468,7 @@
       const text = digits || "00063";
       ctx.save();
       if (!digits) ctx.globalAlpha = 0.45;
-      ctx.font = `700 ${Math.round(h * 0.13)}px "Arial Narrow", Arial, sans-serif`;
+      ctx.font = `700 ${Math.round(h * 0.13)}px "Sila Chest", "Times New Roman", serif`;
       try { ctx.letterSpacing = "6px"; } catch (_) { /* older canvas */ }
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";

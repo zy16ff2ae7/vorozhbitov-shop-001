@@ -53,7 +53,7 @@
       "fit": "Прямой крой",
       "details": [
         "🎖 Фирменный жетон с монограммой — в подарок к первому дропу",
-        "Принт на груди: «СИЛА И ЧЕСТЬ», уставной шрифт",
+        "Принт на груди: «СИЛА И ЧЕСТЬ», фирменный узкий шрифт с засечками",
         "Чёрная нашивка с белым знаком слева у переднего подола",
         "Постоянная чёрная деталь с монограммой у задней горловины",
         "Узкий клинок с потёртой фактурой почти до подола",
@@ -82,7 +82,7 @@
       ],
       "featured": true,
       "media_note": "Фото, 360° и видео подготовлены к согласованию. Производственную размерную сетку уточняет менеджер.",
-      "video": "assets/video/tee-sila-i-chest-360.mp4"
+      "video": "assets/video/tee-sila-i-chest-360-v2.mp4"
     },
     {
       "id": "tee-vzglyad",
@@ -112,7 +112,7 @@
       "fit": "Прямой крой",
       "details": [
         "🎖 Фирменный жетон — в подарок к первому дропу",
-        "Принт: «СИЛА И ЧЕСТЬ / ДИСЦИПЛИНА / МУЖЕСТВО / СИЛА / ХАРАКТЕР / ВОЛЯ / ДОМ»",
+        "Принт: «СИЛА И ЧЕСТЬ»; на спине — СИЛА / ЧЕСТЬ / ДОМ / СЕМЬЯ / ВОЛЯ / ХАРАКТЕР / ВЕРНОСТЬ / ДИСЦИПЛИНА / ДУХ / МУЖЕСТВО",
         "Плотный премиальный хлопок (240–260 г/м²)",
         "Уставной прямой крой",
         "Фирменная тканая нашивка у подола"
@@ -138,7 +138,7 @@
       ],
       "featured": false,
       "media_note": "Фото, 360° и видео подготовлены к согласованию. Производственную размерную сетку уточняет менеджер.",
-      "video": "assets/video/tee-vzglyad-360.mp4"
+      "video": "assets/video/tee-vzglyad-360-v2.mp4"
     },
     {
       "id": "tag-sila-i-chest",
@@ -541,12 +541,12 @@
   "media": {
     "welcome_loop": "assets/video/welcome-final-30s.mp4",
     "welcome_poster": "assets/welcome-sword-logo.jpg",
-    "teaser": "assets/video/campaign-v11.mp4",
-    "teaser_poster": "assets/video/campaign-v11-thumb.jpg",
+    "teaser": "assets/video/drop-typography-18s.mp4",
+    "teaser_poster": "assets/video/drop-typography-18s-thumb.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",
     "teaser_caption": "Фильм выпуска · 18 сек",
     "teaser_story_url": "",
-    "teaser_thumbnail": "assets/video/campaign-v11-thumb.jpg",
+    "teaser_thumbnail": "assets/video/drop-typography-18s-thumb.jpg",
     "hero_image": "assets/drop/hero-sila-chest-v1.jpg",
     "welcome_motion": false,
     "welcome_image": "assets/welcome-sword-logo.jpg"

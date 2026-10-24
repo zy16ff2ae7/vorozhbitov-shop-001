@@ -1,44 +1,16 @@
 @font-face {
-  font-family: "Manrope";
+  font-family: "Sila Chest";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 400 500;
   font-display: swap;
-  src: url("fonts/manrope-400.woff2") format("woff2");
+  src: url("fonts/sila-chest-400.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Manrope";
+  font-family: "Sila Chest";
   font-style: normal;
-  font-weight: 600;
+  font-weight: 600 900;
   font-display: swap;
-  src: url("fonts/manrope-600.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Manrope";
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url("fonts/manrope-800.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Unbounded";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("fonts/unbounded-700.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Unbounded";
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url("fonts/unbounded-900.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Unbounded";
-  font-style: normal;
-  font-weight: 900;
-  font-display: swap;
-  src: url("fonts/unbounded-900.woff2") format("woff2");
+  src: url("fonts/sila-chest-700.woff2") format("woff2");
 }
 
 :root {
@@ -58,8 +30,8 @@
   --acid: #d6ff3c;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
-  --font-display: "Unbounded", "Arial Black", Impact, sans-serif;
-  --font-ui: "Manrope", "Segoe UI", Arial, sans-serif;
+  --font-display: "Sila Chest", "Times New Roman", serif;
+  --font-ui: "Sila Chest", "Times New Roman", serif;
   color-scheme: dark;
   font-family: var(--font-ui);
   background: var(--bg);
@@ -1441,7 +1413,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   color: var(--muted); font-size: 11px; line-height: 1.55; letter-spacing: .13em;
 }
 .hero h1 em, .section-heading h2 em, .manifesto h2 em, .join-banner h2 em, .store-head h2 em {
-  color: inherit; font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-style: italic;
+  color: inherit; font-family: var(--font-ui); font-weight: 400; font-style: italic;
   letter-spacing: -.055em;
 }
 .button {
@@ -2032,3 +2004,44 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .profile-order-status.is-shipped { color: #83c79c; }
 .profile-order-status.is-received,
 .profile-order-status.is-completed { color: var(--muted); }
+
+/* Sila Chest: узкая высококонтрастная антиква требует чуть большего кегля
+   в служебных текстах. Заголовки и тёмная editorial-композиция сохранены. */
+.brand-type strong.brand-wordmark {
+  display: block; width: 112px; height: 25px; flex: 0 0 auto;
+  background: url("assets/brand/sila-chest-wordmark.png") left center / contain no-repeat;
+  font-size: 0; letter-spacing: 0;
+}
+.brand-type small, .footer-brand small { font-size: 10px; }
+.button, .hero-actions .button { font-size: 14px; font-weight: 700; letter-spacing: .09em; }
+.text-button { font-size: 13px; }
+.hero-live, .hero-copy .eyebrow, .hero-copy .eyebrow span:last-child { font-size: 11px; }
+.hero-lead, .hero-copy .hero-lead { font-size: 16px; }
+.brand-principles, .eyebrow, .section-kicker, .sheet-kicker, .item-count, .vertical-label, .filter-caption { font-size: 12px; }
+.category-chip, .filter-chip, .filter-button, .filter-panel-head, .sort-wrap select { font-size: 13px; }
+.product-badge, .badge-3d { font-size: 10px; }
+.product-topline { font-size: 11px; }
+.product-info h3 { font-size: 16px; }
+.product-sizes { font-size: 12px; }
+.bottom-link small { font-size: 11px; }
+.stage-btn { font-size: 13px; font-weight: 700; }
+.media-toolbar #spinToggle, .media-toolbar #mediaPosition { font-size: 12px; }
+.sheet-description { font-size: 16px; line-height: 1.65; }
+.sign-block { font-size: 15px; }
+.fact-row, .sheet-details, .media-note { font-size: 14px; }
+.size-heading, .qty-row { font-size: 13px; }
+.size-button { font-size: 15px; }
+.purchase-bar > span { font-size: 13px; }
+.welcome-copy { font-size: 15px; }
+.welcome-lede { font-size: 17px; }
+.welcome-facts, .welcome-meta { font-size: 11px; }
+
+@media (max-width: 380px) {
+  .brand-type strong.brand-wordmark { width: 88px; height: 22px; }
+  .brand-type small { font-size: 9px; }
+  .button, .hero-actions .button { font-size: 13px; }
+  .hero-live, .hero-copy .eyebrow, .hero-copy .eyebrow span:last-child { font-size: 10px; }
+  .product-info h3 { font-size: 14px; }
+  .product-topline, .product-sizes { font-size: 11px; }
+  .sheet-description { font-size: 15px; }
+}
