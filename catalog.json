@@ -3,7 +3,7 @@
     "name": "СИЛА И ЧЕСТЬ",
     "descriptor": "сила и честь / городская форма",
     "drop": "ПЕРВЫЙ ДРОП",
-    "welcome_image": "assets/drop/hero-sila-chest-v1.jpg",
+    "welcome_image": "assets/welcome-sword-logo.jpg",
     "store_image": "assets/store.jpg"
   },
   "categories": [
@@ -44,20 +44,19 @@
       "description": "Чёрная футболка первого тиража. Надпись «СИЛА И ЧЕСТЬ» на груди, фирменная чёрная нашивка слева у подола. На спине — постоянная деталь с монограммой у горловины и длинный узкий клинок с потёртой фактурой.",
       "signature": "Первый тираж. Один раз и без повторов.",
       "photo_url": "",
-      "image": "assets/spin/tee-sich-01-v2.jpg",
+      "image": "assets/drop/tee-real-8276.jpg",
       "images": [
-        "assets/spin/tee-sich-01-v2.jpg",
-        "assets/spin/tee-sich-05-v2.jpg",
-        "assets/drop/tee-flatlay-v2.jpg",
-        "assets/drop/hero-sila-chest-v1.jpg",
-        "assets/drop/tee-back-final.jpg",
-        "assets/spin/tee-sich-03-v2.jpg",
+        "assets/drop/tee-real-8276.jpg",
+        "assets/drop/tee-real-8273.jpg",
+        "assets/drop/tee-real-8272.jpg",
+        "assets/drop/tee-real-8275.jpg",
         "assets/drop/tee-detail-v4.jpg"
       ],
       "badge": "ВЫПУСК 001",
       "material": "100% хлопок · 240 г/м²",
       "fit": "Прямой крой",
       "details": [
+        "🎖 Фирменный жетон с монограммой — в подарок к первому дропу",
         "Принт на груди: «СИЛА И ЧЕСТЬ», уставной шрифт",
         "Чёрная нашивка с белым знаком слева у переднего подола",
         "Постоянная чёрная деталь с монограммой у задней горловины",
@@ -82,10 +81,8 @@
         "Спереди",
         "Сзади",
         "Ткань и принт",
-        "На Никите",
-        "В зале · спина",
-        "Крой сбоку",
-        "Нашивка у подола"
+        "В зале · посадка",
+        "Нашивка"
       ],
       "featured": true
     },
@@ -104,29 +101,27 @@
       "description": "Футболка «ВЗГЛЯД» из первого дропа бренда «СИЛА И ЧЕСТЬ». Символ стойкости и характера. Доступна по предзаказу.",
       "signature": "Первый дроп. По предзаказу.",
       "photo_url": "",
-      "image": "assets/drop/tee-vzglyad.jpg",
+      "image": "assets/drop/tee-vzglyad-graphic.jpg",
       "images": [
-        "assets/drop/tee-vzglyad.jpg",
-        "assets/drop/odin-v-pole-voin.jpg"
+        "assets/drop/tee-vzglyad-graphic.jpg"
       ],
       "badge": "ПРЕДЗАКАЗ",
       "material": "100% хлопок · 240-260 г/м²",
       "fit": "Прямой крой",
       "details": [
-        "Принт «ВЗГЛЯД»",
-        "Плотный хлопок 240-260 GSM",
-        "Фирменная нашивка у подола",
-        "Постоянная деталь с монограммой",
-        "Символ стойкости и братства"
+        "🎖 Фирменный жетон — в подарок к первому дропу",
+        "Принт: «СИЛА И ЧЕСТЬ / ДИСЦИПЛИНА / МУЖЕСТВО / СИЛА / ХАРАКТЕР / ВОЛЯ / ДОМ»",
+        "Плотный премиальный хлопок (240–260 г/м²)",
+        "Уставной прямой крой",
+        "Фирменная тканая нашивка у подола"
       ],
       "stock_label": "Предзаказ",
       "active": true,
       "spin": [
-        "assets/drop/tee-vzglyad.jpg"
+        "assets/drop/tee-vzglyad-graphic.jpg"
       ],
       "image_labels": [
-        "Лицо",
-        "Смысл"
+        "Смысл и принт"
       ],
       "featured": false
     },
@@ -138,8 +133,8 @@
       "sizes": [
         "ONE SIZE"
       ],
-      "description": "Армейский жетон из нержавеющей стали. Лицо — монограмма ВВ с мечом, оборот — «Сила и честь» и твой личный номер тиража. Номер не повторяется ни у кого.",
-      "signature": "Сто штук на весь мир. Дальше — только у своих.",
+      "description": "Армейский жетон из нержавеющей стали с монограммой и мечом. Идёт в подарок к каждому заказу первого дропа.",
+      "signature": "В подарок к первому дропу",
       "photo_url": "",
       "image": "assets/spin/tag-sich-01.jpg",
       "images": [
@@ -148,7 +143,7 @@
         "assets/spin/tag-sich-03.jpg",
         "assets/spin/tag-sich-04.jpg"
       ],
-      "badge": "ТИРАЖ 100",
+      "badge": "В ПОДАРОК",
       "material": "Нержавеющая сталь · лазерная гравировка",
       "fit": "Нумерованный",
       "details": [
@@ -535,7 +530,7 @@
   ],
   "media": {
     "welcome_loop": "assets/video/welcome-final-30s.mp4",
-    "welcome_poster": "assets/drop/hero-sila-chest-v1.jpg",
+    "welcome_poster": "assets/welcome-sword-logo.jpg",
     "teaser": "assets/video/campaign-v11.mp4",
     "teaser_poster": "assets/video/campaign-v11-thumb.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",
@@ -543,6 +538,7 @@
     "teaser_story_url": "",
     "teaser_thumbnail": "assets/video/campaign-v11-thumb.jpg",
     "hero_image": "assets/drop/hero-sila-chest-v1.jpg",
-    "welcome_motion": true
+    "welcome_motion": false,
+    "welcome_image": "assets/welcome-sword-logo.jpg"
   }
 }

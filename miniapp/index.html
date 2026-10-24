@@ -13,12 +13,12 @@
   <link rel="stylesheet" href="refinement.css">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
-<body class="booting">
+<body>
   <a class="skip-link" href="#catalog">Перейти к вещам</a>
   <div class="noise" aria-hidden="true"></div>
   <div class="scan" aria-hidden="true"></div>
 
-  <div class="boot" id="boot" aria-hidden="true">
+  <div class="boot hidden" id="boot" aria-hidden="true">
     <div class="boot-year">1993</div>
     <p class="boot-stamp">СИЛА<br><em>И ЧЕСТЬ</em></p>
     <small>СИЛА И ЧЕСТЬ</small>
@@ -60,16 +60,13 @@
   <div class="app-shell" id="app">
     <header class="topbar">
       <a class="brand-lockup" href="#home" data-scroll="home" aria-label="СИЛА И ЧЕСТЬ — в начало">
-        <span class="brand-mark">V</span>
-        <span class="brand-type"><strong>СИЛА И ЧЕСТЬ</strong><small>СИЛА И ЧЕСТЬ</small></span>
+        <span class="brand-mark"></span>
+        <span class="brand-type"><strong>СИЛА И ЧЕСТЬ</strong><small>ПЕРВЫЙ ДРОП 001</small></span>
       </a>
       <div class="top-actions">
         <button class="icon-button" id="searchToggle" type="button" aria-label="Поиск" aria-expanded="false" aria-controls="searchOverlay"><span class="icon" data-icon="search"></span></button>
         <button class="icon-button" id="profileButton" type="button" aria-label="Профиль"><span class="icon" data-icon="user"></span></button>
-        <button class="icon-button" id="savedButton" type="button" aria-label="Сохранённые">
-          <span class="icon" data-icon="bookmark"></span><span class="counter hidden" id="savedCount">0</span>
-        </button>
-        <button class="icon-button cart-trigger" id="cartButton" type="button" aria-label="Заявка">
+        <button class="icon-button cart-trigger" id="cartButton" type="button" aria-label="Корзина">
           <span class="icon" data-icon="bag"></span><span class="counter hidden" id="cartCount">0</span>
         </button>
       </div>
@@ -95,9 +92,9 @@
           <div class="hero-live"><span class="pulse-dot"></span> НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ</div>
         </div>
         <div class="hero-copy">
-          <div class="eyebrow"><span>ОДЕЖДА С ХАРАКТЕРОМ</span><span>ВОРОЖБИТОВ</span></div>
+          <div class="eyebrow"><span>ОДЕЖДА С ХАРАКТЕРОМ</span><span>СИЛА И ЧЕСТЬ</span></div>
           <h1 id="heroTitle">СИЛА<br><em>И ЧЕСТЬ.</em></h1>
-          <p class="hero-lead">Твоя форма. На каждый день.</p>
+          <p class="hero-lead">001 Первый дроп. Твоя форма на каждый день.</p>
           <div class="hero-actions">
             <button class="button button-primary" id="heroProductButton" type="button">СМОТРЕТЬ ВЕЩИ <span>↗</span></button>
             <button class="hero-film-button" id="heroWatchFilm" type="button"><span aria-hidden="true">▷</span> Фильм выпуска</button>
@@ -108,7 +105,7 @@
       <section class="section-pad catalog-section" id="catalog">
         <div class="section-heading">
           <div>
-            <span class="section-kicker">01 / ВИТРИНА</span>
+            <span class="section-kicker">01 / ПЕРВЫЙ ДРОП</span>
             <h2>ВЕЩИ<br><em>БРЕНДА.</em></h2>
           </div>
           <span class="item-count" id="productCount">— ВЕЩИ</span>
@@ -181,41 +178,14 @@
         </button>
         <button class="detail-shot detail-tag" type="button" data-detail-product="tag-sila-i-chest" data-detail-photo="0" aria-label="Рассмотреть жетон">
           <img src="assets/spin/tag-sich-01.jpg" alt="Жетон с монограммой" loading="lazy" decoding="async" width="1408" height="768">
-          <span class="detail-caption"><small>03 / ЖЕТОН</small><strong>Личный знак.</strong><span>Рассмотреть гравировку ↗</span></span>
+          <span class="detail-caption"><small>03 / ЖЕТОН</small><strong>В подарок к первому дропу.</strong><span>Рассмотреть гравировку ↗</span></span>
         </button>
-      </section>
-
-      <section class="store-section" id="store" aria-labelledby="storeTitle">
-        <div class="store-head">
-          <span class="section-kicker">02 / МАГАЗИН</span>
-          <h2 id="storeTitle">ТЕРРИТОРИЯ<br><em>БРЕНДА.</em></h2>
-          <p class="store-lead">Бетон, красный сигнал и вещи, которые можно потрогать до покупки. Заходи — покажем всё руками.</p>
-        </div>
-        <figure class="store-hero" tabindex="0" role="button" data-lightbox="assets/store-rack.jpg" data-caption="Магазин ВОРОЖБИТОВ — территория бренда" aria-label="Магазин ВОРОЖБИТОВ — территория бренда. Открыть фото">
-          <img src="assets/store-rack.jpg" alt="Зал магазина: неоновая вывеска ВОРОЖБИТОВ, вешалки с вещами, боксёрская груша" loading="lazy" decoding="async">
-          <figcaption><span>ТОЧКА БРЕНДА · МАГАЗИН</span><strong>ЗАХОДИ К СВОИМ.</strong><small>Первый тираж на вешалках — примерка на месте</small></figcaption>
-        </figure>
-        <div class="store-grid">
-          <figure class="store-shot" tabindex="0" role="button" data-lightbox="assets/store.jpg" data-caption="Вешалки — первый тираж" aria-label="Вешалки — первый тираж. Открыть фото">
-            <img src="assets/store.jpg" alt="Чёрные худи первого тиража на вешалке под красным неоном" loading="lazy" decoding="async">
-            <figcaption>ВЕШАЛКИ / ТИРАЖ 001</figcaption>
-          </figure>
-          <figure class="store-shot" tabindex="0" role="button" data-lightbox="assets/look-street.jpg" data-caption="Городская форма — красный сигнал" aria-label="Городская форма — красный сигнал. Открыть фото">
-            <img src="assets/look-street.jpg" alt="Свой в чёрной форме бренда в ночном городе у красного света" loading="lazy" decoding="async">
-            <figcaption>СИГНАЛ / ГОРОДСКАЯ ФОРМА</figcaption>
-          </figure>
-          <div class="store-facts">
-            <div><span>01</span><strong>ПРИМЕРКА НА МЕСТЕ</strong><small>Подберём размер руками — без гаданий по таблице.</small></div>
-            <div><span>02</span><strong>САМОВЫВОЗ</strong><small>Забери заказ сам после оплаты. Детали подскажет менеджер.</small></div>
-            <div><span>03</span><strong>ДОСТАВКА ПО СТРАНЕ</strong><small>СДЭК и Яндекс. Срок и цена зависят от города.</small></div>
-          </div>
-        </div>
       </section>
 
       <section class="manifesto section-pad" id="manifesto">
         <div class="manifesto-label">
-          <span class="section-kicker">03 / КОНЦЕПЦИЯ</span>
-          <span class="vertical-label">ВОРОЖБИТОВ / 1993</span>
+          <span class="section-kicker">02 / КОНЦЕПЦИЯ</span>
+          <span class="vertical-label">СИЛА И ЧЕСТЬ / 1993</span>
         </div>
         <div class="manifesto-body">
           <h2>СИЛА —<br>В ДЕЛЕ.</h2>
@@ -297,7 +267,7 @@
 
     <footer class="footer section-pad">
       <div class="footer-brand">
-        <span class="brand-mark">V</span>
+        <span class="brand-mark"></span>
         <div><strong>СИЛА И ЧЕСТЬ</strong><small>СИЛА И ЧЕСТЬ / 1993</small></div>
       </div>
       <div class="footer-meta">
@@ -309,10 +279,9 @@
 
   <nav class="bottom-nav" aria-label="Навигация">
     <button class="bottom-link active" data-scroll="home" type="button"><span class="icon" data-icon="home"></span><small>Главная</small></button>
-    <button class="bottom-link" data-scroll="catalog" type="button"><span class="icon" data-icon="grid"></span><small>Каталог</small></button>
-    <button class="bottom-link" data-scroll="store" type="button"><span class="icon" data-icon="pin"></span><small>Магазин</small></button>
-    <button class="bottom-link" id="bottomSaved" type="button"><span class="icon" data-icon="bookmark"></span><small>Избранное</small></button>
-    <button class="bottom-link bottom-cart" id="bottomCartButton" type="button"><span class="icon" data-icon="bag"></span><small>Заявка</small><b class="nav-badge hidden" id="bottomCartCount">0</b></button>
+    <button class="bottom-link" data-scroll="catalog" type="button"><span class="icon" data-icon="grid"></span><small>Первый дроп</small></button>
+    <button class="bottom-link" id="bottomProfileButton" type="button"><span class="icon" data-icon="user"></span><small>Профиль</small></button>
+    <button class="bottom-link bottom-cart" id="bottomCartButton" type="button"><span class="icon" data-icon="bag"></span><small>Корзина</small><b class="nav-badge hidden" id="bottomCartCount">0</b></button>
   </nav>
 
   <div class="modal-backdrop hidden" id="productModal" role="dialog" aria-modal="true" aria-label="Карточка товара">
@@ -372,7 +341,6 @@
         </div>
         <div class="purchase-bar"><span id="purchaseSummary">Выбери размер</span><button class="button button-primary full-button" id="addToCartButton" type="button">ДОБАВИТЬ В ЗАЯВКУ <span>+</span></button></div>
         <button class="button button-ghost full-button" id="waitlistButton" type="button">ЖДАТЬ РАЗМЕР</button>
-        <button class="button button-outline tryon-entry hidden" id="tryonButton" type="button">ПРИМЕРИТЬ ПО ФОТО</button>
         <div class="sheet-details" id="sheetDetails"></div>
         <div class="related" id="related"></div>
       </div>
@@ -388,7 +356,7 @@
       </div>
       <div class="profile-body">
         <div class="profile-hero">
-          <div class="profile-avatar" id="profileAvatar">V</div>
+          <div class="profile-avatar" id="profileAvatar"></div>
           <div>
             <strong id="profileHello">Свой</strong>
             <small id="profileHandle">Данные для заявки и доставки</small>
@@ -526,28 +494,6 @@
       <h3>НАЙДИ СВОЮ ПОСАДКУ</h3>
       <p class="quiz-step" id="quizStep"></p>
       <div class="quiz-body" id="quizBody"></div>
-    </div>
-  </div>
-  <div class="modal-backdrop hidden" id="tryonModal" role="dialog" aria-modal="true" aria-label="Примерка по фото">
-    <div class="modal-sheet tryon-sheet">
-      <button class="sheet-close" data-close="tryonModal" type="button" aria-label="Закрыть примерку">✕</button>
-      <h3>ПРИМЕРКА ПО ФОТО</h3>
-      <p class="tryon-hint">Фото по пояс на светлом фоне — футболка ляжет поверх. Двигай пальцем, размер — ползунком.</p>
-      <div class="tryon-stage">
-        <canvas id="tryonCanvas" width="720" height="900"></canvas>
-        <label class="tryon-upload" id="tryonUpload">
-          <input type="file" id="tryonFile" accept="image/*" hidden>
-          <span class="tryon-upload-mark" aria-hidden="true">↑</span>
-          <span>ЗАГРУЗИТЬ ФОТО</span>
-        </label>
-      </div>
-      <div class="tryon-controls">
-        <label class="tryon-scale">РАЗМЕР ФУТБОЛКИ<input type="range" id="tryonScale" min="40" max="130" value="80"></label>
-        <div class="tryon-actions">
-          <button class="tryon-change hidden" id="tryonChange" type="button">Сменить фото</button>
-          <button class="button button-outline" id="tryonDownload" type="button" disabled>СКАЧАТЬ РЕЗУЛЬТАТ</button>
-        </div>
-      </div>
     </div>
   </div>
   <div class="modal-backdrop hidden" id="payModal" role="dialog" aria-modal="true" aria-label="Оплата">

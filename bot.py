@@ -2782,24 +2782,24 @@ class BrandBot:
                 LOG.debug("Could not set staff commands for %s on start: %s", chat_id, exc)
 
         reply_kb = self.buyer_reply_keyboard(chat_id)
+        brand = esc(self.settings.brand_name)
         if is_new:
             text = (
-                f"<b>{esc(self.settings.brand_name)}</b>\n\n"
-                f"{name}, ты на закрытой территории.\n"
-                "Здесь первыми разбирают выпуск. Тираж маленький, очереди нет — "
-                "берёт тот, кто успел.\n\n"
-                "<b>Что тебе ближе?</b> Отметишь — будем писать по делу, не всем подряд."
+                f"<b>{brand}</b>\n\n"
+                f"{name}, добро пожаловать на закрытую территорию бренда одежды <b>«СИЛА И ЧЕСТЬ»</b>.\n\n"
+                "Первый дроп 001 — для своих.\n"
+                "Тираж строго ограничен, вещи разбирают быстро. "
+                "Выбирай размер на витрине или оформляй заказ напрямую."
             )
-            # Видео с текстом приветствия и постоянной клавиатурой витрины
             if not self.send_teaser(chat_id, caption=text, keyboard=reply_kb):
                 self.send_welcome(chat_id, text, reply_kb)
         else:
             text = (
-                f"<b>{esc(self.settings.brand_name)}</b>\n\n"
-                f"{name}, ты уже в базе. Новые вещи видишь раньше остальных."
+                f"<b>{brand}</b>\n\n"
+                f"{name}, ты на закрытой территории бренда одежды <b>«СИЛА И ЧЕСТЬ»</b>.\n\n"
+                "Первый дроп 001 открыт."
                 + self.cta("drop")
             )
-            # Видео с постоянной клавиатурой витрины
             if not self.send_teaser(chat_id, caption=text, keyboard=reply_kb):
                 self.send_welcome(chat_id, text, reply_kb)
 

@@ -148,8 +148,7 @@
     if ($("#profileEntrance")) $("#profileEntrance").value = profile.entrance || "";
     if ($("#profileHeight")) $("#profileHeight").value = profile.height || "";
     if ($("#profileNote")) $("#profileNote").value = profile.note || "";
-    const letter = (profile.name || (user && user.first_name) || "V").trim().charAt(0).toUpperCase();
-    if ($("#profileAvatar")) $("#profileAvatar").textContent = letter || "V";
+    if ($("#profileAvatar")) $("#profileAvatar").textContent = "";
     if ($("#profileHello")) $("#profileHello").textContent = profile.name || (user && user.first_name) || "Свой";
     if ($("#profileHandle")) {
       $("#profileHandle").textContent = user && user.username ? `@${user.username}` : "Данные для заявки и доставки";
@@ -1147,6 +1146,8 @@
     try {
       tg.ready();
       tg.expand();
+      if (typeof tg.disableVerticalSwipes === "function") tg.disableVerticalSwipes();
+      if (typeof tg.enableClosingConfirmation === "function") tg.enableClosingConfirmation();
       if (typeof tg.setHeaderColor === "function") tg.setHeaderColor("#070708");
       if (typeof tg.setBackgroundColor === "function") tg.setBackgroundColor("#070708");
       if (tg.MainButton) tg.MainButton.hide();
@@ -1164,8 +1165,7 @@
 
   function enterShop() {
     const welcome = $("#welcome");
-    if (welcome.classList.contains("is-leaving")) return;
-    // Заставка уходит вверх, а не пропадает рывком.
+    if (!welcome || welcome.classList.contains("is-leaving")) return;
     welcome.classList.add("is-leaving");
     stopWelcomeVideo();
     document.body.classList.remove("welcoming", "booting");
@@ -1177,23 +1177,18 @@
       syncModalLayers();
       syncMainButton();
     }, reducedMotion() ? 0 : 520);
-
   }
 
   function startExperience() {
     const boot = $("#boot");
     const welcome = $("#welcome");
     syncModalLayers();
-    window.setTimeout(() => {
-      document.body.classList.remove("booting");
-      boot.classList.add("hidden");
+    if (boot) boot.classList.add("hidden");
+    if (welcome) {
       welcome.classList.remove("hidden");
-      document.body.classList.add("welcoming");
-      syncModalLayers();
-      $("#enterShop").focus({ preventScroll: true });
-      // Фильм не ждёт каталог: стартует сразу, версия из каталога подхватится без перезапуска.
       setupWelcomeVideo(mediaConfig());
-    }, reducedMotion() ? 0 : 600);
+    }
+    enterShop();
   }
 
   async function loadCatalog() {
@@ -1778,8 +1773,8 @@
       closeModal("storiesModal");
       if (id) openProduct(id);
     });
-    $("#tryonButton").addEventListener("click", openTryon);
-    $("#tryonFile").addEventListener("change", event => {
+    if ($("#tryonButton")) $("#tryonButton").addEventListener("click", openTryon);
+    if ($("#tryonFile")) $("#tryonFile").addEventListener("change", event => {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
       const img = new Image();
@@ -1787,39 +1782,41 @@
         tryon.photo = img;
         tryon.dx = 0;
         tryon.dy = 0;
-        $("#tryonUpload").classList.add("hidden");
-        $("#tryonChange").classList.remove("hidden");
-        $("#tryonDownload").disabled = false;
+        if ($("#tryonUpload")) $("#tryonUpload").classList.add("hidden");
+        if ($("#tryonChange")) $("#tryonChange").classList.remove("hidden");
+        if ($("#tryonDownload")) $("#tryonDownload").disabled = false;
         drawTryon();
         haptic("light");
       };
       img.src = URL.createObjectURL(file);
     });
-    $("#tryonChange").addEventListener("click", () => $("#tryonFile").click());
-    $("#tryonScale").addEventListener("input", event => { tryon.scale = Number(event.target.value) / 100; drawTryon(); });
-    $("#tryonDownload").addEventListener("click", () => {
+    if ($("#tryonChange")) $("#tryonChange").addEventListener("click", () => $("#tryonFile").click());
+    if ($("#tryonScale")) $("#tryonScale").addEventListener("input", event => { tryon.scale = Number(event.target.value) / 100; drawTryon(); });
+    if ($("#tryonDownload")) $("#tryonDownload").addEventListener("click", () => {
       const canvas = $("#tryonCanvas");
       if (!canvas || !tryon.photo) return;
       const link = document.createElement("a");
-      link.download = "vorozhbitov-tryon.png";
+      link.download = "sila-chest-tryon.png";
       link.href = canvas.toDataURL("image/png");
       link.click();
       haptic("success");
     });
     const tryCanvas = $("#tryonCanvas");
-    tryCanvas.addEventListener("pointerdown", event => {
-      if (!tryon.photo) return;
-      try { tryCanvas.setPointerCapture(event.pointerId); } catch (_) { /* noop */ }
-      tryon.drag = { x: event.clientX - tryon.dx, y: event.clientY - tryon.dy };
-    });
-    tryCanvas.addEventListener("pointermove", event => {
-      if (!tryon.drag) return;
-      tryon.dx = Math.min(Math.max(event.clientX - tryon.drag.x, -180), 180);
-      tryon.dy = Math.min(Math.max(event.clientY - tryon.drag.y, -240), 240);
-      drawTryon();
-    });
-    tryCanvas.addEventListener("pointerup", () => { tryon.drag = null; });
-    tryCanvas.addEventListener("pointercancel", () => { tryon.drag = null; });
+    if (tryCanvas) {
+      tryCanvas.addEventListener("pointerdown", event => {
+        if (!tryon.photo) return;
+        try { tryCanvas.setPointerCapture(event.pointerId); } catch (_) { /* noop */ }
+        tryon.drag = { x: event.clientX - tryon.dx, y: event.clientY - tryon.dy };
+      });
+      tryCanvas.addEventListener("pointermove", event => {
+        if (!tryon.drag) return;
+        tryon.dx = Math.min(Math.max(event.clientX - tryon.drag.x, -180), 180);
+        tryon.dy = Math.min(Math.max(event.clientY - tryon.drag.y, -240), 240);
+        drawTryon();
+      });
+      tryCanvas.addEventListener("pointerup", () => { tryon.drag = null; });
+      tryCanvas.addEventListener("pointercancel", () => { tryon.drag = null; });
+    }
     const personInput = $("#personInput");
     if (personInput) personInput.addEventListener("input", drawPersonPreview);
     $("#heroProductButton").addEventListener("click", () => {
@@ -1929,8 +1926,17 @@
     $("#waitlistButton").addEventListener("click", sendWaitlist);
     $("#cartButton").addEventListener("click", openCart);
     $("#bottomCartButton").addEventListener("click", openCart);
-    $("#savedButton").addEventListener("click", showSaved);
+    if ($("#savedButton")) $("#savedButton").addEventListener("click", showSaved);
     if ($("#profileButton")) $("#profileButton").addEventListener("click", openProfile);
+    if ($("#bottomProfileButton")) $("#bottomProfileButton").addEventListener("click", openProfile);
+    $$("#profileModal input").forEach(input => {
+      input.addEventListener("pointerdown", e => e.stopPropagation());
+      input.addEventListener("click", e => e.stopPropagation());
+      input.addEventListener("focus", e => {
+        e.stopPropagation();
+        setTimeout(() => input.scrollIntoView({ behavior: "smooth", block: "center" }), 180);
+      });
+    });
     if ($("#saveProfile")) $("#saveProfile").addEventListener("click", saveProfile);
     if ($("#profileOrders")) $("#profileOrders").addEventListener("click", event => {
       const payButton = event.target.closest("[data-pay-id]");
