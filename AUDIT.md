@@ -16,8 +16,8 @@
 | Запись каталога | Disk-first чтение, строгая схема и `os.replace`: при ошибке записи in-memory каталог не расходится с файлом. |
 | Возвраты | Отмена любой позиции оплаченной корзины отменяет всю оплату и фиксирует полную сумму возврата; завершение возврата имеет защищённый односторонний переход. |
 | Support/health/backups | Нет ложного fallback на ненастроенный username; `/health` проверяет SQLite и каталог; ежедневные консистентные backup с rotation и fsync; добавлена безопасная retention-политика служебных записей. |
-| Mini App | Переработаны витрина, карточка, корзина, checkout, профиль, модальные окна и мобильная навигация; удалены saved/try-on, исправлены фото, SVG-иконки, keyboard tabs, Telegram colors и русские captions. |
-| Проверки | 191 Python test, 13 Node tests, smoke, syntax, release/media validation и Chromium-сценарии 320/390/1440 px зелёные; page errors и horizontal overflow отсутствуют. |
+| Mini App | Сохранена фирменная тёмная editorial-тема: графитовые витрина, карточка, корзина, checkout, профиль, формы и модальные окна, красные CTA; удалены saved/try-on, исправлены фото, SVG-иконки, keyboard tabs, Telegram colors и русские captions. |
+| Проверки | 192 Python tests, 13 Node tests, smoke, syntax, release/media validation и Chromium-сценарии 320/390/1440 px зелёные; page errors и horizontal overflow отсутствуют. |
 
 **Внешние release gates не подменены локальными тестами:** перед реальными деньгами всё ещё обязательны sandbox-проверки Lava/Crypto Pay, deploy и smoke на боевом окружении, внешнее хранение backup/alerting и проверка в Telegram WebView на iOS/Android. Большая Git-история требует отдельной согласованной LFS/архивной миграции; исходные материалы заказчика не удалялись. Docker в среде недоступен, поэтому образ не собирался.
 

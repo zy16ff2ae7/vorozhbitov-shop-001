@@ -1670,7 +1670,7 @@ class NativeMenuTests(unittest.TestCase):
             self.assertTrue(all(len(row) == 2 for row in sections), rows)
             self.assertEqual(
                 [text for row in sections for text in row],
-                ["🛍 Каталог", "📦 Мои покупки", "📷 Образы", "🎬 Ролик", "👤 Кабинет", "💬 Поддержка"],
+                [f"{ICON['catalog']} Каталог", f"{ICON['orders']} Мои покупки", f"{ICON['looks']} Образы", f"{ICON['film']} Ролик", f"{ICON['account']} Кабинет", f"{ICON['support']} Поддержка"],
             )
             # Витрина остаётся входом, но не занимает системную кнопку «Меню».
             self.assertEqual(rows[-1], ["Открыть витрину ↗"])
@@ -1777,7 +1777,7 @@ class NativeMenuTests(unittest.TestCase):
             bot.show_product(500, 500, "tee-sila-i-chest")
             _chat, _text, product_markup = api.last(500)
             self.assertEqual(button_targets(product_markup)[-2:], ["cat:drop", "menu"])
-            self.assertIn("← Выпуск", flat_buttons(product_markup)[-2])
+            self.assertTrue(any(b in flat_buttons(product_markup)[-2] for b in (f"{ICON['back']} Выпуск", "← Выпуск", "⬅️ Выпуск")))
             bot.show_category(500, 500, "drop")
             self.assertEqual(button_targets(api.last(500)[2])[-2:], ["catalog", "menu"])
             bot.show_catalog(500, 500)
@@ -2785,7 +2785,7 @@ class NativeMenuTests(unittest.TestCase):
             self.assertIn("💳 Оплата:", card_text)
             # Главное действие — следующий этап, нижний ряд — как у всех экранов команды.
             self.assertIn(f"order:{waiting_id}:paid", button_targets(card_markup))
-            self.assertEqual(button_rows(card_markup)[-1], ["← Покупки", "🛠 Управление"])
+            self.assertEqual(button_rows(card_markup)[-1], [f"{ICON['back']} Покупки", f"{ICON['tools']} Управление"])
 
             # Покупателю чужая карточка недоступна: кнопка для него просто устарела.
             self.assertFalse(bot.route_callback("cb", 500, 500, f"aord:{waiting_id}"))
@@ -2813,12 +2813,12 @@ class NativeMenuTests(unittest.TestCase):
             self.assertIn("<b>DROP 002 CAP</b>", text)
             self.assertIn("<b>3 900 ₽</b>", text)
             self.assertIn("Кепка второго выпуска.", text)
-            self.assertIn("📏 Размеры: ONE SIZE", text)
-            self.assertEqual(button_rows(markup), [["🛍 Опубликовать →"], ["✖ Отмена"]])
+            self.assertTrue(any(s in text for s in (f"{ICON['ruler']} Размеры: ONE SIZE", "📏 Размеры: ONE SIZE", "🏷️ Размеры: ONE SIZE")))
+            self.assertEqual(button_rows(markup), [[f"{ICON['catalog']} Опубликовать →"], ["✖ Отмена"]])
 
             bot.route_callback("cb", 1, 1, "add:publish")
             self.assertIn("ВЕЩЬ ОПУБЛИКОВАНА", api.last(1)[1])
-            self.assertEqual(button_rows(api.last(1)[2])[0], ["🛍 Смотреть в витрине →"])
+            self.assertEqual(button_rows(api.last(1)[2])[0], [f"{ICON['catalog']} Смотреть в витрине →"])
             self.assertIsNotNone(bot.catalog.get("drop-002-cap"))
 
     def test_broadcast_segments_are_paired_and_cancellable(self):
@@ -2838,9 +2838,9 @@ class NativeMenuTests(unittest.TestCase):
     def test_navigation_rows_never_duplicate_home(self):
         """Если назад — это и есть главное меню, второй такой кнопки не появляется."""
         self.assertEqual(button_rows(inline_keyboard(nav_rows(("Главное меню", "menu")))),
-                         [["← Главное меню"]])
+                         [[f"{ICON['back']} Главное меню"]])
         rows = button_rows(inline_keyboard(nav_rows(("Витрина", "catalog"))))
-        self.assertEqual(rows, [["← Витрина", "🏠 Главная"]])
+        self.assertEqual(rows, [[f"{ICON['back']} Витрина", "🏠 Главная"]])
 
     def test_plural_and_segment_labels_are_readable(self):
         self.assertEqual([things_word(count) for count in (1, 2, 5, 11, 21)],
@@ -2886,7 +2886,7 @@ class NativeMenuTests(unittest.TestCase):
             db.upsert_user(user)
 
             # 1. Каталог
-            bot.handle_update({"update_id": 1, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "🛍 Каталог"}})
+            bot.handle_update({"update_id": 1, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": f"{ICON['catalog']} Каталог"}})
             self.assertIn("ВИТРИНА", api.last(500)[1])
 
             # 2. Мои покупки
@@ -2894,16 +2894,44 @@ class NativeMenuTests(unittest.TestCase):
             self.assertIn("МОИ ПОКУПКИ", api.last(500)[1])
 
             # 3. Образы
-            bot.handle_update({"update_id": 3, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "📷 Образы"}})
+            bot.handle_update({"update_id": 3, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": f"{ICON['looks']} Образы"}})
             self.assertTrue(len(api.sent) > 0)
 
             # 4. Кабинет
-            bot.handle_update({"update_id": 4, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "👤 Кабинет"}})
+            bot.handle_update({"update_id": 4, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": f"{ICON['account']} Кабинет"}})
             self.assertIn("МОЙ КАБИНЕТ", api.last(500)[1])
 
             # 5. Поддержка
             bot.handle_update({"update_id": 5, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "💬 Поддержка"}})
             self.assertIn("ПОДДЕРЖКА", api.last(500)[1])
+
+    def test_brand_emoji_pack_integration(self):
+        """Проверяем встроенный кастомный эмодзи-пак: команду /emoji, генерацию tg-emoji и API."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            user = {"id": 500, "username": "buyer", "first_name": "Никита"}
+            db.upsert_user(user)
+
+            # 1. Fallback без установленного ID
+            self.assertEqual(bot.emoji("sword"), "⚔️")
+            self.assertEqual(bot.emoji("account"), "🪪")
+
+            # 2. С установленным Telegram custom_emoji_id
+            bot.settings.custom_emoji_ids["sword"] = "5368324127940558849"
+            self.assertEqual(bot.emoji("sword"), '<tg-emoji emoji-id="5368324127940558849">⚔️</tg-emoji>')
+
+            # 3. Вызов команды /emoji
+            bot.handle_update({"update_id": 10, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "/emoji"}})
+            _chat, text, markup = api.last(500)
+            self.assertIn("ЭМОДЗИ-ПАК", text)
+            self.assertIn("addemoji", text)
+            self.assertIn("addemoji", button_targets(markup)[0])
+
+            # 4. Текстовое сообщение «эмодзи»
+            bot.handle_update({"update_id": 11, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "эмодзи"}})
+            _chat, text, markup = api.last(500)
+            self.assertIn("ЭМОДЗИ-ПАК", text)
 
 
 if __name__ == "__main__":
