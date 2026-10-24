@@ -45,5 +45,23 @@ jobs:
         run: python tools/validate_release.py
       - name: Syntax and whitespace
         run: |
-          python -m py_compile bot.py payments.py smoke_test.py test_bot.py test_regressions.py
+          python -m py_compile bot.py payments.py smoke_test.py test_bot.py test_regressions.py tools/container_smoke.py
           git diff --check
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+          sparse-checkout: |
+            miniapp
+            tools
+      - name: Build runtime image
+        run: docker build --tag vorozhbitov-shop:ci .
+      - name: Smoke test without external network
+        run: >-
+          docker run --rm --network none
+          --volume "$PWD/tools/container_smoke.py:/tmp/container_smoke.py:ro"
+          vorozhbitov-shop:ci python /tmp/container_smoke.py

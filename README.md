@@ -254,7 +254,7 @@ python3 tools/validate_release.py                 # каталог и сущес
 python3 tools/menu_preview.py --serve 8099        # те же экраны в виде чата, без токена бота
 ```
 
-Тот же набор запускается в `.github/workflows/test.yml`. Локальный headless Chromium дополнительно проверен на viewport 320/390/1440 px: горизонтального переполнения и JS page errors нет; это не заменяет проверку в реальных Telegram iOS/Android WebView.
+Тот же набор запускается в `.github/workflows/test.yml`. Отдельный container job собирает runtime-образ на Python 3.13 и без внешней сети проверяет внутри него `/health`, `/api/catalog`, тёмную статику и emoji-ассеты. Локальный headless Chromium дополнительно проверен на viewport 320/390/1440 px: горизонтального переполнения и JS page errors нет; это не заменяет проверку в реальных Telegram iOS/Android WebView.
 
 ## Перед боевым запуском
 
