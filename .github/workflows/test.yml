@@ -67,3 +67,27 @@ jobs:
           docker run --rm --network none
           --volume "$PWD/tools/container_smoke.py:/tmp/container_smoke.py:ro"
           vorozhbitov-shop:ci python /tmp/container_smoke.py
+
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+          sparse-checkout: |
+            miniapp
+            tools
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install Playwright (drives the runner's Chrome via channel)
+        run: npm install --no-save playwright
+      - name: Browser regressions against the preview server
+        run: |
+          python preview_server.py &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:4173/api/catalog >/dev/null && break; sleep 1; done
+          node tools/check_ui.cjs

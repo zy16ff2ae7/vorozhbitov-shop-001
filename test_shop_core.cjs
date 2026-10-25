@@ -49,3 +49,24 @@ test('catalog count has correct Russian forms', () => {
   assert.equal(core.productCount(11), '11 ВЕЩЕЙ');
   assert.equal(core.productCount(21), '21 ВЕЩЬ');
 });
+
+test('size recommendation follows the published guide and fit preference', () => {
+  const sizes = ['S','M','L','XL','XXL'];
+  assert.equal(core.recommendSize({height:180, weight:85, fit:'regular'}, sizes).size, 'L');
+  assert.equal(core.recommendSize({height:180, weight:85, fit:'oversize'}, sizes).size, 'XL');
+  assert.equal(core.recommendSize({height:180, weight:85, fit:'close'}, sizes).size, 'M');
+  assert.equal(core.recommendSize({height:172, weight:68, fit:'regular'}, sizes).size, 'S');
+  assert.equal(core.recommendSize({height:180, weight:85, fit:'regular'}, ['S','XL']).size, 'XL');
+  assert.equal(core.recommendSize({height:20, weight:85}, sizes), null);
+  assert.equal(core.recommendSize({height:'x', weight:85}, sizes), null);
+});
+
+test('club streak survives until the end of today and ranks by completed days', () => {
+  const dates = ['2026-10-23','2026-10-24','2026-10-25'];
+  assert.equal(core.clubStreak(dates, '2026-10-25'), 3);
+  assert.equal(core.clubStreak(dates, '2026-10-26'), 3);
+  assert.equal(core.clubStreak(dates, '2026-10-27'), 0);
+  assert.equal(core.clubRank(0).label, 'НОВИЧОК');
+  assert.equal(core.clubRank(3).label, 'БОЕЦ');
+  assert.equal(core.clubRank(7).label, 'СВОЙ');
+});

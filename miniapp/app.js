@@ -7,6 +7,7 @@
     channel_url: "https://t.me/+XufFz8GGR0o3Njky",
     privacy_url: "",
     media: { welcome_motion: false },
+    drop_event: {}, film: [], club: {}, community: [],
     categories: [], products: []
   };
 
@@ -44,7 +45,16 @@
     toastTimer: null,
     modalStack: [],
     viewer: null,
-    stage: "3d"
+    stage: "3d",
+    profileOrders: [],
+    club: loadJSON("vorozhbitov_club", { joined: false, started_on: "", checkins: [], total: 0, completed: false, early_access: false }),
+    clubSource: "local",
+    clubBusy: false,
+    fitChoice: "regular",
+    filmIndex: 0,
+    filmTimer: null,
+    ownerOrder: null,
+    dropTimer: null
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -104,7 +114,7 @@
   }
 
   function imageFor(product) {
-    return imagesFor(product)[0];
+    return product.card_image || imagesFor(product)[0];
   }
 
   function productById(id) {
@@ -173,13 +183,14 @@
   function renderProfileOrders(orders, source) {
     const box = $("#profileOrders");
     if (!box) return;
+    state.profileOrders = Array.isArray(orders) ? orders : [];
     if (!orders.length) {
       box.innerHTML = source === "bot"
         ? `<p class="profile-empty">Заказов пока нет. Здесь появятся заказы, зарегистрированные магазином.</p>`
         : `<p class="profile-empty">Открой витрину из Telegram: здесь будут реальные заказы, способ оплаты и этапы доставки.</p>`;
       return;
     }
-    box.innerHTML = `<p class="profile-caption">Заказы</p>` + orders.map(row => {
+    box.innerHTML = `<p class="profile-caption">Заказы</p>` + orders.map((row, orderIndex) => {
       const status = row.status || "new";
       const when = formatOrderWhen(row.created_at || row.at);
       const size = row.size ? ` · размер ${row.size}` : "";
@@ -190,6 +201,7 @@
       const cancel = row.can_cancel
         ? `<button type="button" class="profile-order-cancel" data-cancel-order="${Number(row.id)}">Отменить заказ</button>`
         : "";
+      const ownerCard = `<button type="button" class="profile-order-pay profile-order-card" data-owner-card="${orderIndex}">Карта владельца</button>`;
       const address = [row.city, row.address, row.entrance].map(value => String(value || "").trim()).filter(Boolean).join(" · ");
       const giftSerial = row.gift && row.gift.serial_label ? ` · №${row.gift.serial_label}` : "";
       return `<article class="profile-order" data-status="${escapeHTML(status)}">
@@ -207,7 +219,7 @@
         </div>
         <div class="profile-order-side">
           <span class="profile-order-status is-${escapeHTML(status)}">${escapeHTML(row.status_label || status)}</span>
-          ${pay}${cancel}
+          ${pay}${cancel}${ownerCard}
         </div>
       </article>`;
     }).join("");
@@ -382,6 +394,7 @@
       pauseProductVideo();
     }
     if (id === "payModal") stopPayPoll();
+    if (id === "filmModal") stopFilm();
     syncModalLayers();
     const previous = state.modalFocus.get(id);
     state.modalFocus.delete(id);
@@ -434,6 +447,7 @@
 
   function setStage(mode, silent) {
     if (mode === "video" && (!state.currentProduct || !state.currentProduct.video)) mode = "photo";
+    if (mode === "3d" && (!state.currentProduct || !Array.isArray(state.currentProduct.spin) || state.currentProduct.spin.length < 2)) mode = "photo";
     state.stage = mode;
     const canvas = $("#view3d");
     const photo = $("#sheetImage");
@@ -503,8 +517,8 @@
       <div class="product-image">
         <img src="${escapeHTML(imageFor(product))}" alt="${escapeHTML(product.name)}" ${index === 0 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>
         <span class="product-badge">${escapeHTML(product.badge || "БАЗА")}</span>
-        ${Array.isArray(product.spin) && product.spin.length > 1 ? '<span class="badge-3d">360°</span>' : '<span class="badge-3d">ФОТО</span>'}
-        <span class="product-hover">РАССМОТРЕТЬ <b>↗</b></span>
+        ${Array.isArray(product.spin) && product.spin.length > 1 ? '<span class="badge-3d">ВРАЩЕНИЕ 360°</span>' : `<span class="badge-3d">${imagesFor(product).length} ФОТО</span>`}
+        <span class="product-hover">ОТКРЫТЬ КАРТОЧКУ <b>↗</b></span>
       </div>
       <div class="product-info">
         <div class="product-topline"><span>${escapeHTML(categoryName(product.category))}</span><span class="product-stock">${escapeHTML(product.stock_label || "В наличии")}</span></div>
@@ -608,10 +622,14 @@
     const productVideo = $("#sheetVideo");
     pauseProductVideo();
     $("#stageVideo").classList.toggle("hidden", !product.video);
+    $("#stage3d").classList.toggle("hidden", !Array.isArray(product.spin) || product.spin.length < 2);
+    const sourceTurnVideo = String(product.video || "").includes("front-to-back");
+    $("#sheetVideo").classList.toggle("sheet-video-portrait", String(product.video || "").includes("concrete"));
+    $("#sheetVideo").classList.toggle("sheet-video-source", sourceTurnVideo);
     if (product.video) {
       if (productVideo.getAttribute("src") !== product.video) productVideo.src = product.video;
-      productVideo.poster = product.image || "";
-      productVideo.setAttribute("aria-label", `${product.name} — предметный 360°-видеообзор без звука`);
+      productVideo.poster = product.card_image || product.image || "";
+      productVideo.setAttribute("aria-label", sourceTurnVideo ? `${product.name} — исходное видео модели от переда к спине, без звука` : `${product.name} — видеообзор исходных видов без звука`);
     } else {
       productVideo.removeAttribute("src");
       productVideo.removeAttribute("poster");
@@ -631,6 +649,7 @@
     $("#waitlistButton").classList.toggle("hidden", gift);
     $("#sheetDescription").textContent = product.description;
     $("#sheetFacts").innerHTML = `<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Плотный хлопок")}</span></div><div class="fact-row"><span>Посадка</span><span>${escapeHTML(product.fit || "Свободная")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(product.stock_label || "В наличии")}</span></div>`;
+    renderPassport(product);
     $("#sizeList").innerHTML = (product.sizes || []).map(size => `<button class="size-button ${state.selectedSize === size ? "selected" : ""}" data-size="${escapeHTML(size)}" aria-pressed="${state.selectedSize === size}" type="button">${escapeHTML(size)}</button>`).join("");
     const initialAdvice = state.selectedSize ? SIZE_ADVICE[state.selectedSize.toUpperCase()] : null;
     $("#sizeHint").textContent = state.selectedSize ? (initialAdvice ? `Размер ${state.selectedSize}: ${initialAdvice}.` : `Размер ${state.selectedSize} выбран.`) : "Выбери размер.";
@@ -644,7 +663,10 @@
     }
     const guide = $("#sizeGuide");
     if (guide) guide.classList.add("hidden");
-    $("#sheetDetails").innerHTML = `<strong>ДЕТАЛИ</strong><br>${(product.details || []).map(escapeHTML).join(" · ")}${product.media_note ? `<p class="media-note">${escapeHTML(product.media_note)}</p>` : ""}`;
+    resetFitFinder(product);
+    $("#sheetDetails").innerHTML = product.media_note
+      ? `<strong>ЧЕСТНО О МЕДИА</strong><p class="media-note">${escapeHTML(product.media_note)}</p>`
+      : "";
     renderPersonalization(product);
     sheetProduct = product;
     drawPersonPreview();
@@ -724,6 +746,8 @@
     const product = state.currentProduct;
     if (!product) return;
     if (!Core.buyable(product)) return showToast("Жетон не продаётся отдельно — добавим его к заказу бесплатно.");
+    const dropGate = dropPurchaseGate();
+    if (dropGate) { showToast(dropGate); haptic("error"); return; }
     if (!state.selectedSize) {
       $("#sizeHint").textContent = "Сначала выбери размер.";
       $(".size-block").scrollIntoView({block:"center", behavior:reducedMotion() ? "instant" : "smooth"});
@@ -926,7 +950,13 @@
     payWatchId = paymentId || "";
     const initData = tg && tg.initData;
     if (!payWatchId || !initData) return;
+    let attempts = 0;
     payPollTimer = setInterval(async () => {
+      // Do not burn battery/traffic while hidden, and stop after ~10 minutes:
+      // the invoice stays payable from «Мои покупки».
+      if (document.hidden) return;
+      attempts += 1;
+      if (attempts > 150) { stopPayPoll(); return; }
       try {
         const response = await fetch("/api/my-orders", {
           headers: { Accept: "application/json", "X-Telegram-Init-Data": initData }
@@ -1037,6 +1067,8 @@
       showToast("Проверь недоступные позиции в корзине.");
       return null;
     }
+    const dropGate = dropPurchaseGate();
+    if (dropGate) { showToast(dropGate); return null; }
     const name = $("#checkoutName").value.trim();
     const phone = $("#checkoutPhone").value.trim();
     const city = $("#checkoutCity").value.trim();
@@ -1196,6 +1228,7 @@
       stopWelcomeVideo();
       syncModalLayers();
       syncMainButton();
+      maybeOpenFilmOnce();
     }, reducedMotion() ? 0 : 350);
   }
 
@@ -1248,6 +1281,10 @@
       applyMedia();
       renderCategoryChips();
       renderProducts();
+      renderDropEvent();
+      renderCommunity();
+      renderClub();
+      loadClubState();
       if (state.modalStack.includes("cartModal")) renderCart();
     } catch (_) {
       $("#catalogError").classList.remove("hidden");
@@ -1266,7 +1303,7 @@
     const media = (state.data && state.data.media) || {};
     return {
       welcomeLoop: media.welcome_motion === false ? "" : (media.welcome_loop || "assets/video/welcome-no-intro-22s.mp4"),
-      welcomePoster: media.welcome_poster || "assets/drop/hero-sila-chest-v2.jpg"
+      welcomePoster: media.welcome_poster || "assets/drop/tee-real-8272.jpg"
     };
   }
 
@@ -1284,6 +1321,9 @@
   function applyMedia() {
     const media = mediaConfig();
     if (state.data.media && state.data.media.hero_image) $("#heroFallback").src = state.data.media.hero_image;
+    if (state.data.media && state.data.media.hero_background && $("#heroBackground")) $("#heroBackground").src = state.data.media.hero_background;
+    if (state.data.media && state.data.media.hero_subject && $("#heroSubject")) $("#heroSubject").src = state.data.media.hero_subject;
+    syncHeroPoster();
     setupWelcomeVideo(media);
     // Тираж на заставке берём из каталога, а не пишем руками.
     const stock = $("#welcomeStock");
@@ -1517,6 +1557,748 @@
     img.src = "assets/spin/tag-sich-01-v3.jpg";
   }
 
+  /* --- Живой постер 001: реальные слои одного исходного фото --- */
+
+  function syncHeroPoster() {
+    const media = $("#heroMedia");
+    const bg = $("#heroBackground");
+    const subject = $("#heroSubject");
+    if (!media || !bg || !subject) return;
+    const ready = image => image && image.complete && image.naturalWidth > 0;
+    const update = () => media.classList.toggle("poster-ready", ready(bg) && ready(subject));
+    [bg, subject].forEach(image => {
+      if (!image.dataset.posterBound) {
+        image.dataset.posterBound = "1";
+        image.addEventListener("load", update);
+        image.addEventListener("error", update);
+      }
+    });
+    update();
+  }
+
+  function setupHeroParallax() {
+    const media = $("#heroMedia");
+    if (!media || media.dataset.parallaxBound) return;
+    media.dataset.parallaxBound = "1";
+    let frame = 0;
+    const apply = (x, y) => {
+      media.style.setProperty("--poster-bg-x", `${(-x * 7).toFixed(2)}px`);
+      media.style.setProperty("--poster-bg-y", `${(-y * 5).toFixed(2)}px`);
+      media.style.setProperty("--poster-type-x", `${(-x * 3).toFixed(2)}px`);
+      media.style.setProperty("--poster-type-y", `${(-y * 2).toFixed(2)}px`);
+      media.style.setProperty("--poster-subject-x", `${(x * 3.5).toFixed(2)}px`);
+      media.style.setProperty("--poster-subject-y", `${(y * 2.2).toFixed(2)}px`);
+    };
+    const fromScroll = () => {
+      frame = 0;
+      if (reducedMotion()) return;
+      const rect = media.getBoundingClientRect();
+      const progress = Math.max(-1, Math.min(1, (window.innerHeight / 2 - (rect.top + rect.height / 2)) / Math.max(1, window.innerHeight / 2)));
+      apply(0, progress);
+    };
+    const queueScroll = () => { if (!frame) frame = window.requestAnimationFrame(fromScroll); };
+    window.addEventListener("scroll", queueScroll, { passive: true });
+    window.addEventListener("resize", queueScroll, { passive: true });
+    media.addEventListener("pointermove", event => {
+      if (reducedMotion() || event.pointerType === "touch") return;
+      const rect = media.getBoundingClientRect();
+      const x = Math.max(-1, Math.min(1, ((event.clientX - rect.left) / rect.width - 0.5) * 2));
+      const y = Math.max(-1, Math.min(1, ((event.clientY - rect.top) / rect.height - 0.5) * 2));
+      apply(x, y);
+    }, { passive: true });
+    media.addEventListener("pointerleave", queueScroll);
+    queueScroll();
+  }
+
+  /* --- Дроп как событие: режим из дат каталога и живого наличия --- */
+
+  function dropMode(now = new Date()) {
+    const event = (state.data && state.data.drop_event) || {};
+    const starts = event.starts_at ? new Date(event.starts_at) : null;
+    const earlyStarts = event.early_starts_at ? new Date(event.early_starts_at) : null;
+    const ends = event.ends_at ? new Date(event.ends_at) : null;
+    const valid = date => date && !Number.isNaN(date.getTime());
+    const earlyMember = normalizeClubState(state.club).early_access;
+    const products = (state.data.products || []).filter(product => Core.buyable(product));
+    const live = products.filter(product => Core.available(product));
+    const base = { event, starts, earlyStarts, ends, products, live, earlyMember, target: starts };
+    // A non-empty but unparsable drop date closes the gate (server does the same).
+    if ([starts, earlyStarts, ends].some(date => date && Number.isNaN(date.getTime()))) return { ...base, id: "ended", broken: true };
+    if (valid(ends) && now > ends) return { ...base, id: "ended" };
+    if (valid(starts) && now < starts) {
+      if (earlyMember && valid(earlyStarts) && now >= earlyStarts) return { ...base, id: "early", target: starts };
+      return { ...base, id: "pre", target: earlyMember && valid(earlyStarts) && now < earlyStarts ? earlyStarts : starts };
+    }
+    if (state.catalogReady && products.length && !live.length) return { ...base, id: "soldout" };
+    return { ...base, id: "live" };
+  }
+
+  function dropPurchaseGate() {
+    if (!state.catalogReady) return "";
+    const mode = dropMode();
+    if (mode.id === "pre") {
+      return mode.earlyMember
+        ? "Раннее окно ещё не открылось. Таймер — в блоке дропа выше."
+        : "Дроп ещё не открыт. Ранний доступ — у участников клуба, закрывших все 7 дней.";
+    }
+    if (mode.id === "ended") return mode.broken ? "Дроп временно недоступен. Напиши менеджеру." : "Дроп закрыт. Этот выпуск завершён.";
+    return "";
+  }
+
+  function formatCountdown(target, now = new Date()) {
+    const totalSeconds = Math.max(0, Math.floor((target.getTime() - now.getTime()) / 1000));
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const pair = value => String(value).padStart(2, "0");
+    return days > 0 ? `${days} Д · ${pair(hours)}:${pair(minutes)}:${pair(seconds)}` : `${pair(hours)}:${pair(minutes)}:${pair(seconds)}`;
+  }
+
+  function renderDropEvent() {
+    const root = $("#dropEvent");
+    if (!root) return;
+    const mode = dropMode();
+    const title = $("#dropEventTitle");
+    const text = $("#dropEventText");
+    const timer = $("#dropEventTimer");
+    const stats = $("#dropEventStats");
+    const button = $("#dropEventButton");
+    root.classList.remove("is-pre", "is-early", "is-live", "is-soldout", "is-ended");
+    root.classList.add(`is-${mode.id}`);
+    if ($("#dropEventKicker")) $("#dropEventKicker").textContent = `001 / ${String(mode.event.title || "СОБЫТИЕ").toUpperCase()}`;
+    window.clearInterval(state.dropTimer);
+    state.dropTimer = null;
+    if (mode.id === "pre") {
+      title.textContent = "СКОРО ОТКРОЕМ";
+      text.textContent = mode.earlyMember
+        ? "Твоё раннее окно откроется первым — таймер ниже. До него покупку держит сервер."
+        : "Ранний доступ — участникам клуба дисциплины, закрывшим все 7 дней. Остальным — по общему таймеру.";
+      timer.classList.remove("hidden");
+      const tick = () => { timer.textContent = formatCountdown(mode.target); if (new Date() >= mode.target) renderDropEvent(); };
+      tick();
+      state.dropTimer = window.setInterval(tick, 1000);
+      button.textContent = mode.earlyMember ? "СМОТРЕТЬ ВИТРИНУ" : "В КЛУБ ЗА РАННИМ ДОСТУПОМ";
+      button.onclick = () => scrollToId(mode.earlyMember ? "catalog" : "club");
+    } else if (mode.id === "early") {
+      title.textContent = "РАННИЙ ДОСТУП ОТКРЫТ";
+      text.textContent = "Ты закрыл все 7 дней клуба. Для всех остальных дроп откроется по таймеру.";
+      timer.classList.remove("hidden");
+      const tick = () => { timer.textContent = formatCountdown(mode.starts); if (new Date() >= mode.starts) renderDropEvent(); };
+      tick();
+      state.dropTimer = window.setInterval(tick, 1000);
+      button.textContent = "К ВЕЩАМ ПЕРВЫМ";
+      button.onclick = () => scrollToId("catalog");
+    } else if (mode.id === "soldout") {
+      title.textContent = "РАЗМЕРЫ ЗАКОНЧИЛИСЬ";
+      text.textContent = "Открой вещь и нажми «Ждать размер» — напишем в Telegram, когда вернётся.";
+      timer.classList.add("hidden");
+      button.textContent = "ЖДАТЬ РАЗМЕР";
+      button.onclick = () => scrollToId("catalog");
+    } else if (mode.id === "ended") {
+      title.textContent = mode.broken ? "ДРОП НА ПАУЗЕ" : "ДРОП ЗАКРЫТ";
+      text.textContent = mode.broken
+        ? "Даты дропа уточняются. Напиши менеджеру — подскажет, когда откроем."
+        : "Этот выпуск завершён. Следующий сначала увидят участники клуба.";
+      timer.classList.add("hidden");
+      button.textContent = "В КЛУБ";
+      button.onclick = () => scrollToId("club");
+    } else {
+      title.textContent = "ДРОП ОТКРЫТ";
+      text.textContent = mode.event.note || "Статус и размеры берутся из живого каталога — без придуманных остатков.";
+      timer.classList.add("hidden");
+      button.textContent = "К ВЕЩАМ";
+      button.onclick = () => scrollToId("catalog");
+    }
+    const sizeCount = new Set(mode.live.flatMap(product => product.sizes || [])).size;
+    const modeLabel = { pre: "Скоро", early: "Ранний доступ", live: "Открыт", soldout: "Нет размеров", ended: "Закрыт" }[mode.id] || mode.id;
+    stats.innerHTML = state.catalogReady
+      ? `<span>ВЕЩЕЙ ДОСТУПНО <b>${mode.live.length}</b></span><span>РАЗМЕРОВ <b>${sizeCount}</b></span><span>РЕЖИМ <b>${modeLabel}</b></span>`
+      : `<span>ЗАГРУЖАЕМ ЖИВОЙ КАТАЛОГ…</span>`;
+  }
+
+  /* --- Паспорт вещи: только факты из каталога и честный статус медиа --- */
+
+  function pluralRu(count, one, few, many) {
+    const mod10 = count % 10, mod100 = count % 100;
+    if (mod10 === 1 && mod100 !== 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+    return many;
+  }
+
+  function passportMediaLine(product) {
+    const photos = imagesFor(product).length;
+    const spin = Array.isArray(product.spin) ? product.spin.length : 0;
+    if (product.id === "tee-odin-v-pole-voin" && spin > 1) {
+      return `${spin} ${pluralRu(spin, "исходный ракурс", "исходных ракурса", "исходных ракурсов")} · полный подтверждённый оборот 360°`;
+    }
+    if (String(product.video || "").includes("front-to-back")) {
+      return `${photos} фото · исходное видео «перед → спина», не полный 360°`;
+    }
+    if (spin > 1) return `${photos} фото · ${spin} ${pluralRu(spin, "ракурс", "ракурса", "ракурсов")} в обзоре`;
+    return `${photos} фото · полного 360° у этой модели не заявляем`;
+  }
+
+  function cleanPassportDetail(item) {
+    // В каталоге детали могут начинаться с эмодзи — в паспорте нужен только текст,
+    // иначе на устройствах без эмодзи-шрифта появляется битый глиф.
+    return String(item || "").replace(/^[^\p{L}\p{N}«"—-]+/u, "").trim();
+  }
+
+  function renderPassport(product) {
+    const body = $("#passportBody");
+    if (!body || !product) return;
+    if ($("#passportCode")) $("#passportCode").textContent = String(product.badge || "001").toUpperCase();
+    const details = (Array.isArray(product.details) ? product.details : []).map(cleanPassportDetail).filter(Boolean).slice(0, 8);
+    // Материал, посадка и статус уже стоят строкой фактов выше — не дублируем их в паспорте.
+    body.innerHTML = `
+      <div class="passport-row"><span>МЕДИА</span><span>${escapeHTML(passportMediaLine(product))}</span></div>
+      ${details.length ? `<div class="passport-row"><span>ДЕТАЛИ</span><ul class="passport-details">${details.map(item => `<li>${escapeHTML(item)}</li>`).join("")}</ul></div>` : ""}
+      ${product.signature ? `<div class="passport-row"><span>СЛОВО</span><span>${escapeHTML(product.signature)}</span></div>` : ""}`;
+  }
+
+  function selectSize(size) {
+    if (!size) return;
+    state.selectedSize = size;
+    $$(".size-button", $("#sizeList")).forEach(node => {
+      const active = node.dataset.size === size;
+      node.classList.toggle("selected", active);
+      node.setAttribute("aria-pressed", String(active));
+    });
+    const advice = SIZE_ADVICE[String(size).toUpperCase()];
+    $("#sizeHint").textContent = advice ? `Размер ${size}: ${advice}.` : `Размер ${size} выбран.`;
+    $("#sizeHint").classList.remove("error");
+    updatePurchaseSummary();
+  }
+
+  function savedFit() {
+    const fit = loadJSON("vorozhbitov_fit", {});
+    return fit && typeof fit === "object" ? fit : {};
+  }
+
+  function setFitChoice(choice) {
+    state.fitChoice = ["close", "regular", "oversize"].includes(choice) ? choice : "regular";
+    $$("[data-fit-choice]").forEach(node => {
+      const active = node.dataset.fitChoice === state.fitChoice;
+      node.classList.toggle("active", active);
+      node.setAttribute("aria-pressed", String(active));
+    });
+  }
+
+  function resetFitFinder(product) {
+    const finder = $("#fitFinder");
+    if (!finder) return;
+    const apparel = (product.sizes || []).some(size => ["S", "M", "L", "XL", "XXL"].includes(String(size).toUpperCase()));
+    finder.classList.toggle("hidden", !apparel || !Core.buyable(product));
+    const saved = savedFit();
+    if ($("#fitHeight")) $("#fitHeight").value = saved.height || state.profile.height || "";
+    if ($("#fitWeight")) $("#fitWeight").value = saved.weight || "";
+    setFitChoice(saved.fit || "regular");
+    const result = $("#fitResult");
+    if (result) {
+      result.classList.remove("error");
+      result.textContent = "Подберём по опубликованной таблице и сразу выберем размер выше.";
+    }
+  }
+
+  function recommendFit() {
+    const product = state.currentProduct;
+    const result = $("#fitResult");
+    if (!product || !result) return;
+    const height = Number($("#fitHeight") && $("#fitHeight").value);
+    const weight = Number($("#fitWeight") && $("#fitWeight").value);
+    const found = Core.recommendSize({ height, weight, fit: state.fitChoice }, product.sizes || []);
+    if (!found) {
+      result.classList.add("error");
+      result.textContent = "Проверь рост и вес: нужны числа в разумных пределах.";
+      haptic("error");
+      return;
+    }
+    saveJSON("vorozhbitov_fit", { height: String(height), weight: String(weight), fit: state.fitChoice });
+    if (state.profile) {
+      state.profile.size = found.size;
+      state.profile.height = String(height);
+      saveJSON("vorozhbitov_profile", state.profile);
+    }
+    selectSize(found.size);
+    const fitLabel = state.fitChoice === "close" ? "плотнее" : state.fitChoice === "oversize" ? "свободнее" : "обычная посадка";
+    result.classList.remove("error");
+    result.innerHTML = found.between
+      ? `Ты между <strong>${escapeHTML(found.size)}</strong> и <strong>${escapeHTML(found.between)}</strong>. Выбрали ${escapeHTML(found.size)}; хочешь свободнее — бери ${escapeHTML(found.between)}.`
+      : `Твой размер: <strong>${escapeHTML(found.size)}</strong> · ${fitLabel}. Уже выбрали его выше.`;
+    haptic("success");
+    $("#sizeList")?.scrollIntoView({ block: "center", behavior: reducedMotion() ? "instant" : "smooth" });
+  }
+
+  /* --- Фильм первого дропа: только реальные фото и видео из каталога --- */
+
+  function filmScenes() {
+    const raw = Array.isArray(state.data.film) ? state.data.film : [];
+    const scenes = raw.filter(scene => scene && (typeof scene.image === "string" || typeof scene.video === "string")).map(scene => ({
+      image: typeof scene.image === "string" ? scene.image : "",
+      video: typeof scene.video === "string" ? scene.video : "",
+      poster: typeof scene.poster === "string" ? scene.poster : "",
+      kicker: String(scene.kicker || "ФИЛЬМ ДРОПА"),
+      title: String(scene.title || "ПЕРВЫЙ ДРОП"),
+      text: String(scene.text || ""),
+      product_id: scene.product_id && productById(scene.product_id) ? scene.product_id : "",
+      cta: scene.cta === "catalog" ? "catalog" : ""
+    }));
+    if (scenes.length) return scenes;
+    return (state.data.lookbook || []).filter(item => item && item.image).map((item, index) => ({
+      image: item.image, video: "", poster: "", product_id: "", cta: index === (state.data.lookbook || []).length - 1 ? "catalog" : "",
+      kicker: `0${index + 1} / ПЕРВЫЙ ДРОП`, title: String(item.caption || "СИЛА И ЧЕСТЬ"), text: "Реальное фото из каталога."
+    }));
+  }
+
+  function stopFilm() {
+    window.clearTimeout(state.filmTimer);
+    state.filmTimer = null;
+    const video = $("#filmVideo");
+    if (video) video.pause();
+  }
+
+  function closeFilm() {
+    stopFilm();
+    closeModal("filmModal");
+  }
+
+  function showFilmScene(index) {
+    const scenes = filmScenes();
+    if (!scenes.length) { closeFilm(); return; }
+    if (index >= scenes.length) { closeFilm(); scrollToId("catalog"); return; }
+    state.filmIndex = Math.max(0, index);
+    const scene = scenes[state.filmIndex];
+    const image = $("#filmImage");
+    const video = $("#filmVideo");
+    const useVideo = Boolean(scene.video && !saverMode());
+    window.clearTimeout(state.filmTimer);
+    if (useVideo) {
+      image.classList.add("hidden");
+      video.classList.remove("hidden");
+      if (video.getAttribute("src") !== scene.video) video.src = scene.video;
+      video.poster = scene.poster || scene.image || "";
+      const playback = video.play();
+      if (playback && typeof playback.catch === "function") playback.catch(() => { /* poster stays visible */ });
+    } else {
+      video.pause();
+      video.classList.add("hidden");
+      image.classList.remove("hidden");
+      image.src = scene.image || scene.poster || "";
+      image.alt = `${scene.title} — реальное медиа из каталога`;
+      image.classList.toggle("contain", /product-proof|\/spin\//.test(image.src));
+    }
+    $("#filmKicker").textContent = scene.kicker;
+    $("#filmTitle").textContent = scene.title;
+    $("#filmText").textContent = scene.text;
+    $("#filmCounter").textContent = `${String(state.filmIndex + 1).padStart(2, "0")} / ${String(scenes.length).padStart(2, "0")}`;
+    $("#filmProduct").classList.toggle("hidden", !scene.product_id);
+    $("#filmCatalog").classList.toggle("hidden", scene.cta !== "catalog");
+    const progress = $("#filmProgress");
+    const sceneIndex = state.filmIndex;
+    const scheduleAdvance = ms => {
+      progress.style.setProperty("--film-duration", `${ms}ms`);
+      progress.innerHTML = scenes.map((_, i) => `<span class="${i < sceneIndex ? "done" : i === sceneIndex ? "current" : ""}"><i></i></span>`).join("");
+      window.clearTimeout(state.filmTimer);
+      if (!reducedMotion()) {
+        state.filmTimer = window.setTimeout(() => {
+          if (state.filmIndex === sceneIndex && state.modalStack.at(-1) === "filmModal" && !document.hidden) showFilmScene(sceneIndex + 1);
+        }, ms);
+      }
+    };
+    // Video scenes run for the real clip length, not a guessed constant.
+    if (useVideo && Number.isFinite(video.duration) && video.duration > 0) {
+      scheduleAdvance(Math.min(30000, Math.max(3000, Math.round(video.duration * 1000))));
+    } else {
+      scheduleAdvance(useVideo ? 9000 : 5200);
+      if (useVideo) {
+        video.addEventListener("loadedmetadata", () => {
+          if (state.filmIndex !== sceneIndex || !Number.isFinite(video.duration) || video.duration <= 0) return;
+          const left = Math.min(30000, Math.max(1200, Math.round((video.duration - (video.currentTime || 0)) * 1000)));
+          scheduleAdvance(left);
+        }, { once: true });
+        video.addEventListener("ended", () => {
+          if (state.filmIndex === sceneIndex && state.modalStack.at(-1) === "filmModal") showFilmScene(sceneIndex + 1);
+        }, { once: true });
+      }
+    }
+    const nextScene = scenes[sceneIndex + 1];
+    if (nextScene && nextScene.image) { const warm = new Image(); warm.src = nextScene.image; }
+  }
+
+  function openStories(index = 0) {
+    const scenes = filmScenes();
+    if (!scenes.length) {
+      showToast("Фильм дропа пока недоступен — каталог ещё грузится.");
+      return;
+    }
+    saveJSON("vorozhbitov_film_seen", (state.data.drop_event && state.data.drop_event.id) || "drop-001");
+    openModal("filmModal");
+    // Программный фокус на кнопке закрытия рисует красное кольцо-«мишень» при автооткрытии.
+    // Оставляем фокус в модалке, но без видимого кольца; Tab-ловушка продолжит работать.
+    const filmClose = $("#filmModal [data-close]");
+    if (filmClose) {
+      try { filmClose.focus({ preventScroll: true, focusVisible: false }); }
+      catch (_) { /* older WebView без focusVisible — обработает строка ниже */ }
+      if (filmClose.matches(":focus-visible")) filmClose.blur();
+    }
+    showFilmScene(index);
+    haptic("light");
+  }
+
+  function maybeOpenFilmOnce() {
+    const seen = loadJSON("vorozhbitov_film_seen", "");
+    const dropId = (state.data.drop_event && state.data.drop_event.id) || "drop-001";
+    if (seen === dropId || !filmScenes().length) return;
+    window.setTimeout(() => {
+      if (!document.body.classList.contains("welcoming") && !state.modalStack.length) openStories(0);
+    }, 650);
+  }
+
+  /* --- Клуб дисциплины: сервер в Telegram, локальный запасной режим в браузере --- */
+
+  const CLUB_FALLBACK_TASKS = [
+    "Тренировка или 30 минут движения. Без отговорок.",
+    "Подъём точно в запланированное время.",
+    "Закрой дело, которое давно откладывал.",
+    "Час полной тишины: без ленты, новостей и лишнего шума.",
+    "Помоги своему человеку делом, а не словами.",
+    "Порядок в форме и вещах: всё на своих местах.",
+    "Подведи итог недели письменно. Что сдержал — то твоё."
+  ];
+
+  function clubConfig() {
+    const config = (state.data && state.data.club) || {};
+    const tasks = Array.isArray(config.tasks) ? config.tasks.filter(task => typeof task === "string" && task.trim()) : [];
+    return {
+      title: String(config.title || "7 ДНЕЙ СЛОВА"),
+      reward: String(config.reward || "Ранний доступ к следующим выпускам для тех, кто закрыл все 7 дней."),
+      tasks: tasks.length >= 7 ? tasks.slice(0, 7) : CLUB_FALLBACK_TASKS
+    };
+  }
+
+  function localDateISO(date = new Date()) {
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+
+  function normalizeClubState(raw) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    const seen = new Set();
+    const checkins = (Array.isArray(source.checkins) ? source.checkins : [])
+      .filter(row => row && /^\d{4}-\d{2}-\d{2}$/.test(String(row.date || "")))
+      .map(row => ({ date: String(row.date), task_index: Math.max(0, Math.min(6, Number(row.task_index) || 0)) }))
+      .filter(row => !seen.has(row.date) && seen.add(row.date))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 7);
+    return {
+      joined: Boolean(source.joined || checkins.length),
+      started_on: typeof source.started_on === "string" ? source.started_on : "",
+      checkins,
+      total: checkins.length,
+      completed: checkins.length >= 7,
+      early_access: checkins.length >= 7,
+      today: /^\d{4}-\d{2}-\d{2}$/.test(String(source.today || "")) ? String(source.today) : ""
+    };
+  }
+
+  function persistClub(raw, source) {
+    state.club = normalizeClubState(raw);
+    state.clubSource = source || state.clubSource || "local";
+    saveJSON("vorozhbitov_club", state.club);
+    renderClub();
+    renderDropEvent();
+  }
+
+  function renderClub() {
+    state.club = normalizeClubState(state.club);
+    const club = state.club;
+    const config = clubConfig();
+    const rank = Core.clubRank(club.total);
+    // Server club days are Europe/Moscow; device-local "today" breaks streaks
+    // for other timezones, so prefer the server date when we have it.
+    const today = state.clubSource === "bot" && club.today ? club.today : localDateISO();
+    const doneToday = club.checkins.some(row => row.date === today);
+    const streak = Core.clubStreak(club.checkins.map(row => row.date), today);
+    const current = Math.min(club.total, 6);
+    if ($("#clubTitle")) {
+      const words = config.title.split(" ");
+      let tail = words.slice(2).join(" ") || "СЛОВА";
+      if (!/[.!]$/.test(tail)) tail += ".";
+      $("#clubTitle").innerHTML = `${escapeHTML(words.slice(0, 2).join(" "))}<br><em>${escapeHTML(tail)}</em>`;
+    }
+    if ($("#clubRank")) $("#clubRank").textContent = `РАНГ: ${rank.label}`;
+    if ($("#clubProgressBar")) $("#clubProgressBar").style.width = `${Math.round((club.total / 7) * 100)}%`;
+    if ($("#clubStreak")) $("#clubStreak").textContent = `Серия: ${streak}`;
+    if ($("#clubTotal")) $("#clubTotal").textContent = `Выполнено: ${club.total} / 7`;
+    if ($("#clubSource")) $("#clubSource").textContent = state.clubSource === "bot" ? "Прогресс сохранён в боте" : "Прогресс на этом устройстве";
+    if ($("#clubTaskDay")) $("#clubTaskDay").textContent = club.completed ? "НЕДЕЛЯ ЗАКРЫТА" : `ДЕНЬ ${String(current + 1).padStart(2, "0")}`;
+    if ($("#clubTaskText")) $("#clubTaskText").textContent = club.completed ? config.reward : config.tasks[current];
+    if ($("#clubDays")) {
+      $("#clubDays").innerHTML = Array.from({ length: 7 }, (_, index) => {
+        const done = index < club.total;
+        const isToday = index === club.total && !club.completed;
+        return `<span class="club-day ${done ? "done" : ""} ${isToday ? "today" : ""}" aria-label="День ${index + 1}${done ? " выполнен" : ""}">${done ? "✓" : index + 1}</span>`;
+      }).join("");
+    }
+    const button = $("#clubAction");
+    if (button) {
+      button.disabled = state.clubBusy || club.completed || doneToday;
+      button.textContent = state.clubBusy ? "СОХРАНЯЮ…"
+        : !club.joined ? "ВСТУПИТЬ В КЛУБ"
+        : club.completed ? "РАНГ «СВОЙ» · РАННИЙ ДОСТУП ОТКРЫТ"
+        : doneToday ? "СЕГОДНЯ СДЕЛАНО ✓"
+        : `СДЕЛАЛ · ДЕНЬ ${current + 1}`;
+    }
+    if ($("#clubNote")) {
+      $("#clubNote").textContent = club.completed ? config.reward
+        : doneToday ? "Сегодня закрыто. Следующее задание — завтра."
+        : state.clubSource === "bot" ? "Отметка сохранится в боте и не потеряется на другом устройстве."
+        : "Из Telegram прогресс сохраняется в боте. В браузере — на этом устройстве.";
+    }
+    if ($("#profileClubRank")) $("#profileClubRank").textContent = `${rank.label} · ${club.total} / 7`;
+    if ($("#profileClubStreak")) $("#profileClubStreak").textContent = club.early_access ? "Ранний доступ открыт" : `Серия: ${streak}`;
+  }
+
+  async function clubApi(action) {
+    const initData = tg && tg.initData;
+    if (!initData) throw new Error("local");
+    const response = await fetch("/api/club", action ? {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json", "X-Telegram-Init-Data": initData },
+      body: JSON.stringify({ action })
+    } : { headers: { Accept: "application/json", "X-Telegram-Init-Data": initData } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.club) throw new Error(payload.error || "club unavailable");
+    return payload.club;
+  }
+
+  async function loadClubState() {
+    renderClub();
+    if (!(tg && tg.initData)) return;
+    try {
+      let serverClub = normalizeClubState(await clubApi(""));
+      // Replay an action that was applied locally while the server was down,
+      // so an offline check-in is not lost on the next online launch.
+      const pending = loadJSON("vorozhbitov_club_pending", "");
+      if (pending === "join" || pending === "checkin") {
+        try {
+          serverClub = normalizeClubState(await clubApi(pending));
+          saveJSON("vorozhbitov_club_pending", "");
+        } catch (_) { /* keep pending for the next launch */ }
+      }
+      // Пустой серверный профиль не должен стирать уже заработанный локальный прогресс.
+      if (serverClub.total === 0 && normalizeClubState(state.club).total > 0) { renderClub(); return; }
+      persistClub(serverClub, "bot");
+    } catch (_) { state.clubSource = "local"; renderClub(); }
+  }
+
+  function localClubApply(action) {
+    const club = normalizeClubState(state.club);
+    const today = localDateISO();
+    if (!club.joined) {
+      club.joined = true;
+      club.started_on = today;
+    }
+    if (action === "checkin" && !club.completed && !club.checkins.some(row => row.date === today)) {
+      club.checkins.push({ date: today, task_index: Math.min(club.total, 6) });
+    }
+    return normalizeClubState(club);
+  }
+
+  async function clubAction() {
+    if (state.clubBusy) return;
+    const before = normalizeClubState(state.club);
+    const action = before.joined ? "checkin" : "join";
+    state.clubBusy = true;
+    renderClub();
+    try {
+      if (tg && tg.initData) persistClub(await clubApi(action), "bot");
+      else persistClub(localClubApply(action), "local");
+      haptic("success");
+      showToast(action === "join" ? "Ты в клубе. День 01 открыт." : state.club.completed ? "Неделя закрыта. Ранг «СВОЙ»." : "День закрыт. Так держать.");
+    } catch (_) {
+      persistClub(localClubApply(action), "local");
+      saveJSON("vorozhbitov_club_pending", action);
+      showToast("Сервер недоступен — сохранил отметку на этом устройстве и досошлю позже.");
+    } finally {
+      state.clubBusy = false;
+      renderClub();
+    }
+  }
+
+  /* --- Свои: только одобренные реальные фото из каталога --- */
+
+  function renderCommunity() {
+    const grid = $("#communityGrid");
+    if (!grid) return;
+    const entries = (Array.isArray(state.data.community) ? state.data.community : [])
+      .filter(item => item && typeof item.image === "string" && item.image);
+    if (!entries.length) {
+      grid.innerHTML = `<div class="community-empty"><span>ПОКА ПУСТО — И ЭТО ЧЕСТНО</span><strong>Стань первым своим.</strong><span>Здесь появятся реальные фото покупателей после проверки и разрешения автора.</span></div>`;
+      return;
+    }
+    grid.innerHTML = entries.map(item => {
+      const product = item.product_id ? productById(item.product_id) : null;
+      const title = String(item.caption || item.name || (product && product.name) || "Свой человек");
+      const city = String(item.city || "СИЛА И ЧЕСТЬ").toUpperCase();
+      const attrs = product ? `data-community-product="${escapeHTML(product.id)}" role="button" tabindex="0"` : "";
+      return `<figure class="community-card" ${attrs}><img src="${escapeHTML(item.image)}" alt="${escapeHTML(title)} — реальное фото из раздела «Свои»" loading="lazy" decoding="async"><figcaption><span>${escapeHTML(city)}</span><strong>${escapeHTML(title)}</strong></figcaption></figure>`;
+    }).join("");
+  }
+
+  function submitCommunityPhoto() {
+    const text = [
+      "Здравствуйте! Хочу в раздел «СВОИ» бренда СИЛА И ЧЕСТЬ.",
+      "Сейчас прикреплю своё фото в вещи бренда к этому сообщению.",
+      "Город: ",
+      "Вещь: ",
+      "Разрешаю опубликовать фото в миниаппе и канале бренда после проверки."
+    ].join("\n");
+    const url = checkoutClient.managerUrl(state.data.support_username, text);
+    if (!url) {
+      showToast("Менеджер пока не подключён. Напиши в канал бренда — фото примем там.");
+      return;
+    }
+    if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
+    showToast("Чат открыт. Прикрепи фото к готовому тексту и отправь.");
+    haptic("light");
+  }
+
+  /* --- Карта владельца по зарегистрированному заказу --- */
+
+  function loadCanvasImage(src) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = src;
+    });
+  }
+
+  function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
+    const words = String(text || "").split(/\s+/).filter(Boolean);
+    let line = "";
+    let lines = 0;
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        ctx.fillText(line, x, y + lines * lineHeight);
+        lines += 1;
+        if (lines >= maxLines) return y + lines * lineHeight;
+        line = word;
+      } else line = test;
+    }
+    if (line && lines < maxLines) {
+      ctx.fillText(line, x, y + lines * lineHeight);
+      lines += 1;
+    }
+    return y + lines * lineHeight;
+  }
+
+  async function drawOwnerCard(row) {
+    const canvas = $("#ownerCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (_) { /* fallback fonts */ }
+    const product = (row.product_id && productById(row.product_id)) || (state.data.products || []).find(item => item.name === row.product_name);
+    ctx.fillStyle = "#0b0b0d";
+    ctx.fillRect(0, 0, 900, 1200);
+    ctx.fillStyle = "#e10600";
+    ctx.fillRect(0, 0, 900, 14);
+    ctx.fillStyle = "#f4eee6";
+    ctx.font = "700 28px 'Sila Chest', Arial, sans-serif";
+    ctx.fillText("СИЛА И ЧЕСТЬ", 56, 78);
+    ctx.fillStyle = "#a49c8f";
+    ctx.font = "600 20px Arial, sans-serif";
+    ctx.fillText("ПЕРВЫЙ ДРОП · 001", 56, 112);
+    ctx.fillStyle = "#f4eee6";
+    ctx.font = "800 82px 'Sila Chest', Arial, sans-serif";
+    ctx.fillText("КАРТА", 52, 218);
+    ctx.fillText("ВЛАДЕЛЬЦА", 52, 302);
+    ctx.fillStyle = "#171719";
+    ctx.fillRect(56, 344, 788, 388);
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    ctx.strokeRect(56, 344, 788, 388);
+    if (product) {
+      try {
+        const image = await loadCanvasImage(imageFor(product));
+        const box = { x: 56, y: 344, w: 788, h: 388 };
+        // Заполняем рамку целиком (кадрирование по верхней трети), иначе портретное фото
+        // висит узкой полосой посреди пустого чёрного прямоугольника.
+        const scale = Math.max(box.w / image.naturalWidth, box.h / image.naturalHeight);
+        const w = image.naturalWidth * scale;
+        const h = image.naturalHeight * scale;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(box.x, box.y, box.w, box.h);
+        ctx.clip();
+        ctx.drawImage(image, box.x + (box.w - w) / 2, box.y + (box.h - h) * 0.3, w, h);
+        ctx.restore();
+      } catch (_) { /* text card remains valid without the photo */ }
+    }
+    let y = 798;
+    const field = (label, value, big = false) => {
+      ctx.fillStyle = "#e10600";
+      ctx.font = "800 18px Arial, sans-serif";
+      ctx.fillText(label, 56, y);
+      ctx.fillStyle = "#f4eee6";
+      ctx.font = big ? "800 44px 'Sila Chest', Arial, sans-serif" : "700 30px Arial, sans-serif";
+      y = wrapCanvasText(ctx, value || "—", 56, y + (big ? 48 : 38), 788, big ? 48 : 36, 2) + 28;
+    };
+    field("ВЕЩЬ", row.product_name || "Вещь бренда", true);
+    field("РАЗМЕР / ЗАКАЗ", `${row.size || "—"} · №${row.id || "—"}${row.quantity ? ` · ${row.quantity} шт.` : ""}`);
+    const when = formatOrderWhen(row.created_at || row.at);
+    field("СТАТУС", `${row.status_label || row.status || "зарегистрирован"}${when ? ` · ${when}` : ""}`);
+    if (row.gift) field("ПОДАРОК", `${row.gift.name || "Жетон"}${row.gift.serial_label ? ` · №${row.gift.serial_label}` : ""}`);
+    ctx.fillStyle = "#a49c8f";
+    ctx.font = "600 20px Arial, sans-serif";
+    ctx.fillText("СИЛА / ДИСЦИПЛИНА / ЧЕСТЬ", 56, 1146);
+    const link = $("#ownerDownload");
+    if (state.ownerCardUrl) URL.revokeObjectURL(state.ownerCardUrl);
+    if (canvas.toBlob) {
+      canvas.toBlob(blob => {
+        if (!blob || !link) return;
+        state.ownerCardUrl = URL.createObjectURL(blob);
+        link.href = state.ownerCardUrl;
+      }, "image/png");
+    } else if (link) link.href = canvas.toDataURL("image/png");
+    if (link) link.download = `sila-i-chest-owner-${row.id || "card"}.png`;
+  }
+
+  function openOwnerCard(index) {
+    const row = state.profileOrders[Number(index)];
+    if (!row) return;
+    state.ownerOrder = row;
+    // Сбрасываем ссылку до перерисовки, чтобы нельзя было скачать карту прошлого заказа.
+    const link = $("#ownerDownload");
+    if (link) link.setAttribute("href", "#");
+    openModal("ownerCardModal");
+    drawOwnerCard(row);
+    haptic("light");
+  }
+
+  async function shareOwnerCard() {
+    const canvas = $("#ownerCanvas");
+    if (!canvas) return;
+    try {
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+      if (blob && navigator.share) {
+        const file = new File([blob], "sila-i-chest-owner-card.png", { type: "image/png" });
+        if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: "Карта владельца · СИЛА И ЧЕСТЬ" });
+          return;
+        }
+      }
+      throw new Error("share unavailable");
+    } catch (_) {
+      const link = $("#ownerDownload");
+      if (link && link.href && link.href !== "#") link.click();
+      showToast("Скачал карту — её можно отправить в чат или сторис вручную.");
+    }
+  }
+
   function bindEvents() {
     $("#retryCatalog").addEventListener("click", loadCatalog);
     renderSkeletons();
@@ -1526,6 +2308,7 @@
       browseCollection();
       scrollToId("catalog");
     });
+    if ($("#dropFilmButton")) $("#dropFilmButton").addEventListener("click", () => openStories(0));
     $("#zoomProduct").addEventListener("click", zoomProduct);
     $("#mediaPrev").addEventListener("click", () => stepMedia(-1));
     $("#mediaNext").addEventListener("click", () => stepMedia(1));
@@ -1584,14 +2367,14 @@
     $("#sizeList").addEventListener("click", event => {
       const button = event.target.closest("[data-size]");
       if (!button) return;
-      state.selectedSize = button.dataset.size;
-      $$(".size-button", $("#sizeList")).forEach(node => { node.classList.toggle("selected", node === button); node.setAttribute("aria-pressed", String(node === button)); });
-      updatePurchaseSummary();
-      const advice = SIZE_ADVICE[state.selectedSize.toUpperCase()];
-      $("#sizeHint").textContent = advice ? `Размер ${state.selectedSize}: ${advice}.` : `Размер ${state.selectedSize} выбран.`;
-      $("#sizeHint").classList.remove("error");
+      selectSize(button.dataset.size);
       haptic("light");
     });
+    if ($("#fitFinder")) $("#fitFinder").addEventListener("click", event => {
+      const choice = event.target.closest("[data-fit-choice]");
+      if (choice) setFitChoice(choice.dataset.fitChoice);
+    });
+    if ($("#fitRecommend")) $("#fitRecommend").addEventListener("click", recommendFit);
 
     $("#galleryDots").addEventListener("click", event => {
       const button = event.target.closest("[data-gallery]");
@@ -1625,6 +2408,11 @@
     });
     if ($("#saveProfile")) $("#saveProfile").addEventListener("click", saveProfile);
     if ($("#profileOrders")) $("#profileOrders").addEventListener("click", event => {
+      const ownerButton = event.target.closest("[data-owner-card]");
+      if (ownerButton) {
+        openOwnerCard(ownerButton.dataset.ownerCard);
+        return;
+      }
       const payButton = event.target.closest("[data-pay-id]");
       if (payButton) {
         resumePayment(payButton.dataset.payId);
@@ -1661,10 +2449,12 @@
       $("#searchToggle").setAttribute("aria-expanded", String(!$("#searchOverlay").classList.contains("hidden")));
       if (!$("#searchOverlay").classList.contains("hidden")) $("#searchInput").focus();
     });
+    let searchRenderTimer = null;
     $("#searchInput").addEventListener("input", event => {
       state.search = event.target.value;
       $("#clearSearch").classList.toggle("hidden", !state.search);
-      renderProducts();
+      window.clearTimeout(searchRenderTimer);
+      searchRenderTimer = window.setTimeout(renderProducts, 120);
     });
     $("#searchInput").addEventListener("keydown", event => {
       if (event.key === "Enter") {
@@ -1723,6 +2513,51 @@
       startPayMethod(button.dataset.payMethod, button.dataset.payUrl || "", button.dataset.payKind || "link");
     });
     $("#channelButton").addEventListener("click", openChannel);
+    if ($("#clubAction")) $("#clubAction").addEventListener("click", clubAction);
+    if ($("#profileClubButton")) $("#profileClubButton").addEventListener("click", () => { closeModal("profileModal"); scrollToId("club"); });
+    if ($("#communitySubmit")) $("#communitySubmit").addEventListener("click", submitCommunityPhoto);
+    if ($("#communityGrid")) {
+      $("#communityGrid").addEventListener("click", event => {
+        const card = event.target.closest("[data-community-product]");
+        if (card) openProduct(card.dataset.communityProduct);
+      });
+      $("#communityGrid").addEventListener("keydown", event => {
+        const card = event.target.closest("[data-community-product]");
+        if (card && ["Enter", " "].includes(event.key)) { event.preventDefault(); openProduct(card.dataset.communityProduct); }
+      });
+    }
+    if ($("#filmPrev")) $("#filmPrev").addEventListener("click", () => showFilmScene(Math.max(0, state.filmIndex - 1)));
+    if ($("#filmNext")) $("#filmNext").addEventListener("click", () => showFilmScene(state.filmIndex + 1));
+    if ($("#filmProduct")) $("#filmProduct").addEventListener("click", () => {
+      const scene = filmScenes()[state.filmIndex];
+      closeFilm();
+      if (scene && scene.product_id) openProduct(scene.product_id);
+    });
+    if ($("#filmCatalog")) $("#filmCatalog").addEventListener("click", () => { closeFilm(); browseCollection(); scrollToId("catalog"); });
+    if ($(".film-media")) {
+      let filmTouchX = null;
+      $(".film-media").addEventListener("pointerdown", event => { filmTouchX = event.clientX; }, { passive: true });
+      $(".film-media").addEventListener("pointerup", event => {
+        if (filmTouchX === null) return;
+        const delta = event.clientX - filmTouchX;
+        filmTouchX = null;
+        if (Math.abs(delta) < 42) return;
+        showFilmScene(state.filmIndex + (delta < 0 ? 1 : -1));
+      }, { passive: true });
+    }
+    document.addEventListener("keydown", event => {
+      if (state.modalStack.at(-1) !== "filmModal" || event.target.matches("input,select,textarea")) return;
+      if (event.key === "ArrowRight") { event.preventDefault(); showFilmScene(state.filmIndex + 1); }
+      if (event.key === "ArrowLeft") { event.preventDefault(); showFilmScene(Math.max(0, state.filmIndex - 1)); }
+    });
+    if ($("#ownerShare")) $("#ownerShare").addEventListener("click", shareOwnerCard);
+    if ($("#ownerDownload")) $("#ownerDownload").addEventListener("click", event => {
+      const href = event.currentTarget.getAttribute("href") || "";
+      if (!href || href === "#") {
+        event.preventDefault();
+        showToast("Карта ещё собирается — секунду.");
+      }
+    });
     $("#closeToast").addEventListener("click", () => $("#successToast").classList.add("hidden"));
 
     $("#deliverRow").addEventListener("click", event => {
@@ -1802,6 +2637,11 @@
   iconize();
   configureTelegram();
   bindEvents();
+  setupHeroParallax();
+  syncHeroPoster();
+  renderDropEvent();
+  renderCommunity();
+  renderClub();
   updateCounters();
   // Конфиг по умолчанию не скачивает ролик; каталог может явно включить motion.
   setupWelcomeVideo(mediaConfig());
