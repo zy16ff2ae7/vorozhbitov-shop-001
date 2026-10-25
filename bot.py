@@ -3766,9 +3766,12 @@ class BrandBot:
         user = self.db.get_user(user_id)
         phone = str(user["phone"] or "") if user else ""
         verb = "предзаказ" if product.get("badge") == "ПРЕДЗАКАЗ" or "предзаказ" in str(product.get("stock_label", "")).lower() else "заказ"
+        gift = self.gift_for_checkout()
+        gift_line = f"• Подарок: {gift['name']} (бесплатно к первому дропу)\n" if gift else ""
         message = (
             f"Здравствуйте! Хочу оформить {verb}:\n"
             f"• {product['name']} · размер {size} · 1 шт. · {product['price']}\n"
+            f"{gift_line}"
             f"Телефон: {phone or 'укажу в чате'}\n"
             "Доставку и наличие прошу подтвердить в ответ."
         )
@@ -7519,7 +7522,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/app/":
-            self.send_response(308)
+            self.send_response(301)
             self.send_header("Location", "/")
             self.send_header("Content-Length", "0")
             self.end_headers()
