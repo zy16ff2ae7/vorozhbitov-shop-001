@@ -23,6 +23,7 @@ from bot import (
     Catalog,
     CHAT_MENU_BUTTON,
     Database,
+    DEFAULT_CUSTOM_EMOJI_IDS,
     ICON,
     RateLimiter,
     REF_RE,
@@ -3172,7 +3173,7 @@ class NativeMenuTests(unittest.TestCase):
         self.assertTrue(kb.get("resize_keyboard"))
         self.assertEqual(kb.get("input_field_placeholder"), "СИЛА И ЧЕСТЬ")
         rows = kb.get("keyboard", [])
-        self.assertEqual(rows[0][0]["text"], "⊞ Открыть витрину")
+        self.assertEqual(rows[0][0]["text"], "Открыть витрину")
         self.assertEqual(rows[0][0]["web_app"]["url"], "https://vorozhbitov.shop")
         self.assertEqual(rows[0][0].get("style"), "primary")
         self.assertEqual(len(rows[1]), 2)
@@ -3187,7 +3188,23 @@ class NativeMenuTests(unittest.TestCase):
         kb_admin = buyer_reply_keyboard("https://vorozhbitov.shop", is_admin=True)
         rows_admin = kb_admin.get("keyboard", [])
         self.assertEqual(len(rows_admin), 4)
-        self.assertEqual(rows_admin[3][1]["text"], "⚙︎ Управление магазином")
+        self.assertEqual(rows_admin[3][1]["text"], "⚙️ Управление магазином")
+
+        # Версия с кастомными эмодзи: иконки передаются через icon_custom_emoji_id,
+        # а в text НЕТ двойных эмодзи и глифов вроде ⊞
+        kb_ce = buyer_reply_keyboard("https://vorozhbitov.shop", is_admin=True, custom_emoji_ids=DEFAULT_CUSTOM_EMOJI_IDS)
+        rows_ce = kb_ce.get("keyboard", [])
+        self.assertEqual(rows_ce[0][0]["text"], "Открыть витрину")
+        self.assertEqual(rows_ce[0][0].get("icon_custom_emoji_id"), DEFAULT_CUSTOM_EMOJI_IDS["cart"])
+        self.assertEqual([b["text"] for b in rows_ce[1]], ["Первый дроп", "Личный кабинет"])
+        self.assertEqual(rows_ce[1][0].get("icon_custom_emoji_id"), DEFAULT_CUSTOM_EMOJI_IDS["catalog"])
+        self.assertEqual(rows_ce[1][1].get("icon_custom_emoji_id"), DEFAULT_CUSTOM_EMOJI_IDS["account"])
+        self.assertEqual([b["text"] for b in rows_ce[2]], ["Канал", "О бренде"])
+        self.assertEqual(rows_ce[2][0].get("icon_custom_emoji_id"), DEFAULT_CUSTOM_EMOJI_IDS["channel"])
+        self.assertEqual(rows_ce[2][1].get("icon_custom_emoji_id"), DEFAULT_CUSTOM_EMOJI_IDS["seal"])
+        self.assertEqual(rows_ce[3][0]["text"], "Поддержка")
+        self.assertEqual(rows_ce[3][0].get("icon_custom_emoji_id"), DEFAULT_CUSTOM_EMOJI_IDS["support"])
+        self.assertEqual(rows_ce[3][1]["text"], "⚙️ Управление магазином")
 
     def test_reply_keyboard_text_routing(self):
         """Нажатия на постоянные кнопки внизу чата корректно открывают экраны."""

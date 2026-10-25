@@ -2527,38 +2527,34 @@ def buyer_reply_keyboard(
     emojis = custom_emoji_ids or {}
     rows: list[list[dict[str, Any]]] = []
     if webapp_url.startswith("https://"):
-        btn: dict[str, Any] = {"text": "⊞ Открыть витрину", "web_app": {"url": webapp_url}, "style": "primary"}
+        btn: dict[str, Any] = {"text": "Открыть витрину", "web_app": {"url": webapp_url}, "style": "primary"}
         if emojis.get("cart"):
             btn["icon_custom_emoji_id"] = str(emojis["cart"])
         rows.append([btn])
 
-    b_drop: dict[str, Any] = {"text": f"{ICON['catalog']} Первый дроп"}
-    if emojis.get("catalog") or emojis.get("sword"):
-        b_drop["icon_custom_emoji_id"] = str(emojis.get("catalog") or emojis.get("sword"))
+    def _reply_btn(label: str, icon_key: str) -> dict[str, Any]:
+        icon_id = emojis.get(icon_key)
+        if icon_id:
+            # Кастомный эмодзи рисуется Telegram на самой кнопке;
+            # текст кнопки не должен дублировать стандартный эмодзи.
+            return {"text": label, "icon_custom_emoji_id": str(icon_id)}
+        fallback = ICON.get(icon_key, "")
+        text = f"{fallback} {label}".strip() if fallback else label
+        return {"text": text}
 
-    b_acc: dict[str, Any] = {"text": f"{ICON['account']} Личный кабинет"}
-    if emojis.get("account"):
-        b_acc["icon_custom_emoji_id"] = str(emojis["account"])
-
-    b_chan: dict[str, Any] = {"text": f"{ICON['channel']} Канал"}
-    if emojis.get("channel"):
-        b_chan["icon_custom_emoji_id"] = str(emojis["channel"])
-
-    b_seal: dict[str, Any] = {"text": f"{ICON['seal']} О бренде"}
-    if emojis.get("seal"):
-        b_seal["icon_custom_emoji_id"] = str(emojis["seal"])
+    b_drop = _reply_btn("Первый дроп", "catalog" if "catalog" in emojis else "sword")
+    b_acc = _reply_btn("Личный кабинет", "account")
+    b_chan = _reply_btn("Канал", "channel")
+    b_seal = _reply_btn("О бренде", "seal")
+    b_sup = _reply_btn("Поддержка", "support")
 
     rows.extend([
         [b_drop, b_acc],
         [b_chan, b_seal],
     ])
 
-    b_sup: dict[str, Any] = {"text": f"{ICON['support']} Поддержка"}
-    if emojis.get("support"):
-        b_sup["icon_custom_emoji_id"] = str(emojis["support"])
-
     if is_admin:
-        rows.append([b_sup, {"text": "⚙︎ Управление магазином"}])
+        rows.append([b_sup, {"text": "⚙️ Управление магазином"}])
     else:
         rows.append([b_sup])
     return {
