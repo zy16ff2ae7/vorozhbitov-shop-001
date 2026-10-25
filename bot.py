@@ -2473,6 +2473,7 @@ ICON = {
     "patch": "🏷️",     # 08_ruler.png
     "pay": "💳",       # 09_card.png — Титан-карта
     "looks": "🗡️",     # 10_lookbook.png — Спина с клинком
+    "lookbook": "🗡️",  # 10_lookbook.png — Лукбук / спина с клинком
     "channel": "📢",   # 11_channel.png — Тактический сигнал канала
     "back": "⬅️",      # 12_back.png — Уставной шеврон возврата
     "film": "🎬",
@@ -2500,7 +2501,8 @@ ICON = {
 
 def icon(kind: str, label: str) -> str:
     """Подпись кнопки: знак из общего словаря + короткий текст."""
-    return f"{ICON[kind]} {label}"
+    symbol = ICON.get(kind, "")
+    return f"{symbol} {label}".strip() if symbol else label
 
 
 def nav_rows(back: tuple[str, str] | None = None) -> list[list[tuple[str, str]]]:
@@ -6845,7 +6847,7 @@ class BrandBot:
                 "• После отправки трек-номер для отслеживания посылки появится в твоих покупках и придёт в этот чат.\n\n"
                 "Самовывоза и офлайн-точек нет — только проверенная курьерская доставка.",
                 inline_keyboard([
-                    [(icon("orders", "📦 Мои покупки и трек"), "orders")],
+                    [(icon("orders", "Мои покупки и трек"), "orders")],
                     [(icon("catalog", "Выбрать вещь в витрине"), "cat:drop")],
                     nav_rows(("Главное меню", "menu"))[0]
                 ])

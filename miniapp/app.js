@@ -1320,9 +1320,8 @@
     $("#welcomeMotionIcon").textContent = waiting ? "▷" : "Ⅱ";
     const canPlay = welcomeCanPlay();
     const fallback = $("#welcomeFallback");
-    // Фото — только для режима без движения. Во всех остальных случаях фон чёрный,
-    // магазин под заставкой не просвечивает (у .welcome сплошной фон).
-    if (fallback) fallback.classList.toggle("hidden", canPlay || (!reducedMotion() && Boolean(welcomePlayback.source)));
+    const isPlaying = video.classList.contains("is-playing");
+    if (fallback) fallback.classList.toggle("hidden", isPlaying);
     // Источник ставим сразу, не дожидаясь конца загрузки и гейта воспроизведения:
     // ролик буферизуется уже под бут-штампом и стартует мгновенно.
     if (!saverBlocked && !reducedMotion() && welcomePlayback.source && video.getAttribute("src") !== welcomePlayback.source) {
@@ -1400,8 +1399,10 @@
         }
       });
       video.addEventListener("playing", () => {
-        if (welcomeCanPlay()) video.classList.add("is-playing");
-        else video.pause();
+        if (welcomeCanPlay()) {
+          video.classList.add("is-playing");
+          $("#welcomeFallback")?.classList.add("hidden");
+        } else video.pause();
       });
       video.addEventListener("canplay", () => {
         // Первая попытка play() могла уйти в пустоту до данных — повторяем по готовности.
@@ -1578,6 +1579,11 @@
       const isHidden = guide.classList.toggle("hidden");
       $("#sizeGuideToggle").setAttribute("aria-expanded", String(!isHidden));
       $("#sizeGuideToggle").textContent = isHidden ? "ТАБЛИЦА РАЗМЕРОВ ▾" : "СКРЫТЬ ТАБЛИЦУ ▴";
+      if (!isHidden) {
+        window.requestAnimationFrame(() => {
+          guide.scrollIntoView({ behavior: reducedMotion() ? "instant" : "smooth", block: "nearest" });
+        });
+      }
       haptic("light");
     });
 
