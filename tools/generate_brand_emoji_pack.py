@@ -3,8 +3,9 @@ import math
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 import numpy as np
 
-REPO_DIR = "/Users/mac/Documents/Codex/2026-09-13/https-github-com-zy16ff2ae7-vorozhbitov-shop/work/vorozhbitov-shop"
-OUT_DIR = os.path.join(REPO_DIR, "custom_emoji_pack/icons")
+REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PACK_DIR = os.path.join(REPO_DIR, "custom_emoji_pack_v3")
+OUT_DIR = os.path.join(PACK_DIR, "icons")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # High-resolution supersampling canvas (600x600 -> 100x100 via Lanczos)
@@ -22,7 +23,7 @@ C_GOLD = (235, 185, 80, 255)       # EMV chip gold
 C_MUTED = (130, 145, 160, 255)     # Secondary typography
 C_BORDER = (45, 55, 68, 255)
 
-FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+FONT_BOLD = os.path.join(REPO_DIR, "miniapp/fonts/sila-chest-700.woff2")
 
 def get_font(size):
     return ImageFont.truetype(FONT_BOLD, size)
@@ -37,32 +38,22 @@ def finalize(img, filename):
     print(f"Generated: {filename} (100x100 PNG RGBA)")
 
 def get_clean_sword(target_w=None, target_h=None, color=C_WHITE):
-    """Extracts authentic sword logo from welcome-sword-logo.jpg"""
-    sword_path = os.path.join(REPO_DIR, "miniapp/assets/welcome-sword-logo.jpg")
-    im = Image.open(sword_path).convert("L")
-    crop = im.crop((245, 16, 961, 1295)) # 716 x 1279
-    arr = np.array(crop).astype(float)
-    alpha = np.clip((arr - 15) / (120 - 15) * 255.0, 0, 255).astype(np.uint8)
-    
-    rgba = np.zeros((crop.height, crop.width, 4), dtype=np.uint8)
-    rgba[:,:,0] = color[0]
-    rgba[:,:,1] = color[1]
-    rgba[:,:,2] = color[2]
-    rgba[:,:,3] = alpha
-    
-    img = Image.fromarray(rgba, "RGBA")
+    """Reuse the exact customer-derived silhouette and distressed alpha."""
+    sword_path = os.path.join(REPO_DIR, "miniapp/assets/brand/sword-monogram-light-v2.png")
+    source = Image.open(sword_path).convert("RGBA")
+    img = Image.new("RGBA", source.size, color)
+    img.putalpha(source.getchannel("A"))
     if target_h and not target_w:
-        target_w = int(target_h * crop.width / crop.height)
+        target_w = int(target_h * source.width / source.height)
     elif target_w and not target_h:
-        target_h = int(target_w * crop.height / crop.width)
+        target_h = int(target_w * source.height / source.width)
     elif not target_w and not target_h:
-        target_w, target_h = crop.width, crop.height
-        
+        target_w, target_h = source.width, source.height
     return img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
 def get_clean_seal(size=400, color=C_WHITE):
-    """Extracts authentic round seal from sila-chest-seal.jpg"""
-    seal_path = os.path.join(REPO_DIR, "miniapp/assets/sila-chest-seal.jpg")
+    """Extracts authentic round seal from sila-chest-seal-v3.jpg"""
+    seal_path = os.path.join(REPO_DIR, "miniapp/assets/sila-chest-seal-v3.jpg")
     im = Image.open(seal_path).convert("L")
     crop = im.crop((17, 13, 490, 485)) # 473 x 472
     arr = np.array(crop).astype(float)
@@ -170,9 +161,10 @@ def make_drop():
     d.ellipse([235, 92, 365, 145], fill=C_WHITE)
     d.ellipse([247, 100, 353, 137], fill=C_CARBON)
     
-    # Authentic chest typography: «СИЛА И ЧЕСТЬ»
-    f_chest = get_font(32)
-    d.text((300, 235), "СИЛА И ЧЕСТЬ", font=f_chest, fill=C_WHITE, anchor="mm")
+    # Exact reference contours for the small chest print; other captions use Sila Chest.
+    wordmark = Image.open(os.path.join(REPO_DIR, "miniapp/assets/brand/sila-chest-wordmark.png")).convert("RGBA")
+    wordmark = wordmark.resize((220, 46), Image.Resampling.LANCZOS)
+    im.alpha_composite(wordmark, (300 - wordmark.width // 2, 235 - wordmark.height // 2))
     # Red tactical accent dash
     d.rectangle([230, 260, 370, 268], fill=C_RED)
     
@@ -242,7 +234,7 @@ def make_orders():
     finalize(im, "04_orders.png")
 
 # =============================================================
-# 05. PROFILE — Стальной жетон «СИЛА И ЧЕСТЬ» (по tag-sich-01.jpg)
+# 05. PROFILE — Стальной жетон «СИЛА И ЧЕСТЬ» (по tag-sich-01-v3.jpg)
 # =============================================================
 def make_profile():
     im = make_canvas()
@@ -352,7 +344,7 @@ def make_cart():
     finalize(im, "07_cart.png")
 
 # =============================================================
-# 08. RULER — Тканый шеврон у подола / Замеры (tee-detail-v4.jpg)
+# 08. RULER — Тканый шеврон у подола / Замеры (tee-detail-v6.jpg)
 # =============================================================
 def make_ruler():
     im = make_canvas()
@@ -531,7 +523,7 @@ def make_back():
 # Preview Grid Generator
 # =============================================================
 def make_preview_grid():
-    grid_path = os.path.join(REPO_DIR, "custom_emoji_pack/preview_grid.png")
+    grid_path = os.path.join(PACK_DIR, "preview_grid.png")
     cols, rows = 4, 3
     cell_w, cell_h = 180, 180
     pad = 40

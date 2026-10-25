@@ -20,6 +20,8 @@ jobs:
           sparse-checkout: |
             miniapp
             tools
+            approval
+            custom_emoji_pack_v3
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'

@@ -169,7 +169,7 @@ def screens() -> list[tuple[str, str, list[dict]]]:
 
         def two_purchases(bot, db):
             purchase(db, 500, "tee-sila-i-chest", "L")
-            purchase(db, 500, "tag-sila-i-chest", "ONE SIZE")
+            purchase(db, 500, "tee-vzglyad", "M")
             bot.show_my_orders(500, 500)
 
         shoot("Мои покупки", "один список с группами вместо десятка сообщений", two_purchases)
@@ -216,7 +216,7 @@ def screens() -> list[tuple[str, str, list[dict]]]:
 
         def staff_orders(bot, db):
             purchase(db, 500, "tee-sila-i-chest", "L")
-            working = purchase(db, 500, "tag-sila-i-chest", "ONE SIZE")
+            working = purchase(db, 500, "tee-vzglyad", "M")
             db.mark_payment_paid(working["payment_id"], "stars", "preview-charge")
             db.set_order_status(working["order_ids"][0], "confirmed")
             bot.admin_orders(1)
@@ -250,11 +250,15 @@ def screens() -> list[tuple[str, str, list[dict]]]:
 
 
 CSS = """
+@font-face { font-family: "Sila Chest"; font-style: normal; font-weight: 400 500; font-display: swap;
+             src: url("/fonts/sila-chest-400.woff2") format("woff2"); }
+@font-face { font-family: "Sila Chest"; font-style: normal; font-weight: 600 900; font-display: swap;
+             src: url("/fonts/sila-chest-700.woff2") format("woff2"); }
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 body {
   margin: 0; padding: 32px 16px 64px; background: #0e1621; color: #f2f5f8;
-  font: 15px/1.45 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font: 15px/1.45 "Sila Chest", "Times New Roman", serif;
 }
 header { max-width: 1180px; margin: 0 auto 28px; }
 h1 { font-size: 22px; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 6px; }
@@ -282,7 +286,7 @@ b { color: #fff; }
 .kb button.wide { grid-column: 1 / -1; }
 .kb button.primary { background: #3a6ea5; font-weight: 600; }
 .kb button.nav { background: #22364a; color: #b9cbdb; }
-code { background: #0e1621; padding: 1px 5px; border-radius: 6px; font-size: 12.5px; }
+code { background: #0e1621; padding: 1px 5px; border-radius: 6px; font-family: inherit; font-size: 12.5px; }
 """
 
 JS = ""
@@ -354,15 +358,23 @@ def render_page() -> str:
 
 class PreviewHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
-        if self.path.split("?")[0] not in {"/", "/index.html"}:
+        path = self.path.split("?")[0]
+        if path in {"/fonts/sila-chest-400.woff2", "/fonts/sila-chest-700.woff2"}:
+            body = (BASE_DIR / "miniapp/fonts" / path.rsplit("/", 1)[-1]).read_bytes()
+            content_type = "font/woff2"
+            cache_control = "public, max-age=3600"
+        elif path in {"/", "/index.html"}:
+            body = render_page().encode("utf-8")
+            content_type = "text/html; charset=utf-8"
+            cache_control = "no-store"
+        else:
             self.send_response(404)
             self.end_headers()
             return
-        body = render_page().encode("utf-8")
         self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache_control)
         self.end_headers()
         self.wfile.write(body)
 

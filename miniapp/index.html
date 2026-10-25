@@ -7,8 +7,8 @@
   <meta name="description" content="СИЛА И ЧЕСТЬ — бренд одежды с характером. Выпуск 001. Основатель: Никита Ворожбитов.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23070708'/%3E%3Cpath d='M32 8 L35 20 L35 44 L40 48 L40 50 L34 50 L34 56 L30 56 L30 50 L24 50 L24 48 L29 44 L29 20 Z' fill='%23e10600'/%3E%3C/svg%3E">
   <title>СИЛА И ЧЕСТЬ</title>
-  <link rel="preload" href="fonts/unbounded-900.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/manrope-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/sila-chest-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/sila-chest-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -25,9 +25,9 @@
 
   <section class="welcome hidden" id="welcome" aria-label="Приветствие">
     <video class="welcome-media" id="welcomeVideo" muted autoplay loop playsinline preload="auto" aria-hidden="true"></video>
-    <img class="welcome-media hidden" id="welcomeFallback" src="assets/drop/hero-sila-chest-v1.jpg" alt="СИЛА И ЧЕСТЬ — приветствие">
+    <img class="welcome-media hidden" id="welcomeFallback" src="assets/drop/hero-sila-chest-v2.jpg" alt="СИЛА И ЧЕСТЬ — приветствие">
     <div class="welcome-shade"></div>
-    <button class="welcome-motion hidden" id="welcomeMotion" type="button" aria-label="Остановить видео"><span id="welcomeFrameCount" aria-hidden="true">ФИЛЬМ · 25 СЕК</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
+    <button class="welcome-motion hidden" id="welcomeMotion" type="button" aria-label="Остановить видео"><span id="welcomeFrameCount" aria-hidden="true">ФИЛЬМ · 22 СЕК</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
     <div class="welcome-frame">
       <div class="welcome-kicker"><span class="pulse-dot"></span> ПЕРВЫЙ ДРОП · ДЛЯ СВОИХ</div>
       <h1>СИЛА<br>И ЧЕСТЬ</h1>
@@ -56,7 +56,7 @@
     <header class="topbar">
       <a class="brand-lockup" href="#home" data-scroll="home" aria-label="СИЛА И ЧЕСТЬ — в начало">
         <span class="brand-mark"></span>
-        <span class="brand-type"><strong>СИЛА И ЧЕСТЬ</strong><small>ПЕРВЫЙ ДРОП 001</small></span>
+        <span class="brand-type"><strong class="brand-wordmark">СИЛА И ЧЕСТЬ</strong><small>ПЕРВЫЙ ДРОП 001</small></span>
       </a>
       <div class="top-actions">
         <button class="icon-button" id="searchToggle" type="button" aria-label="Поиск" aria-expanded="false" aria-controls="searchOverlay"><span class="icon" data-icon="search"></span></button>
@@ -82,7 +82,7 @@
     <main>
       <section class="hero" id="home" aria-labelledby="heroTitle">
         <div class="hero-media">
-          <img src="assets/drop/hero-sila-chest-v1.jpg" alt="Никита Ворожбитов в футболке «Сила и честь» и фирменном жетоне" fetchpriority="high" decoding="async" id="heroFallback" width="1024" height="1536">
+          <img src="assets/drop/hero-sila-chest-v2.jpg" alt="Никита Ворожбитов в футболке «Сила и честь» и фирменном жетоне" fetchpriority="high" decoding="async" id="heroFallback" width="1024" height="1536">
           <div class="hero-shade"></div>
           <div class="hero-live"><span class="pulse-dot"></span> НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ</div>
         </div>
@@ -158,15 +158,15 @@
       <section class="product-story section-pad" id="details" aria-labelledby="detailTitle">
         <div class="detail-heading"><span class="section-kicker">ПЕРВЫЙ ВЫПУСК / ПРЕДМЕТНО</span><h2 id="detailTitle">ВЕЩЬ<br>В ДЕТАЛЯХ.</h2></div>
         <button class="detail-shot" type="button" data-detail-product="tee-sila-i-chest" data-detail-photo="0" aria-label="Рассмотреть перед футболки">
-          <img src="assets/spin/tee-sich-01-v2.jpg" alt="Футболка «Сила и честь», предметный рендер спереди" loading="lazy" decoding="async" width="1080" height="590">
+          <img src="assets/spin/tee-sich-01-v4.jpg" alt="Футболка «Сила и честь», предметный рендер спереди" loading="lazy" decoding="async" width="1080" height="590">
           <span class="detail-caption"><small>01 / СПЕРЕДИ</small><strong>Основной знак.</strong><span>Надпись и нашивка у подола ↗</span></span>
         </button>
         <button class="detail-shot detail-closeup" type="button" data-detail-product="tee-sila-i-chest" data-detail-photo="1" aria-label="Рассмотреть футболку сбоку">
-          <img src="assets/spin/tee-sich-03-v2.jpg" alt="Футболка «Сила и честь», предметный рендер сбоку" loading="lazy" decoding="async" width="1080" height="590">
+          <img src="assets/spin/tee-sich-03-v4.jpg" alt="Футболка «Сила и честь», предметный рендер сбоку" loading="lazy" decoding="async" width="1080" height="590">
           <span class="detail-caption"><small>02 / СБОКУ</small><strong>Чистый силуэт.</strong><span>Ракурс без модели ↗</span></span>
         </button>
         <button class="detail-shot detail-tag" type="button" data-detail-product="tee-sila-i-chest" data-detail-photo="4" aria-label="Рассмотреть фурнитуру">
-          <img src="assets/drop/tee-detail-v4.jpg" alt="Крупный план нашивки с монограммой у задней горловины" loading="lazy" decoding="async" width="1080" height="720">
+          <img src="assets/drop/tee-detail-v6.jpg" alt="Крупный план нашивки с монограммой у задней горловины" loading="lazy" decoding="async" width="1080" height="720">
           <span class="detail-caption"><small>03 / ФУРНИТУРА</small><strong>Деталь крупным планом.</strong><span>Нашивка у горловины ↗</span></span>
         </button>
       </section>

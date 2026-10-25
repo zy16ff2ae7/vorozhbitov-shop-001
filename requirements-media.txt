@@ -1,0 +1,5 @@
+# Optional reproducible product-artwork and video builders in tools/.
+Pillow>=10.4,<13
+numpy>=1.26,<3
+opencv-python-headless>=4.8,<6
+imageio-ffmpeg>=0.5,<1
