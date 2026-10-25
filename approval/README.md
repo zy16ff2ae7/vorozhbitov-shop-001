@@ -44,17 +44,17 @@
 
 ## 3. Белая футболка «ОДИН В ПОЛЕ ВОИН» — активный товар
 
-![Контрольный лист белой футболки](tee-odin-v-pole-voin-logo-v7-contact-sheet.jpg)
+![Контрольный лист белой футболки](tee-odin-v-pole-voin-logo-v8-contact-sheet.jpg)
 
-- [Контрольный лист JPG](tee-odin-v-pole-voin-logo-v7-contact-sheet.jpg)
-- [Товарное видео 360° MP4](../miniapp/assets/video/tee-odin-v-pole-voin-360-v7.mp4) — 8 секунд, 1080×590, 24 fps, H.264, без звука; тот же бетонный фон, масштаб и кроссфейды, что у чёрных футболок.
+- [Контрольный лист JPG](tee-odin-v-pole-voin-logo-v8-contact-sheet.jpg)
+- [Товарное видео 360° MP4](../miniapp/assets/video/tee-odin-v-pole-voin-360-v8.mp4) — 8 секунд, 1080×590, 24 fps, H.264, без звука; тот же бетонный фон, масштаб и кроссфейды, что у чёрных футболок.
 - [Крупные детали JPG](../miniapp/assets/drop/odin-voin-detail-v3.jpg) — монограмма, надпись и нашивки.
-- В v7 сохранён силуэт v6: свободные перед и спинка, обычный ворот, полные манжеты, ровный подол, общие центр и размер. На задних ракурсах 04/05/06 точная надпись монтажно повторяет перспективу и складки, а внутри букв сохранены освещение и микрорельеф хлопка; это не плоский слой поверх ткани. Боковые кадры очищены от дубля нашивки, обрезанных букв и краевых артефактов; фирменные элементы сохранены.
-- Предыдущий вариант: [контрольный лист v6](tee-odin-v-pole-voin-logo-v6-contact-sheet.jpg) и [видео v6](../miniapp/assets/video/tee-odin-v-pole-voin-360-v6.mp4) сохранены только для сравнения и не используются витриной.
-- Более ранние версии: [контрольный лист v5](tee-odin-v-pole-voin-logo-v5-contact-sheet.jpg), [видео v5](../miniapp/assets/video/tee-odin-v-pole-voin-360-v5.mp4), [контрольный лист v4](tee-odin-v-pole-voin-logo-v4-contact-sheet.jpg), [видео v4](../miniapp/assets/video/tee-odin-v-pole-voin-360-v4.mp4), [контрольный лист v3](tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg) и [видео v3](../miniapp/assets/video/tee-odin-v-pole-voin-360-v3.mp4) также сохранены и не активны.
+- В v8 сохранены свободные перед и спинка, обычный ворот, полные манжеты, ровный подол, общие центр и размер. На задних ракурсах 04/05/06 ткань восстановлена из нетронутых исходных кадров одним бесшовным участком; старая печать удалена без letter-shaped inpaint-пятен, а точная новая надпись не искривляется волнами и наследует освещение хлопка. Боковые кадры очищены от дубля нашивки, обрезанных букв и краевых артефактов; фирменные элементы сохранены.
+- Предыдущий вариант: [контрольный лист v7](tee-odin-v-pole-voin-logo-v7-contact-sheet.jpg) и [видео v7](../miniapp/assets/video/tee-odin-v-pole-voin-360-v7.mp4) сохранены только для сравнения и не используются витриной.
+- Более ранние версии: [контрольный лист v6](tee-odin-v-pole-voin-logo-v6-contact-sheet.jpg), [видео v6](../miniapp/assets/video/tee-odin-v-pole-voin-360-v6.mp4), [контрольный лист v5](tee-odin-v-pole-voin-logo-v5-contact-sheet.jpg), [видео v5](../miniapp/assets/video/tee-odin-v-pole-voin-360-v5.mp4), [контрольный лист v4](tee-odin-v-pole-voin-logo-v4-contact-sheet.jpg), [видео v4](../miniapp/assets/video/tee-odin-v-pole-voin-360-v4.mp4), [контрольный лист v3](tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg) и [видео v3](../miniapp/assets/video/tee-odin-v-pole-voin-360-v3.mp4) также сохранены и не активны.
 - В Mini App: 5 фото, 8 ракурсов вращения, видео, размеры S–XXL и существующий checkout. Цена **4 900 ₽**, статус **предзаказ**.
 
-Витринные ракурсы: [01](../miniapp/assets/spin/odin-voin-01-v7.jpg) · [02](../miniapp/assets/spin/odin-voin-02-v7.jpg) · [03](../miniapp/assets/spin/odin-voin-03-v7.jpg) · [04](../miniapp/assets/spin/odin-voin-04-v7.jpg) · [05](../miniapp/assets/spin/odin-voin-05-v7.jpg) · [06](../miniapp/assets/spin/odin-voin-06-v7.jpg) · [07](../miniapp/assets/spin/odin-voin-07-v7.jpg) · [08](../miniapp/assets/spin/odin-voin-08-v7.jpg).
+Витринные ракурсы: [01](../miniapp/assets/spin/odin-voin-01-v8.jpg) · [02](../miniapp/assets/spin/odin-voin-02-v8.jpg) · [03](../miniapp/assets/spin/odin-voin-03-v8.jpg) · [04](../miniapp/assets/spin/odin-voin-04-v8.jpg) · [05](../miniapp/assets/spin/odin-voin-05-v8.jpg) · [06](../miniapp/assets/spin/odin-voin-06-v8.jpg) · [07](../miniapp/assets/spin/odin-voin-07-v8.jpg) · [08](../miniapp/assets/spin/odin-voin-08-v8.jpg).
 
 ### Полный белый review-комплект
 
@@ -64,7 +64,7 @@
 - [Десять исправленных ракурсов JPG](brand-logo-review-2026-10-25-v2/odin-v-pole-voin-frames.jpg)
 - [Видеообзор MP4](brand-logo-review-2026-10-25-v2/odin-v-pole-voin-review.mp4) — 10 секунд, 720×1280, 30 fps, H.264, исходная звуковая дорожка AAC.
 - [Постер JPG](brand-logo-review-2026-10-25-v2/odin-v-pole-voin-poster.jpg)
-- Исходные боковые кадры [03](brand-logo-review-2026-10-25-v2/white-sources/odin-voin-03-original.jpg) и [08](brand-logo-review-2026-10-25-v2/white-sources/odin-voin-08-original.jpg) сохранены отдельно; генератор `tools/refine_white_spin.py` использует только committed inputs и не требует архив переписки.
+- Нетронутые исходники сохранены отдельно: задние [04](brand-logo-review-2026-10-25-v2/white-sources/odin-voin-04-original.jpg), [05](brand-logo-review-2026-10-25-v2/white-sources/odin-voin-05-original.jpg), [06](brand-logo-review-2026-10-25-v2/white-sources/odin-voin-06-original.jpg) и боковые [03](brand-logo-review-2026-10-25-v2/white-sources/odin-voin-03-original.jpg), [08](brand-logo-review-2026-10-25-v2/white-sources/odin-voin-08-original.jpg). Генератор `tools/refine_white_spin.py` использует только committed inputs и не требует архив переписки.
 - Отдельные кадры: [01](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-01.jpg) · [02](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-02.jpg) · [03](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-03.jpg) · [04](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-04.jpg) · [05](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-05.jpg) · [06](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-06.jpg) · [07](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-07.jpg) · [08](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-08.jpg) · [09](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-09.jpg) · [10](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-10.jpg).
 - [Прежний белый макет](brand-logo-review-2026-10-25/odin-v-pole-voin-board.jpg) сохранён для сравнения.
 

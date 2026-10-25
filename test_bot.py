@@ -227,7 +227,7 @@ class BotTests(unittest.TestCase):
         for product_id, version, old_name in (
             ("tee-sila-i-chest", "-360-v5.mp4", "tee-sila-i-chest-360.mp4"),
             ("tee-vzglyad", "-360-v5.mp4", "tee-vzglyad-360.mp4"),
-            ("tee-odin-v-pole-voin", "-360-v7.mp4", "tee-odin-v-pole-voin-360-v3.mp4"),
+            ("tee-odin-v-pole-voin", "-360-v8.mp4", "tee-odin-v-pole-voin-360-v3.mp4"),
         ):
             self.assertTrue(catalog.get(product_id)["video"].endswith(version))
             if old_name:
@@ -244,11 +244,11 @@ class BotTests(unittest.TestCase):
             "tee-sila-i-chest-logo-v5-contact-sheet.jpg",
             "tee-vzglyad-logo-v4-contact-sheet.jpg",
             "tag-sila-i-chest-logo-v3-contact-sheet.jpg",
-            "tee-odin-v-pole-voin-logo-v7-contact-sheet.jpg",
+            "tee-odin-v-pole-voin-logo-v8-contact-sheet.jpg",
             "drop-vzglyad-logo-v3-18s-contact-sheet.jpg",
             "tee-sila-i-chest-360-v5.mp4",
             "tee-vzglyad-360-v5.mp4",
-            "tee-odin-v-pole-voin-360-v7.mp4",
+            "tee-odin-v-pole-voin-360-v8.mp4",
             "drop-vzglyad-18s-v3.mp4",
             "odin-v-pole-voin-board.jpg",
             "odin-v-pole-voin-frames.jpg",
@@ -272,7 +272,7 @@ class BotTests(unittest.TestCase):
         for product_id, suffix in (
             ("tee-sila-i-chest", "-v4.jpg"),
             ("tee-vzglyad", "-v3.jpg"),
-            ("tee-odin-v-pole-voin", "-v7.jpg"),
+            ("tee-odin-v-pole-voin", "-v8.jpg"),
             ("tag-sila-i-chest", "-v3.jpg"),
         ):
             product = catalog.get(product_id)
@@ -295,9 +295,11 @@ class BotTests(unittest.TestCase):
             "assets/spin/odin-voin-01-v4.jpg",
             "assets/spin/odin-voin-01-v5.jpg",
             "assets/spin/odin-voin-01-v6.jpg",
+            "assets/spin/odin-voin-01-v7.jpg",
             "assets/video/tee-odin-v-pole-voin-360-v4.mp4",
             "assets/video/tee-odin-v-pole-voin-360-v5.mp4",
             "assets/video/tee-odin-v-pole-voin-360-v6.mp4",
+            "assets/video/tee-odin-v-pole-voin-360-v7.mp4",
             "assets/drop/tee-detail-v4.jpg",
             "assets/drop/tee-detail-v5.jpg",
             "assets/drop/tee-vzglyad-detail.jpg",
@@ -311,7 +313,13 @@ class BotTests(unittest.TestCase):
         review = root / "approval/brand-logo-review-2026-10-25-v2"
         self.assertTrue((review / "odin-v-pole-voin-board.jpg").is_file())
         self.assertEqual(len(list((review / "white-frames").glob("odin-voin-*.jpg"))), 10)
-        for source_name in ("odin-voin-03-original.jpg", "odin-voin-08-original.jpg"):
+        for source_name in (
+            "odin-voin-03-original.jpg",
+            "odin-voin-04-original.jpg",
+            "odin-voin-05-original.jpg",
+            "odin-voin-06-original.jpg",
+            "odin-voin-08-original.jpg",
+        ):
             self.assertTrue((review / "white-sources" / source_name).is_file())
         self.assertAlmostEqual(mp4_duration_seconds(review / "odin-v-pole-voin-review.mp4"), 10.0, places=2)
         self.assertTrue((root / "approval/brand-logo-review-2026-10-25/odin-v-pole-voin-board.jpg").is_file())
