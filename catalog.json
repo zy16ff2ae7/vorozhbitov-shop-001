@@ -155,12 +155,12 @@
       "description": "Белая футболка «ОДИН В ПОЛЕ ВОИН». Тёмная фактурная монограмма на груди, фирменная надпись на спине и нашивки на рукаве и у подола. Предзаказ первого выпуска.",
       "signature": "Белый вариант. По предзаказу.",
       "photo_url": "",
-      "image": "assets/spin/odin-voin-01-v6.jpg",
+      "image": "assets/spin/odin-voin-01-v7.jpg",
       "images": [
-        "assets/spin/odin-voin-01-v6.jpg",
-        "assets/spin/odin-voin-03-v6.jpg",
-        "assets/spin/odin-voin-05-v6.jpg",
-        "assets/spin/odin-voin-07-v6.jpg",
+        "assets/spin/odin-voin-01-v7.jpg",
+        "assets/spin/odin-voin-03-v7.jpg",
+        "assets/spin/odin-voin-05-v7.jpg",
+        "assets/spin/odin-voin-07-v7.jpg",
         "assets/drop/odin-voin-detail-v3.jpg"
       ],
       "badge": "ПРЕДЗАКАЗ",
@@ -175,14 +175,14 @@
       "stock_label": "Предзаказ",
       "active": true,
       "spin": [
-        "assets/spin/odin-voin-01-v6.jpg",
-        "assets/spin/odin-voin-02-v6.jpg",
-        "assets/spin/odin-voin-03-v6.jpg",
-        "assets/spin/odin-voin-04-v6.jpg",
-        "assets/spin/odin-voin-05-v6.jpg",
-        "assets/spin/odin-voin-06-v6.jpg",
-        "assets/spin/odin-voin-07-v6.jpg",
-        "assets/spin/odin-voin-08-v6.jpg"
+        "assets/spin/odin-voin-01-v7.jpg",
+        "assets/spin/odin-voin-02-v7.jpg",
+        "assets/spin/odin-voin-03-v7.jpg",
+        "assets/spin/odin-voin-04-v7.jpg",
+        "assets/spin/odin-voin-05-v7.jpg",
+        "assets/spin/odin-voin-06-v7.jpg",
+        "assets/spin/odin-voin-07-v7.jpg",
+        "assets/spin/odin-voin-08-v7.jpg"
       ],
       "image_labels": [
         "01 / Спереди · фактурная монограмма",
@@ -193,7 +193,7 @@
       ],
       "featured": false,
       "media_note": "Монтаж исправленных визуализаций для согласования. Вращение 360° — 8 ракурсов, не новая живая съёмка.",
-      "video": "assets/video/tee-odin-v-pole-voin-360-v6.mp4"
+      "video": "assets/video/tee-odin-v-pole-voin-360-v7.mp4"
     },
     {
       "id": "tag-sila-i-chest",

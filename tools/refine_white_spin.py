@@ -3,7 +3,7 @@
 
 The eight outputs are montage visualisations, not a new live recording.  They
 share the black tees' 1080×590 concrete plate, garment height and baseline.
-Existing v3–v5 assets and all customer/source images are left untouched.  No
+Existing v3–v6 assets and all customer/source images are left untouched.  No
 ``task_materials`` archive is required: every input is committed in miniapp/
 or approval/.
 
@@ -16,6 +16,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image, ImageFilter
+
+try:
+    from .update_white_product import text_art
+except ImportError:  # direct ``python tools/refine_white_spin.py`` execution
+    from update_white_product import text_art
 
 ROOT = Path(__file__).resolve().parents[1]
 MINIAPP = ROOT / "miniapp"
@@ -45,6 +50,91 @@ def concrete_plate() -> Image.Image:
     mask = cv2.dilate(mask, np.ones((9, 9), np.uint8))
     restored = cv2.inpaint(image, mask, 9, cv2.INPAINT_TELEA)
     return Image.fromarray(cv2.cvtColor(restored, cv2.COLOR_BGR2RGB))
+
+
+def integrate_back_print(source: Path, box, direction: str) -> Image.Image:
+    """Put the exact back lettering into the cloth rather than over it.
+
+    This is a reproducible photographic montage, not a claim of a new physical
+    shoot. The previous flat print is removed locally. The same glyphs are then
+    perspective-warped, displaced by broad folds, and multiplied by normalized
+    cotton illumination and fine fabric detail. Committed white frames and the
+    bundled Cyrillic font are the only inputs; ``task_materials`` is not used.
+    """
+    if direction not in {"front", "left", "right"}:
+        raise ValueError(f"Unsupported back-print direction: {direction}")
+    with Image.open(source) as opened:
+        source_image = opened.convert("RGB")
+    x, y, width, height = box
+    pixels = np.asarray(source_image)
+    if x < 0 or y < 0 or x + width > source_image.width or y + height > source_image.height:
+        raise ValueError(f"Back-print box outside source: {box}")
+
+    old_art = np.asarray(text_art((width, height)))[..., 3]
+    old_mask = cv2.dilate((old_art > 8).astype(np.uint8) * 255, np.ones((3, 3), np.uint8))
+    full_mask = np.zeros(pixels.shape[:2], dtype=np.uint8)
+    full_mask[y : y + height, x : x + width] = old_mask
+    clean = cv2.inpaint(pixels, full_mask, 5, cv2.INPAINT_TELEA)
+
+    original = cv2.cvtColor(pixels[y : y + height, x : x + width], cv2.COLOR_RGB2GRAY).astype(np.float32)
+    valid = ((old_mask == 0) & (original > 80)).astype(np.float32)
+
+    def normalized(values: np.ndarray, sigma: float) -> np.ndarray:
+        return cv2.GaussianBlur(values * valid, (0, 0), sigma) / np.maximum(
+            cv2.GaussianBlur(valid, (0, 0), sigma), 1e-4
+        )
+
+    # Do not use the old black letters as an illumination source. Surrounding
+    # cotton supplies both the broad folds and the fine print surface variation.
+    shade = normalized(original, 8)
+    fine = normalized(original - cv2.GaussianBlur(original, (0, 0), 3), 3)
+
+    corners = np.float32([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]])
+    if direction == "right":
+        target = np.float32(
+            [[0, 12], [width - 14, 0], [width - 24, height - 10], [0, height + 6]]
+        )
+        warp_strength = 1.0
+    elif direction == "left":
+        target = np.float32(
+            [[14, 0], [width, 12], [width, height + 6], [24, height - 10]]
+        )
+        warp_strength = 1.0
+    else:
+        target = corners
+        warp_strength = 0.55
+
+    transform = cv2.getPerspectiveTransform(corners, target)
+    warped = cv2.warpPerspective(
+        old_art,
+        transform,
+        (width, height),
+        flags=cv2.INTER_LANCZOS4,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+    fold = cv2.GaussianBlur(shade - cv2.GaussianBlur(shade, (0, 0), 22), (0, 0), 6)
+    dy = np.clip(fold / 5, -8, 8) * warp_strength
+    dx = np.clip(fold / 14, -3, 3) * warp_strength
+    xx, yy = np.meshgrid(
+        np.arange(width, dtype=np.float32), np.arange(height, dtype=np.float32)
+    )
+    warped = cv2.remap(
+        warped,
+        xx + dx,
+        yy + dy,
+        cv2.INTER_LANCZOS4,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+
+    alpha = warped.astype(np.float32) / 255 * 0.88
+    cloth = clean[y : y + height, x : x + width].astype(np.float32)
+    ink = np.clip(shade * 0.22 + fine * 0.25, 0, 255)[..., None]
+    printed = cloth * (1 - alpha[..., None]) + ink * alpha[..., None]
+    result = clean.copy()
+    result[y : y + height, x : x + width] = np.clip(printed, 0, 255).astype(np.uint8)
+    return Image.fromarray(result, "RGB")
 
 
 def clean_first_side() -> Image.Image:
@@ -255,13 +345,25 @@ def build_white_spin() -> list[Path]:
         (15, 600), (15, 550), (20, 500), (45, 450),
         (90, 400), (160, 320),
     ]
+    # The three readable back views share one physical print treatment.  The
+    # opposite three-quarter views use mirrored perspective, while the direct
+    # back gets a gentler fold displacement and no artificial horizontal skew.
+    back_right = integrate_back_print(
+        FRAME_DIR / "odin-voin-04.jpg", (295, 435, 290, 270), "right"
+    )
+    back_front = integrate_back_print(
+        FRAME_DIR / "odin-voin-05.jpg", (175, 440, 410, 260), "front"
+    )
+    back_left = integrate_back_print(
+        FRAME_DIR / "odin-voin-06.jpg", (125, 435, 390, 270), "left"
+    )
     sources = [
         (FRAME_DIR / "odin-voin-01.jpg", front_tag, None, symmetric_outline),
         (FRAME_DIR / "odin-voin-02.jpg", angle_tag, None, None),
         (first_side, first_side_tag, duplicate_side_tag, None),
-        (FRAME_DIR / "odin-voin-04.jpg", None, None, None),
-        (FRAME_DIR / "odin-voin-05.jpg", None, None, symmetric_outline),
-        (FRAME_DIR / "odin-voin-06.jpg", None, None, None),
+        (back_right, None, None, None),
+        (back_front, None, None, symmetric_outline),
+        (back_left, None, None, None),
         (other_side, other_side_clean_panel, other_side_print_edge, None),
         (FRAME_DIR / "odin-voin-09.jpg", None, None, None),
     ]
@@ -282,7 +384,7 @@ def build_white_spin() -> list[Path]:
         )
         if frame.size != CANVAS_SIZE:
             raise AssertionError(frame.size)
-        output = SPIN / f"odin-voin-{index:02d}-v6.jpg"
+        output = SPIN / f"odin-voin-{index:02d}-v7.jpg"
         frame.save(output, quality=95, subsampling=0, optimize=True)
         outputs.append(output)
     return outputs

@@ -44,17 +44,17 @@
 
 ## 3. Белая футболка «ОДИН В ПОЛЕ ВОИН» — активный товар
 
-![Контрольный лист белой футболки](tee-odin-v-pole-voin-logo-v6-contact-sheet.jpg)
+![Контрольный лист белой футболки](tee-odin-v-pole-voin-logo-v7-contact-sheet.jpg)
 
-- [Контрольный лист JPG](tee-odin-v-pole-voin-logo-v6-contact-sheet.jpg)
-- [Товарное видео 360° MP4](../miniapp/assets/video/tee-odin-v-pole-voin-360-v6.mp4) — 8 секунд, 1080×590, 24 fps, H.264, без звука; тот же бетонный фон, масштаб и кроссфейды, что у чёрных футболок.
+- [Контрольный лист JPG](tee-odin-v-pole-voin-logo-v7-contact-sheet.jpg)
+- [Товарное видео 360° MP4](../miniapp/assets/video/tee-odin-v-pole-voin-360-v7.mp4) — 8 секунд, 1080×590, 24 fps, H.264, без звука; тот же бетонный фон, масштаб и кроссфейды, что у чёрных футболок.
 - [Крупные детали JPG](../miniapp/assets/drop/odin-voin-detail-v3.jpg) — монограмма, надпись и нашивки.
-- В v6 перед и спинка используют свободные кадры исходного вращения, как у чёрных: обычный ворот, полные манжеты и ровный подол, тот же центр и измеренный размер в кадре. Боковые кадры очищены от дубля нашивки, обрезанных букв и краевых артефактов; фирменные элементы сохранены.
-- Предыдущий вариант: [контрольный лист v5](tee-odin-v-pole-voin-logo-v5-contact-sheet.jpg) и [видео v5](../miniapp/assets/video/tee-odin-v-pole-voin-360-v5.mp4) сохранены только для сравнения и не используются витриной.
-- Более ранние версии: [контрольный лист v4](tee-odin-v-pole-voin-logo-v4-contact-sheet.jpg), [видео v4](../miniapp/assets/video/tee-odin-v-pole-voin-360-v4.mp4), [контрольный лист v3](tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg) и [видео v3](../miniapp/assets/video/tee-odin-v-pole-voin-360-v3.mp4) также сохранены и не активны.
+- В v7 сохранён силуэт v6: свободные перед и спинка, обычный ворот, полные манжеты, ровный подол, общие центр и размер. На задних ракурсах 04/05/06 точная надпись монтажно повторяет перспективу и складки, а внутри букв сохранены освещение и микрорельеф хлопка; это не плоский слой поверх ткани. Боковые кадры очищены от дубля нашивки, обрезанных букв и краевых артефактов; фирменные элементы сохранены.
+- Предыдущий вариант: [контрольный лист v6](tee-odin-v-pole-voin-logo-v6-contact-sheet.jpg) и [видео v6](../miniapp/assets/video/tee-odin-v-pole-voin-360-v6.mp4) сохранены только для сравнения и не используются витриной.
+- Более ранние версии: [контрольный лист v5](tee-odin-v-pole-voin-logo-v5-contact-sheet.jpg), [видео v5](../miniapp/assets/video/tee-odin-v-pole-voin-360-v5.mp4), [контрольный лист v4](tee-odin-v-pole-voin-logo-v4-contact-sheet.jpg), [видео v4](../miniapp/assets/video/tee-odin-v-pole-voin-360-v4.mp4), [контрольный лист v3](tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg) и [видео v3](../miniapp/assets/video/tee-odin-v-pole-voin-360-v3.mp4) также сохранены и не активны.
 - В Mini App: 5 фото, 8 ракурсов вращения, видео, размеры S–XXL и существующий checkout. Цена **4 900 ₽**, статус **предзаказ**.
 
-Витринные ракурсы: [01](../miniapp/assets/spin/odin-voin-01-v6.jpg) · [02](../miniapp/assets/spin/odin-voin-02-v6.jpg) · [03](../miniapp/assets/spin/odin-voin-03-v6.jpg) · [04](../miniapp/assets/spin/odin-voin-04-v6.jpg) · [05](../miniapp/assets/spin/odin-voin-05-v6.jpg) · [06](../miniapp/assets/spin/odin-voin-06-v6.jpg) · [07](../miniapp/assets/spin/odin-voin-07-v6.jpg) · [08](../miniapp/assets/spin/odin-voin-08-v6.jpg).
+Витринные ракурсы: [01](../miniapp/assets/spin/odin-voin-01-v7.jpg) · [02](../miniapp/assets/spin/odin-voin-02-v7.jpg) · [03](../miniapp/assets/spin/odin-voin-03-v7.jpg) · [04](../miniapp/assets/spin/odin-voin-04-v7.jpg) · [05](../miniapp/assets/spin/odin-voin-05-v7.jpg) · [06](../miniapp/assets/spin/odin-voin-06-v7.jpg) · [07](../miniapp/assets/spin/odin-voin-07-v7.jpg) · [08](../miniapp/assets/spin/odin-voin-08-v7.jpg).
 
 ### Полный белый review-комплект
 
