@@ -153,7 +153,7 @@ def main() -> None:
     for product_id, sheet_name in (
         ("tee-sila-i-chest", "tee-sila-i-chest-logo-v5-contact-sheet.jpg"),
         ("tee-vzglyad", "tee-vzglyad-logo-v4-contact-sheet.jpg"),
-        ("tee-odin-v-pole-voin", "tee-odin-v-pole-voin-logo-v4-contact-sheet.jpg"),
+        ("tee-odin-v-pole-voin", "tee-odin-v-pole-voin-logo-v5-contact-sheet.jpg"),
     ):
         product = products[product_id]
         build_video(product)
