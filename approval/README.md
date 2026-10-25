@@ -6,11 +6,11 @@
 
 ## 1. Футболка «СИЛА И ЧЕСТЬ»
 
-![Контрольный лист «СИЛА И ЧЕСТЬ»](tee-sila-i-chest-logo-v4-contact-sheet.jpg)
+![Контрольный лист «СИЛА И ЧЕСТЬ»](tee-sila-i-chest-logo-v5-contact-sheet.jpg)
 
-- [Контрольный лист JPG](tee-sila-i-chest-logo-v4-contact-sheet.jpg)
-- [Видеообзор 360° MP4](../miniapp/assets/video/tee-sila-i-chest-360-v4.mp4) — 4 секунды, 1080×590, 24 fps, H.264, без звука.
-- Прежний лист: [версия v3](tee-sila-i-chest-logo-v3-contact-sheet.jpg). Прежнее видео: [360° v3](../miniapp/assets/video/tee-sila-i-chest-360-v3.mp4).
+- [Контрольный лист JPG](tee-sila-i-chest-logo-v5-contact-sheet.jpg)
+- [Видеообзор 360° MP4](../miniapp/assets/video/tee-sila-i-chest-360-v5.mp4) — 8 секунд, 1080×590, 24 fps, H.264, без звука; короткие кроссфейды и повтор первого кадра для мягкого loop.
+- Прежний лист: [версия v4](tee-sila-i-chest-logo-v4-contact-sheet.jpg). Прежнее видео: [360° v4](../miniapp/assets/video/tee-sila-i-chest-360-v4.mp4).
 
 | Кадр | Файл |
 |---|---|
@@ -24,11 +24,11 @@
 
 ## 2. Футболка «ВЗГЛЯД»
 
-![Контрольный лист «ВЗГЛЯД»](tee-vzglyad-logo-v3-contact-sheet.jpg)
+![Контрольный лист «ВЗГЛЯД»](tee-vzglyad-logo-v4-contact-sheet.jpg)
 
-- [Контрольный лист JPG](tee-vzglyad-logo-v3-contact-sheet.jpg)
-- [Видеообзор 360° MP4](../miniapp/assets/video/tee-vzglyad-360-v4.mp4) — 4 секунды, 1080×590, 24 fps, H.264, без звука.
-- Прежний лист: [версия v2](tee-vzglyad-logo-v2-contact-sheet.jpg). Прежнее видео: [360° v3](../miniapp/assets/video/tee-vzglyad-360-v3.mp4).
+- [Контрольный лист JPG](tee-vzglyad-logo-v4-contact-sheet.jpg)
+- [Видеообзор 360° MP4](../miniapp/assets/video/tee-vzglyad-360-v5.mp4) — 8 секунд, 1080×590, 24 fps, H.264, без звука; короткие кроссфейды и повтор первого кадра для мягкого loop.
+- Прежний лист: [версия v3](tee-vzglyad-logo-v3-contact-sheet.jpg). Прежнее видео: [360° v4](../miniapp/assets/video/tee-vzglyad-360-v4.mp4).
 
 | Кадр | Файл |
 |---|---|
@@ -44,14 +44,15 @@
 
 ## 3. Белая футболка «ОДИН В ПОЛЕ ВОИН» — активный товар
 
-![Контрольный лист белой футболки](tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg)
+![Контрольный лист белой футболки](tee-odin-v-pole-voin-logo-v4-contact-sheet.jpg)
 
-- [Контрольный лист JPG](tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg)
-- [Товарное видео 360° MP4](../miniapp/assets/video/tee-odin-v-pole-voin-360-v3.mp4) — 4 секунды, 720×1280, 24 fps, H.264, без звука; исходный портретный ракурс сохранён без кадрирования.
+- [Контрольный лист JPG](tee-odin-v-pole-voin-logo-v4-contact-sheet.jpg)
+- [Товарное видео 360° MP4](../miniapp/assets/video/tee-odin-v-pole-voin-360-v4.mp4) — 8 секунд, 1080×590, 24 fps, H.264, без звука; тот же бетонный фон, масштаб и кроссфейды, что у чёрных футболок.
 - [Крупные детали JPG](../miniapp/assets/drop/odin-voin-detail-v3.jpg) — монограмма, надпись и нашивки.
+- Прежний портретный вариант: [контрольный лист v3](tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg) и [видео v3](../miniapp/assets/video/tee-odin-v-pole-voin-360-v3.mp4) сохранены только для сравнения, не используются витриной.
 - В Mini App: 5 фото, 8 ракурсов вращения, видео, размеры S–XXL и существующий checkout. Цена **4 900 ₽**, статус **предзаказ**.
 
-Витринные ракурсы: [01](../miniapp/assets/spin/odin-voin-01-v3.jpg) · [02](../miniapp/assets/spin/odin-voin-02-v3.jpg) · [03](../miniapp/assets/spin/odin-voin-03-v3.jpg) · [04](../miniapp/assets/spin/odin-voin-04-v3.jpg) · [05](../miniapp/assets/spin/odin-voin-05-v3.jpg) · [06](../miniapp/assets/spin/odin-voin-06-v3.jpg) · [07](../miniapp/assets/spin/odin-voin-07-v3.jpg) · [08](../miniapp/assets/spin/odin-voin-08-v3.jpg).
+Витринные ракурсы: [01](../miniapp/assets/spin/odin-voin-01-v4.jpg) · [02](../miniapp/assets/spin/odin-voin-02-v4.jpg) · [03](../miniapp/assets/spin/odin-voin-03-v4.jpg) · [04](../miniapp/assets/spin/odin-voin-04-v4.jpg) · [05](../miniapp/assets/spin/odin-voin-05-v4.jpg) · [06](../miniapp/assets/spin/odin-voin-06-v4.jpg) · [07](../miniapp/assets/spin/odin-voin-07-v4.jpg) · [08](../miniapp/assets/spin/odin-voin-08-v4.jpg).
 
 ### Полный белый review-комплект
 
@@ -61,10 +62,11 @@
 - [Десять исправленных ракурсов JPG](brand-logo-review-2026-10-25-v2/odin-v-pole-voin-frames.jpg)
 - [Видеообзор MP4](brand-logo-review-2026-10-25-v2/odin-v-pole-voin-review.mp4) — 10 секунд, 720×1280, 30 fps, H.264, исходная звуковая дорожка AAC.
 - [Постер JPG](brand-logo-review-2026-10-25-v2/odin-v-pole-voin-poster.jpg)
+- [Исходный второй боковой кадр](brand-logo-review-2026-10-25-v2/white-sources/odin-voin-08-original.jpg) сохранён отдельно; генератор `tools/refine_white_spin.py` использует только committed inputs и не требует архив переписки.
 - Отдельные кадры: [01](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-01.jpg) · [02](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-02.jpg) · [03](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-03.jpg) · [04](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-04.jpg) · [05](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-05.jpg) · [06](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-06.jpg) · [07](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-07.jpg) · [08](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-08.jpg) · [09](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-09.jpg) · [10](brand-logo-review-2026-10-25-v2/white-frames/odin-voin-10.jpg).
 - [Прежний белый макет](brand-logo-review-2026-10-25/odin-v-pole-voin-board.jpg) сохранён для сравнения.
 
-Исходный `task_materials/chat_export/video_files/0818.mp4` сохранён без изменений. Review MP4 — монтаж из десяти исправленных кадров исходного вращения, а не новая живая съёмка. Старый неактивный `field-tee-001` не используется как новый SKU.
+Исходный `task_materials/chat_export/video_files/0818.mp4` сохранён без изменений. Архивный review MP4 — монтаж из десяти исправленных кадров исходного вращения; активные товарные MP4 — новый восьмисекундный монтаж восьми landscape-ракурсов. Ни тот ни другой не является новой живой съёмкой. Старый неактивный `field-tee-001` не используется как новый SKU.
 
 ## 4. Жетон
 
@@ -105,9 +107,9 @@
 - сохранение клинка, кольца ценностей, изображения глаз, надписей и нашивок;
 - надпись «ОДИН В ПОЛЕ ВОИН» на белой спине и в деталях;
 - front / side / back / второй side и крупные планы;
-- последовательность ракурсов в трёх 360°-видео и девять сцен тизера;
+- единые 1080×590, центрирование и масштаб во всех 360°, плавные кроссфейды без сдвига изделия и мягкий loop в трёх новых восьмисекундных видео;
 - белую карточку, выбор размера, корзину и оформление предзаказа;
-- единый тёмный фон, свет и общий стиль комплекта.
+- единый тёмный бетонный фон, свет и общий стиль комплекта, особенно у белой футболки.
 
 ## Важно
 

@@ -11,7 +11,6 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
-import tempfile
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
@@ -52,25 +51,44 @@ def contain_on_dark(path: Path, size: tuple[int, int]) -> Image.Image:
 
 
 def build_video(product: dict) -> None:
+    """Render an exact eight-second loop with frame-aligned crossfades.
+
+    Nine one-second inputs (eight angles plus the first angle) and eight
+    0.125-second transitions produce 192 frames at 24 fps.  No zoom or pan is
+    applied, so the garment remains stable and the loop closes on frame 01.
+    """
     output = MINIAPP / product["video"]
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="logo-360-") as directory:
-        listing = Path(directory) / "frames.txt"
-        lines = []
-        for asset in product["spin"]:
-            lines += [f"file '{(MINIAPP / asset).as_posix()}'", "duration 0.5"]
-        lines.append(f"file '{(MINIAPP / product['spin'][-1]).as_posix()}'")
-        listing.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        subprocess.run(
-            [
-                ffmpeg_executable(), "-hide_banner", "-loglevel", "error", "-y",
-                "-f", "concat", "-safe", "0", "-i", str(listing),
-                "-vf", "fps=24,format=yuv420p", "-t", "4", "-an",
-                "-c:v", "libx264", "-preset", "medium", "-crf", "19",
-                "-movflags", "+faststart", str(output),
-            ],
-            check=True,
+    frames = [MINIAPP / asset for asset in product["spin"]]
+    if len(frames) != 8:
+        raise ValueError(f"{product['id']}: expected eight spin frames")
+    sequence = [*frames, frames[0]]
+    command = [ffmpeg_executable(), "-hide_banner", "-loglevel", "error", "-y"]
+    for frame in sequence:
+        command += ["-loop", "1", "-framerate", "24", "-t", "1", "-i", str(frame)]
+
+    filters = []
+    for index in range(len(sequence)):
+        filters.append(
+            f"[{index}:v]scale=1080:590:force_original_aspect_ratio=increase,"
+            f"crop=1080:590,fps=24,format=yuv420p[v{index}]"
         )
+    previous = "v0"
+    for index in range(1, len(sequence)):
+        output_label = f"x{index}"
+        filters.append(
+            f"[{previous}][v{index}]xfade=transition=fade:duration=0.125:"
+            f"offset={index * 0.875:.3f},fps=24[{output_label}]"
+        )
+        previous = output_label
+    filters.append(f"[{previous}]fps=24,format=yuv420p[video]")
+    command += [
+        "-filter_complex", ";".join(filters), "-map", "[video]",
+        "-frames:v", "192", "-r", "24", "-an",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "19",
+        "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output),
+    ]
+    subprocess.run(command, check=True)
 
 
 def product_sheet(product: dict, output_name: str) -> None:
@@ -97,7 +115,7 @@ def product_sheet(product: dict, output_name: str) -> None:
     video_bg = ImageEnhance.Brightness(video_bg).enhance(0.42)
     canvas.paste(video_bg, (x, y))
     draw.text((x + 240, y + 102), "360° ВИДЕО", font=font(42, True), fill=INK, anchor="mm")
-    draw.text((x + 240, y + 154), "MP4 · 4 СЕК · БЕЗ ЗВУКА", font=font(22), fill=INK, anchor="mm")
+    draw.text((x + 240, y + 154), "MP4 · 8 СЕК · БЕЗ ЗВУКА", font=font(22), fill=INK, anchor="mm")
     draw.text((x, y + 280), "06 / 360° ВИДЕО", font=font(23, True), fill=RED)
 
     draw.line((48, 860, 1520, 860), fill=(50, 48, 46), width=1)
@@ -133,14 +151,13 @@ def main() -> None:
     catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
     products = {product["id"]: product for product in catalog["products"]}
     for product_id, sheet_name in (
-        ("tee-sila-i-chest", "tee-sila-i-chest-logo-v4-contact-sheet.jpg"),
-        ("tee-vzglyad", "tee-vzglyad-logo-v3-contact-sheet.jpg"),
-        ("tee-odin-v-pole-voin", "tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg"),
+        ("tee-sila-i-chest", "tee-sila-i-chest-logo-v5-contact-sheet.jpg"),
+        ("tee-vzglyad", "tee-vzglyad-logo-v4-contact-sheet.jpg"),
+        ("tee-odin-v-pole-voin", "tee-odin-v-pole-voin-logo-v4-contact-sheet.jpg"),
     ):
         product = products[product_id]
         build_video(product)
         product_sheet(product, sheet_name)
-    tag_sheet(products["tag-sila-i-chest"])
 
 
 if __name__ == "__main__":

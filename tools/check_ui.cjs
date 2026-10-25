@@ -33,6 +33,10 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
  await check('360 controls, nested photo zoom and keyboard focus',async()=>{
   await page.locator('[data-product-id="tee-sila-i-chest"] .product-open').click();await page.waitForFunction(()=>document.querySelector('.spin-frame').complete);
   assert.equal(await page.evaluate(()=>VorozhbitovShop.state.viewer.frames.length),8);assert.equal(await page.evaluate(()=>VorozhbitovShop.state.viewer.raf),0);await shot(page,'mobile-product');
+  assert.equal(await page.locator('.spin-frame').count(),2);await page.waitForFunction(()=>document.querySelector('.spin-frame-next').complete);
+  await page.emulateMedia({reducedMotion:'no-preference'});const blend=await page.evaluate(()=>{const v=VorozhbitovShop.state.viewer;v.index=.97;v.show();return Number(document.querySelector('.spin-frame-next').style.opacity)});
+  assert.ok(blend>0&&blend<1);await page.evaluate(()=>{const v=VorozhbitovShop.state.viewer;v.index=0;v.show()});await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await page.locator('.spin-frame-current').evaluate(img=>getComputedStyle(img).objectFit),'cover');assert.equal(await page.locator('.spin-frame-current').evaluate(img=>img.style.transform),'');
   await page.locator('#view3d').focus();await page.keyboard.press('ArrowRight');assert.equal(await page.locator('#mediaPosition').textContent(),'02 / 08');
   await page.locator('#mediaNext').click();assert.equal(await page.locator('#mediaPosition').textContent(),'03 / 08');await page.locator('#spinToggle').click();
   await page.locator('#zoomProduct').click();assert.equal(await page.evaluate(()=>VorozhbitovShop.state.viewer.alive),false);assert.equal(await page.locator('#productModal').getAttribute('aria-hidden'),'true');
@@ -41,7 +45,7 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
   await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.id),'zoomProduct');await page.locator('#spinToggle').click();await page.locator('#stagePhoto').click();
   assert.equal(await page.locator('#galleryDots button').count(),5);await page.locator('[data-gallery="1"]').click();assert.match(await page.locator('#sheetImage').getAttribute('src'),/tee-sich-03/);
   await page.locator('[data-gallery="4"]').click();await shot(page,'mobile-detail');
-  await page.locator('#stageVideo').click();await page.waitForFunction(()=>document.querySelector('#sheetVideo').readyState>=1);assert.match(await page.locator('#sheetVideo').getAttribute('src'),/tee-sila-i-chest-360-v4\.mp4\?v=/);assert.ok(Math.abs(await page.locator('#sheetVideo').evaluate(video=>video.duration)-4)<0.05);await page.locator('#stagePhoto').click();
+  await page.locator('#stageVideo').click();await page.waitForFunction(()=>document.querySelector('#sheetVideo').readyState>=1);assert.match(await page.locator('#sheetVideo').getAttribute('src'),/tee-sila-i-chest-360-v5\.mp4\?v=/);assert.ok(Math.abs(await page.locator('#sheetVideo').evaluate(video=>video.duration)-8)<0.05);await shot(page,'mobile-black-video');await page.locator('#stagePhoto').click();
   await page.locator('#addToCartButton').click();await page.locator('[data-size="XXL"]').click();
   assert.equal(await page.locator('[data-size="XXL"]').getAttribute('aria-pressed'),'true');
  });
@@ -62,9 +66,10 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
   await page.locator('#stagePhoto').click();assert.equal(await page.locator('#galleryDots button').count(),5);
   await page.locator('[data-gallery="4"]').click();assert.match(await page.locator('#sheetImage').getAttribute('src'),/odin-voin-detail-v3/);
   await page.locator('#stageVideo').click();await page.waitForFunction(()=>document.querySelector('#sheetVideo').readyState>=1);
-  assert.match(await page.locator('#sheetVideo').getAttribute('src'),/tee-odin-v-pole-voin-360-v3\.mp4\?v=/);
-  assert.ok(Math.abs(await page.locator('#sheetVideo').evaluate(video=>video.duration)-4)<0.05);
-  await page.locator('#stage3d').click();await shot(page,'mobile-white-product');
+  assert.match(await page.locator('#sheetVideo').getAttribute('src'),/tee-odin-v-pole-voin-360-v4\.mp4\?v=/);
+  assert.ok(Math.abs(await page.locator('#sheetVideo').evaluate(video=>video.duration)-8)<0.05);await shot(page,'mobile-white-video');
+  await page.locator('#stage3d').click();await page.waitForFunction(()=>{const img=document.querySelector('.spin-frame-current');return img.complete&&img.naturalWidth===1080&&img.naturalHeight===590});
+  assert.equal(await page.locator('.spin-frame-next').evaluate(img=>getComputedStyle(img).objectFit),'cover');await shot(page,'mobile-white-product');
   await page.locator('#addToCartButton').click();await page.locator('[data-size="M"]').click();await page.locator('#addToCartButton').click();
   await page.locator('#cartModal:not(.hidden)').waitFor();assert.match(await page.locator('#cartContent').textContent(),/ОДИН В ПОЛЕ ВОИН/);
   assert.equal((await page.locator('#cartTotal').textContent()).replace(/\s/g,' '),'4 900 ₽');

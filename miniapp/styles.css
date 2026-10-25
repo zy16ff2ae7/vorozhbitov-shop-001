@@ -883,8 +883,9 @@ h1, h2 {
 }
 .view3d:active { cursor: grabbing; }
 .spin-frame {
+  position: absolute; inset: 0;
   width: 100%; height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
   pointer-events: none;
   user-select: none;
@@ -892,6 +893,7 @@ h1, h2 {
   -webkit-touch-callout: none;
   -webkit-user-drag: none;
 }
+.spin-frame-next { opacity: 0; }
 .sheet-photo[src*="/tee-flatlay-v2.jpg"],
 .sheet-photo[src*="/tee-back-v3.jpg"],
 .sheet-photo[src*="/tee-detail-v6.jpg"],
@@ -1675,10 +1677,9 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .sheet-header .sheet-close { position: static; flex-shrink: 0; }
 .sheet-image { height: clamp(340px, 53svh, 500px); background: #171719; }
 .sheet-image > img, .sheet-photo { filter: none; object-fit: contain; }
-.sheet-image > .sheet-video { width: 100%; height: 100%; min-height: 0; object-fit: contain; background: #171719; }
+.sheet-image > .sheet-video { width: 100%; height: 100%; min-height: 0; object-fit: cover; object-position: center; background: #171719; }
 .view3d { background: #171719; touch-action: pan-y; }
-.spin-frame { object-fit: contain; }
-.spin-frame[src*="/tee-sich-"], .sheet-photo[src*="/spin/"] { object-fit: cover; }
+.spin-frame, .sheet-photo[src*="/spin/"] { object-fit: cover; object-position: center; }
 .stage-switch { left: 14px; top: 14px; overflow: hidden; background: rgba(20, 20, 22,.94); border: 1px solid var(--field-line); backdrop-filter: none; }
 .stage-btn { min-height: 44px; padding-inline: 15px; color: var(--muted); font-size: 11px; }
 .stage-btn.active { color: var(--bg); background: var(--ink); }

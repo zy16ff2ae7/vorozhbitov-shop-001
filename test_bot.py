@@ -99,6 +99,7 @@ class BotTests(unittest.TestCase):
     def test_all_drop_tees_have_full_photo_and_spin_sets(self):
         catalog = Catalog(Path(__file__).with_name("catalog.json"))
         miniapp = Path(__file__).with_name("miniapp")
+        from PIL import Image
         for product_id in ("tee-sila-i-chest", "tee-vzglyad", "tee-odin-v-pole-voin"):
             with self.subTest(product_id=product_id):
                 product = catalog.get(product_id)
@@ -113,6 +114,9 @@ class BotTests(unittest.TestCase):
                     self.assertTrue((miniapp / asset).is_file(), asset)
                 spin_hashes = {hashlib.sha256((miniapp / asset).read_bytes()).digest() for asset in product["spin"]}
                 self.assertEqual(len(spin_hashes), 8, "360° frames must not be copies of one image")
+                for asset in product["spin"]:
+                    with Image.open(miniapp / asset) as frame:
+                        self.assertEqual(frame.size, (1080, 590), asset)
         self.assertIn("принт на груди", catalog.get("tee-vzglyad")["image_labels"][-1])
         self.assertIn("360°", catalog.get("tee-vzglyad")["media_note"])
         # The original combined design remains an untouched source material.
@@ -142,7 +146,7 @@ class BotTests(unittest.TestCase):
             video = miniapp / catalog.get(product_id)["video"]
             self.assertEqual(video.suffix, ".mp4")
             self.assertGreater(video.stat().st_size, 10_000)
-            self.assertAlmostEqual(mp4_duration_seconds(video), 4.0, places=2)
+            self.assertAlmostEqual(mp4_duration_seconds(video), 8.0, places=2)
         index = (miniapp / "index.html").read_text(encoding="utf-8")
         video_tag = next(line for line in index.splitlines() if 'id="sheetVideo"' in line)
         self.assertIn('id="stageVideo"', index)
@@ -155,6 +159,17 @@ class BotTests(unittest.TestCase):
         self.assertIn('if (mode !== "video") pauseProductVideo();', app)
         self.assertIn('if (document.hidden) pauseProductVideo();', app)
         self.assertIn('if (!product || state.stage === "video") return;', app)
+
+    def test_product_viewer_has_two_crossfade_layers_and_no_drag_shift(self):
+        root = Path(__file__).parent
+        viewer = (root / "miniapp/viewer3d.js").read_text(encoding="utf-8")
+        styles = (root / "miniapp/styles.css").read_text(encoding="utf-8")
+        self.assertIn("spin-frame-current", viewer)
+        self.assertIn("spin-frame-next", viewer)
+        self.assertIn("smoothstep((fraction - .78) / .22)", viewer)
+        self.assertNotIn("translateX(", viewer)
+        self.assertIn('.spin-frame, .sheet-photo[src*="/spin/"] { object-fit: cover;', styles)
+        self.assertIn(".sheet-video { width: 100%; height: 100%; min-height: 0; object-fit: cover;", styles)
 
     def test_public_product_name_is_vzglyad_with_stable_technical_id(self):
         root = Path(__file__).parent
@@ -210,9 +225,9 @@ class BotTests(unittest.TestCase):
         self.assertEqual(media["teaser_thumbnail"], "assets/video/drop-vzglyad-18s-v3-thumb.jpg")
         self.assertAlmostEqual(mp4_duration_seconds(miniapp / media["teaser"]), 18.0, places=2)
         for product_id, version, old_name in (
-            ("tee-sila-i-chest", "-360-v4.mp4", "tee-sila-i-chest-360.mp4"),
-            ("tee-vzglyad", "-360-v4.mp4", "tee-vzglyad-360.mp4"),
-            ("tee-odin-v-pole-voin", "-360-v3.mp4", None),
+            ("tee-sila-i-chest", "-360-v5.mp4", "tee-sila-i-chest-360.mp4"),
+            ("tee-vzglyad", "-360-v5.mp4", "tee-vzglyad-360.mp4"),
+            ("tee-odin-v-pole-voin", "-360-v4.mp4", "tee-odin-v-pole-voin-360-v3.mp4"),
         ):
             self.assertTrue(catalog.get(product_id)["video"].endswith(version))
             if old_name:
@@ -226,14 +241,14 @@ class BotTests(unittest.TestCase):
         approval = root / "approval"
         readme = (approval / "README.md").read_text(encoding="utf-8")
         for name in (
-            "tee-sila-i-chest-logo-v4-contact-sheet.jpg",
-            "tee-vzglyad-logo-v3-contact-sheet.jpg",
+            "tee-sila-i-chest-logo-v5-contact-sheet.jpg",
+            "tee-vzglyad-logo-v4-contact-sheet.jpg",
             "tag-sila-i-chest-logo-v3-contact-sheet.jpg",
-            "tee-odin-v-pole-voin-logo-v3-contact-sheet.jpg",
+            "tee-odin-v-pole-voin-logo-v4-contact-sheet.jpg",
             "drop-vzglyad-logo-v3-18s-contact-sheet.jpg",
-            "tee-sila-i-chest-360-v4.mp4",
-            "tee-vzglyad-360-v4.mp4",
-            "tee-odin-v-pole-voin-360-v3.mp4",
+            "tee-sila-i-chest-360-v5.mp4",
+            "tee-vzglyad-360-v5.mp4",
+            "tee-odin-v-pole-voin-360-v4.mp4",
             "drop-vzglyad-18s-v3.mp4",
             "odin-v-pole-voin-board.jpg",
             "odin-v-pole-voin-frames.jpg",
@@ -257,7 +272,7 @@ class BotTests(unittest.TestCase):
         for product_id, suffix in (
             ("tee-sila-i-chest", "-v4.jpg"),
             ("tee-vzglyad", "-v3.jpg"),
-            ("tee-odin-v-pole-voin", "-v3.jpg"),
+            ("tee-odin-v-pole-voin", "-v4.jpg"),
             ("tag-sila-i-chest", "-v3.jpg"),
         ):
             product = catalog.get(product_id)
@@ -276,6 +291,7 @@ class BotTests(unittest.TestCase):
             "assets/spin/tee-vzglyad-01-v2.jpg",
             "assets/spin/tag-sich-01.jpg",
             "assets/spin/tag-sich-01-v2.jpg",
+            "assets/spin/odin-voin-01-v3.jpg",
             "assets/drop/tee-detail-v4.jpg",
             "assets/drop/tee-detail-v5.jpg",
             "assets/drop/tee-vzglyad-detail.jpg",
