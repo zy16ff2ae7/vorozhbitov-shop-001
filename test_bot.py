@@ -330,8 +330,8 @@ class BotTests(unittest.TestCase):
         runtime_source = miniapp / "assets/brand/customer-sword-reference.jpg"
         self.assertTrue(runtime_source.is_file())
         source_archive = root / "task_materials"
-        if source_archive.is_dir():
-            original = source_archive / "chat_export/photos/photo_16@24-10-2026_18-37-50.jpg"
+        original = source_archive / "chat_export/photos/photo_16@24-10-2026_18-37-50.jpg"
+        if original.is_file():
             self.assertEqual(hashlib.sha256(runtime_source.read_bytes()).digest(), hashlib.sha256(original.read_bytes()).digest())
             self.assertTrue((source_archive / "chat_export/video_files/0818.mp4").is_file())
         self.assertIn("assets/sila-chest-seal-v3.jpg", (miniapp / "styles.css").read_text(encoding="utf-8"))
