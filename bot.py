@@ -7606,7 +7606,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
     def _stamp_assets(self, body: bytes) -> bytes:
         """Версионировать клиентский код и CSS вместе с его шрифтами."""
         text = body.decode("utf-8", "replace")
-        for name in ("app.js", "checkout.js", "shop-core.js", "viewer3d.js", "styles.css"):
+        for name in ("app.js", "checkout.js", "shop-core.js", "viewer3d.js", "telegram-web-app.js", "styles.css"):
             asset = self.static_root / name
             try:
                 version = self._asset_version(asset)

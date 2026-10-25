@@ -110,7 +110,7 @@ img { display: block; max-width: 100%; }
 .welcome {
   position: fixed; inset: 0; z-index: 180;
   display: grid; align-items: end;
-  overflow: hidden;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
   /* Сплошной фон: пока видео грузится, магазин под заставкой не просвечивает. */
   background: #070708;
 }

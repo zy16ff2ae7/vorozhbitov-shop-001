@@ -1176,7 +1176,7 @@
       stopWelcomeVideo();
       syncModalLayers();
       syncMainButton();
-    }, reducedMotion() ? 0 : 520);
+    }, reducedMotion() ? 0 : 350);
   }
 
   function startExperience() {
@@ -1399,8 +1399,8 @@
       // WebView может резать автоплей: первый жест снимает запрет, возврат во вкладку — повод повторить.
       window.addEventListener("pointerdown", event => {
         if (video.classList.contains("is-playing")) return;
-        // Тап по кнопке обработает её click: не запускаем видео под его будущий тоггл.
-        if (event.target.closest && event.target.closest("#welcomeMotion")) return;
+        // Тап по кнопке обработает её click/touchend: не перехватываем жест
+        if (event.target.closest && (event.target.closest("#welcomeMotion") || event.target.closest("#enterShop"))) return;
         welcomePlayback.blocked = false;
         syncWelcomeVideo();
       }, { passive: true });
@@ -1525,7 +1525,14 @@
       syncModalLayers();
       if (document.hidden) pauseProductVideo();
     });
-    $("#enterShop").addEventListener("click", enterShop);
+    const enterBtn = $("#enterShop");
+    if (enterBtn) {
+      enterBtn.addEventListener("click", enterShop);
+      enterBtn.addEventListener("touchend", event => {
+        event.preventDefault();
+        enterShop();
+      });
+    }
     $$("[data-stage]").forEach(button => button.addEventListener("click", () => {
       setStage(button.dataset.stage);
       haptic("light");
