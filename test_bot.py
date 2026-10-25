@@ -227,7 +227,7 @@ class BotTests(unittest.TestCase):
         for product_id, version, old_name in (
             ("tee-sila-i-chest", "-360-v5.mp4", "tee-sila-i-chest-360.mp4"),
             ("tee-vzglyad", "-360-v5.mp4", "tee-vzglyad-360.mp4"),
-            ("tee-odin-v-pole-voin", "-360-v5.mp4", "tee-odin-v-pole-voin-360-v3.mp4"),
+            ("tee-odin-v-pole-voin", "-360-v6.mp4", "tee-odin-v-pole-voin-360-v3.mp4"),
         ):
             self.assertTrue(catalog.get(product_id)["video"].endswith(version))
             if old_name:
@@ -244,11 +244,11 @@ class BotTests(unittest.TestCase):
             "tee-sila-i-chest-logo-v5-contact-sheet.jpg",
             "tee-vzglyad-logo-v4-contact-sheet.jpg",
             "tag-sila-i-chest-logo-v3-contact-sheet.jpg",
-            "tee-odin-v-pole-voin-logo-v5-contact-sheet.jpg",
+            "tee-odin-v-pole-voin-logo-v6-contact-sheet.jpg",
             "drop-vzglyad-logo-v3-18s-contact-sheet.jpg",
             "tee-sila-i-chest-360-v5.mp4",
             "tee-vzglyad-360-v5.mp4",
-            "tee-odin-v-pole-voin-360-v5.mp4",
+            "tee-odin-v-pole-voin-360-v6.mp4",
             "drop-vzglyad-18s-v3.mp4",
             "odin-v-pole-voin-board.jpg",
             "odin-v-pole-voin-frames.jpg",
@@ -272,7 +272,7 @@ class BotTests(unittest.TestCase):
         for product_id, suffix in (
             ("tee-sila-i-chest", "-v4.jpg"),
             ("tee-vzglyad", "-v3.jpg"),
-            ("tee-odin-v-pole-voin", "-v5.jpg"),
+            ("tee-odin-v-pole-voin", "-v6.jpg"),
             ("tag-sila-i-chest", "-v3.jpg"),
         ):
             product = catalog.get(product_id)
@@ -293,7 +293,9 @@ class BotTests(unittest.TestCase):
             "assets/spin/tag-sich-01-v2.jpg",
             "assets/spin/odin-voin-01-v3.jpg",
             "assets/spin/odin-voin-01-v4.jpg",
+            "assets/spin/odin-voin-01-v5.jpg",
             "assets/video/tee-odin-v-pole-voin-360-v4.mp4",
+            "assets/video/tee-odin-v-pole-voin-360-v5.mp4",
             "assets/drop/tee-detail-v4.jpg",
             "assets/drop/tee-detail-v5.jpg",
             "assets/drop/tee-vzglyad-detail.jpg",

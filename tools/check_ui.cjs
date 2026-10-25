@@ -66,7 +66,7 @@ async function shot(page,name,options={}){await page.screenshot({path:path.join(
   await page.locator('#stagePhoto').click();assert.equal(await page.locator('#galleryDots button').count(),5);
   await page.locator('[data-gallery="4"]').click();assert.match(await page.locator('#sheetImage').getAttribute('src'),/odin-voin-detail-v3/);
   await page.locator('#stageVideo').click();await page.waitForFunction(()=>document.querySelector('#sheetVideo').readyState>=1);
-  assert.match(await page.locator('#sheetVideo').getAttribute('src'),/tee-odin-v-pole-voin-360-v5\.mp4\?v=/);
+  assert.match(await page.locator('#sheetVideo').getAttribute('src'),/tee-odin-v-pole-voin-360-v6\.mp4\?v=/);
   assert.ok(Math.abs(await page.locator('#sheetVideo').evaluate(video=>video.duration)-8)<0.05);await shot(page,'mobile-white-video');
   await page.locator('#stage3d').click();await page.waitForFunction(()=>{const img=document.querySelector('.spin-frame-current');return img.complete&&img.naturalWidth===1080&&img.naturalHeight===590});
   assert.equal(await page.locator('.spin-frame-next').evaluate(img=>getComputedStyle(img).objectFit),'cover');await shot(page,'mobile-white-product');

@@ -3,7 +3,7 @@
 
 The eight outputs are montage visualisations, not a new live recording.  They
 share the black tees' 1080×590 concrete plate, garment height and baseline.
-Existing v3/v4 assets and all customer/source images are left untouched.  No
+Existing v3–v5 assets and all customer/source images are left untouched.  No
 ``task_materials`` archive is required: every input is committed in miniapp/
 or approval/.
 
@@ -23,7 +23,6 @@ REVIEW = ROOT / "approval/brand-logo-review-2026-10-25-v2"
 FRAME_DIR = REVIEW / "white-frames"
 SOURCE_FIRST_SIDE = REVIEW / "white-sources/odin-voin-03-original.jpg"
 SOURCE_SIDE = REVIEW / "white-sources/odin-voin-08-original.jpg"
-BOARD = MINIAPP / "assets/drop/odin-v-pole-voin-v3.jpg"
 PLATE_SOURCE = MINIAPP / "assets/spin/tee-sich-03-v4.jpg"
 SPIN = MINIAPP / "assets/spin"
 CANVAS_SIZE = (1080, 590)
@@ -141,48 +140,18 @@ def clean_other_side() -> Image.Image:
 def garment_cutout(
     source: Path | Image.Image,
     *,
-    crop: tuple[int, int, int, int] | None = None,
-    board: str = "",
+    allowed_polygon: list[tuple[int, int]] | None = None,
     include_polygons: list[list[tuple[int, int]]] | None = None,
     exclude_polygons: list[list[tuple[int, int]]] | None = None,
 ) -> Image.Image:
     image = source.copy() if isinstance(source, Image.Image) else Image.open(source)
-    image = image.convert("RGB")
-    if crop:
-        image = image.crop(crop)
-    pixels = np.array(image)
+    pixels = np.array(image.convert("RGB"))
     gray = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY)
-    if board:
-        hsv = cv2.cvtColor(pixels, cv2.COLOR_RGB2HSV)
-        bright = ((hsv[..., 1] < 70) & (hsv[..., 2] > 70)).astype(np.uint8) * 255
-
-        # The board photographs include a model.  Keep the complete sleeves and
-        # hem, but exclude tattooed arms, the wristwatch and the neck before
-        # finding the garment contour.  A brightness-only contour included the
-        # watch as a bright detached artefact in the previous version.
-        outlines = {
-            "front": [
-                (235, 28), (425, 28), (510, 65), (580, 125),
-                (655, 345), (650, 375), (525, 410), (507, 398),
-                (507, 525), (502, 585), (485, 620), (440, 645),
-                (350, 663), (260, 660), (180, 640), (130, 610),
-                (122, 580), (135, 540), (145, 415), (125, 420),
-                (10, 380), (5, 350), (65, 150), (125, 80),
-            ],
-            "back": [
-                (220, 50), (405, 48), (485, 55), (570, 115),
-                (680, 350), (675, 380), (555, 420), (542, 405),
-                (548, 585), (540, 635), (505, 665), (440, 685),
-                (350, 695), (250, 690), (180, 670), (145, 640),
-                (145, 420), (125, 425), (15, 380), (8, 350),
-                (65, 160), (125, 85),
-            ],
-        }
+    bright = (gray > 34).astype(np.uint8) * 255
+    if allowed_polygon:
         allowed = np.zeros(gray.shape, np.uint8)
-        cv2.fillPoly(allowed, [np.array(outlines[board], np.int32)], 255)
+        cv2.fillPoly(allowed, [np.array(allowed_polygon, np.int32)], 255)
         bright = cv2.bitwise_and(bright, allowed)
-    else:
-        bright = (gray > 34).astype(np.uint8) * 255
     bright = cv2.morphologyEx(bright, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
     contours, _ = cv2.findContours(bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
@@ -191,38 +160,6 @@ def garment_cutout(
     mask = np.zeros(gray.shape, np.uint8)
     cv2.drawContours(mask, [contour], -1, 255, -1)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((11, 11), np.uint8))
-
-    if board:
-        # The board contains a model.  Its outer garment contour already drops
-        # arms; darken only enclosed skin at the collar instead of revealing a
-        # bright background hole.  No skin or mannequin is composited.
-        hsv = cv2.cvtColor(pixels, cv2.COLOR_RGB2HSV)
-        skin = (hsv[..., 0] < 28) & (hsv[..., 1] > 62) & (hsv[..., 2] > 35)
-        pixels[skin & (mask > 0)] = (18, 18, 18)
-
-        # Fill only the central concavity between the collar edges.  A convex
-        # hull supplies the outer boundary; tight top/central limits prevent it
-        # from touching sleeves, underarms, shoulders or the garment hem.
-        bx, by, bw, bh = cv2.boundingRect(contour)
-        hull_mask = np.zeros_like(mask)
-        cv2.drawContours(hull_mask, [cv2.convexHull(contour)], -1, 255, -1)
-        yy, xx = np.indices(mask.shape)
-        collar = (
-            (board == "front")
-            & (hull_mask > 0) & (mask == 0)
-            & (yy < by + bh * 0.25)
-            & (np.abs(xx - (bx + bw / 2)) < bw * 0.22)
-        )
-        collar_shape = np.zeros_like(mask)
-        cv2.ellipse(
-            collar_shape,
-            (round(bx + bw / 2), round(by + bh * 0.063)),
-            (round(bw * 0.14), round(bh * 0.047)),
-            0, 0, 360, 255, -1,
-        )
-        collar &= collar_shape > 0
-        pixels[collar] = (18, 18, 18)
-        mask[collar] = 255
 
     # Detached letters, logo fragments and hanging editing artefacts are not
     # part of the garment.  Real prints/labels inside the contour are retained.
@@ -261,10 +198,17 @@ def garment_cutout(
     return rgba.crop((x, y, x + width, y + height))
 
 
-def composite(plate: Image.Image, cutout: Image.Image) -> Image.Image:
-    width = round(cutout.width * GARMENT_HEIGHT / cutout.height)
-    cutout = cutout.resize((width, GARMENT_HEIGHT), Image.Resampling.LANCZOS)
-    x = round(CANVAS_SIZE[0] / 2 - cutout.width / 2)
+def composite(
+    plate: Image.Image,
+    cutout: Image.Image,
+    *,
+    width_scale: float = 1.0,
+    garment_height: int = GARMENT_HEIGHT,
+    center_x: float = CANVAS_SIZE[0] / 2,
+) -> Image.Image:
+    width = round(cutout.width * garment_height / cutout.height * width_scale)
+    cutout = cutout.resize((width, garment_height), Image.Resampling.LANCZOS)
+    x = round(center_x - cutout.width / 2)
     y = GARMENT_BASELINE - cutout.height
     canvas = plate.copy().convert("RGBA")
 
@@ -283,7 +227,8 @@ def build_white_spin() -> list[Path]:
     plate = concrete_plate()
     first_side = clean_first_side()
     other_side = clean_other_side()
-    front_tag = [[(327, 1054), (378, 1057), (369, 1117), (316, 1108)]]
+    front_tag = [[(499, 1048), (533, 1050), (530, 1116), (497, 1112)]]
+    angle_tag = [[(327, 1054), (378, 1057), (369, 1117), (316, 1108)]]
     first_side_tag = [[(178, 1038), (208, 1048), (202, 1103), (169, 1094)]]
     duplicate_side_tag = [[
         (140, 1052), (164, 1058), (178, 1065),
@@ -297,29 +242,47 @@ def build_white_spin() -> list[Path]:
         (225, 380), (310, 380), (310, 780), (203, 780),
         (204, 650), (208, 550), (214, 450),
     ]]
+    # Frames 01/05 are the same free-floating front/back views used for the
+    # black tees.  Their sleeve tips touch the portrait source boundary; this
+    # shared symmetric outline trims those tips to complete, natural curves.
+    # It does not alter the collar, torso, prints or straight garment hem.
+    symmetric_outline = [
+        (250, 260), (470, 260), (560, 310), (630, 400),
+        (675, 450), (700, 500), (705, 550), (705, 600),
+        (695, 650), (680, 680), (660, 705), (580, 755),
+        (590, 1080), (570, 1120), (150, 1120), (130, 1080),
+        (140, 755), (60, 705), (40, 680), (25, 650),
+        (15, 600), (15, 550), (20, 500), (45, 450),
+        (90, 400), (160, 320),
+    ]
     sources = [
-        (BOARD, (0, 0, 700, 700), "front", None, None),
-        (FRAME_DIR / "odin-voin-02.jpg", None, "", front_tag, None),
-        (first_side, None, "", first_side_tag, duplicate_side_tag),
-        (FRAME_DIR / "odin-voin-04.jpg", None, "", None, None),
-        (BOARD, (700, 0, 1402, 700), "back", None, None),
-        (FRAME_DIR / "odin-voin-06.jpg", None, "", None, None),
-        (other_side, None, "", other_side_clean_panel, other_side_print_edge),
-        (FRAME_DIR / "odin-voin-09.jpg", None, "", None, None),
+        (FRAME_DIR / "odin-voin-01.jpg", front_tag, None, symmetric_outline),
+        (FRAME_DIR / "odin-voin-02.jpg", angle_tag, None, None),
+        (first_side, first_side_tag, duplicate_side_tag, None),
+        (FRAME_DIR / "odin-voin-04.jpg", None, None, None),
+        (FRAME_DIR / "odin-voin-05.jpg", None, None, symmetric_outline),
+        (FRAME_DIR / "odin-voin-06.jpg", None, None, None),
+        (other_side, other_side_clean_panel, other_side_print_edge, None),
+        (FRAME_DIR / "odin-voin-09.jpg", None, None, None),
     ]
     outputs = []
-    for index, (source, crop, board, include, exclude) in enumerate(sources, 1):
+    for index, (source, include, exclude, allowed) in enumerate(sources, 1):
         cutout = garment_cutout(
             source,
-            crop=crop,
-            board=board,
+            allowed_polygon=allowed,
             include_polygons=include,
             exclude_polygons=exclude,
         )
-        frame = composite(plate, cutout)
+        frame = composite(
+            plate,
+            cutout,
+            width_scale=1.14 if index in (1, 5) else 1.0,
+            garment_height=452 if index in (1, 5) else GARMENT_HEIGHT,
+            center_x=535 if index in (1, 5) else CANVAS_SIZE[0] / 2,
+        )
         if frame.size != CANVAS_SIZE:
             raise AssertionError(frame.size)
-        output = SPIN / f"odin-voin-{index:02d}-v5.jpg"
+        output = SPIN / f"odin-voin-{index:02d}-v6.jpg"
         frame.save(output, quality=95, subsampling=0, optimize=True)
         outputs.append(output)
     return outputs
