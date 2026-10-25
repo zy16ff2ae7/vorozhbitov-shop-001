@@ -76,6 +76,7 @@
       <div class="search-hints">
         <button type="button" data-hint="сила и честь">сила и честь</button>
         <button type="button" data-hint="взгляд">взгляд</button>
+        <button type="button" data-hint="один в поле воин">один в поле воин</button>
       </div>
     </div>
 
@@ -287,6 +288,20 @@
         <div class="size-block">
           <div class="size-heading">
             <strong>РАЗМЕР</strong>
+            <button class="size-guide-toggle" id="sizeGuideToggle" type="button" aria-expanded="false">ТАБЛИЦА РАЗМЕРОВ ▾</button>
+          </div>
+          <div class="size-guide hidden" id="sizeGuide">
+            <div class="size-guide-table">
+              <div class="size-guide-row size-guide-header">
+                <span>Размер</span><span>Рост</span><span>Вес</span><span>Ширина</span>
+              </div>
+              <div class="size-guide-row"><span>S</span><span>165–174 см</span><span>60–72 кг</span><span>57 см</span></div>
+              <div class="size-guide-row"><span>M</span><span>172–182 см</span><span>70–82 кг</span><span>60 см</span></div>
+              <div class="size-guide-row"><span>L</span><span>178–188 см</span><span>80–92 кг</span><span>63 см</span></div>
+              <div class="size-guide-row"><span>XL</span><span>184–194 см</span><span>90–105 кг</span><span>66 см</span></div>
+              <div class="size-guide-row"><span>XXL</span><span>188–200 см</span><span>100–120 кг</span><span>69 см</span></div>
+            </div>
+            <p class="size-guide-note">Плотный премиальный оверсайз (240 г/м²). Свободный крой со спущенным плечом.</p>
           </div>
           <div class="size-list" id="sizeList"></div>
           <p class="size-hint" id="sizeHint">Выбери размер.</p>

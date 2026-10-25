@@ -3264,6 +3264,63 @@ class NativeMenuTests(unittest.TestCase):
             text = api.photos[-1][2] if api.photos else api.last(500)[1]
             self.assertIn("ЭМОДЗИ-ПАК", text)
 
+    def test_smart_reply_and_faq_routing(self):
+        """Проверяем умный роутинг текстовых сообщений: размеры, заказы/статус, оплата, возврат, техподдержка."""
+        with tempfile.TemporaryDirectory() as directory:
+            api = MenuAPI()
+            bot, db = self._bot(directory, api)
+            user = {"id": 500, "username": "buyer", "first_name": "Никита"}
+            db.upsert_user(user)
+
+            # 1. Запрос размеров
+            bot.handle_update({"update_id": 20, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "размеры"}})
+            text = api.last(500)[1]
+            self.assertIn("ТАБЛИЦА РАЗМЕРОВ", text)
+            self.assertIn("S", text)
+            self.assertIn("XXL", text)
+
+            # 2. Вопрос о статусе заказа
+            bot.handle_update({"update_id": 21, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "где заказ"}})
+            text = api.last(500)[1]
+            self.assertIn("ПОКУПКИ", text)
+
+            # 3. Вопрос по оплате
+            bot.handle_update({"update_id": 22, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "как оплатить"}})
+            text = api.last(500)[1]
+            self.assertIn("ОПЛАТИТЬ", text)
+
+            # 4. Вопрос по возврату
+            bot.handle_update({"update_id": 23, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "возврат"}})
+            text = api.last(500)[1]
+            self.assertIn("ВОЗВРАТ", text)
+
+            # 5. Сообщение о сбое/проблеме
+            bot.handle_update({"update_id": 24, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "не работает"}})
+            text = api.last(500)[1]
+            self.assertIn("ПОДДЕРЖКА", text)
+
+            # 6. Callback faq:pay
+            bot.handle_update({"update_id": 25, "callback_query": {"id": "cb_faq", "from": user, "message": {"chat": {"id": 500, "type": "private"}}, "data": "faq:pay"}})
+            text = api.last(500)[1]
+            self.assertIn("ОПЛАТИТЬ", text)
+
+            # 7. Вопрос о доставке
+            bot.handle_update({"update_id": 26, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "доставка"}})
+            text = api.last(500)[1]
+            self.assertIn("ДОСТАВКА И СРОКИ", text)
+            self.assertIn("СДЭК", text)
+
+            # 8. Вопрос о материале/ткани
+            bot.handle_update({"update_id": 27, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "материал"}})
+            text = api.last(500)[1]
+            self.assertIn("МАТЕРИАЛЫ И КАЧЕСТВО", text)
+            self.assertIn("хлопок", text)
+
+            # 9. Вопрос об отзывах
+            bot.handle_update({"update_id": 28, "message": {"chat": {"id": 500, "type": "private"}, "from": user, "text": "отзывы"}})
+            text = api.last(500)[1]
+            self.assertIn("ОТЗЫВЫ И ФОТО ПОКУПАТЕЛЕЙ", text)
+
 
 if __name__ == "__main__":
     unittest.main()

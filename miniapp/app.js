@@ -70,6 +70,16 @@
     write: saveJSON
   });
 
+  const SIZE_ADVICE = {
+    "S": "рост 165–174 см · вес 60–72 кг",
+    "M": "рост 172–182 см · вес 70–82 кг",
+    "L": "рост 178–188 см · вес 80–92 кг",
+    "XL": "рост 184–194 см · вес 90–105 кг",
+    "XXL": "рост 188–200 см · вес 100–120 кг",
+    "ONE SIZE": "единый универсальный размер",
+    "ОДИН": "единый универсальный размер"
+  };
+
   function escapeHTML(value) {
     return String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   }
@@ -479,7 +489,7 @@
       if (state.stock === "limited" && !isLimited(product)) return false;
       if (state.stock === "available" && !Core.available(product)) return false;
       if (state.sizeFilter !== "all" && !(product.sizes || []).includes(state.sizeFilter)) return false;
-      if (search && !`${product.name} ${product.description} ${product.badge} ${product.material} ${product.signature || ""} ${product.print || ""}`.toLowerCase().includes(search)) return false;
+      if (search && !`${product.name} ${product.description} ${product.badge} ${product.material} ${product.signature || ""} ${product.print || ""} ${(product.details || []).join(" ")}`.toLowerCase().includes(search)) return false;
       return true;
     });
     if (state.sort === "price-asc") list = [...list].sort((a, b) => priceNumber(a.price) - priceNumber(b.price));
@@ -491,7 +501,7 @@
   function renderProductCard(product, index) {
     return `<article class="product-card" data-product-id="${escapeHTML(product.id)}" style="--i:${index}">
       <div class="product-image">
-        <img src="${escapeHTML(imageFor(product))}" alt="${escapeHTML(product.name)}" loading="lazy">
+        <img src="${escapeHTML(imageFor(product))}" alt="${escapeHTML(product.name)}" ${index === 0 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>
         <span class="product-badge">${escapeHTML(product.badge || "БАЗА")}</span>
         ${Array.isArray(product.spin) && product.spin.length > 1 ? '<span class="badge-3d">360°</span>' : '<span class="badge-3d">ФОТО</span>'}
         <span class="product-hover">РАССМОТРЕТЬ <b>↗</b></span>
@@ -622,8 +632,18 @@
     $("#sheetDescription").textContent = product.description;
     $("#sheetFacts").innerHTML = `<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Плотный хлопок")}</span></div><div class="fact-row"><span>Посадка</span><span>${escapeHTML(product.fit || "Свободная")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(product.stock_label || "В наличии")}</span></div>`;
     $("#sizeList").innerHTML = (product.sizes || []).map(size => `<button class="size-button ${state.selectedSize === size ? "selected" : ""}" data-size="${escapeHTML(size)}" aria-pressed="${state.selectedSize === size}" type="button">${escapeHTML(size)}</button>`).join("");
-    $("#sizeHint").textContent = state.selectedSize ? `Размер ${state.selectedSize} выбран.` : "Выбери размер.";
+    const initialAdvice = state.selectedSize ? SIZE_ADVICE[state.selectedSize.toUpperCase()] : null;
+    $("#sizeHint").textContent = state.selectedSize ? (initialAdvice ? `Размер ${state.selectedSize}: ${initialAdvice}.` : `Размер ${state.selectedSize} выбран.`) : "Выбери размер.";
     $("#sizeHint").classList.remove("error");
+    const hasApparelSizes = (product.sizes || []).some(s => ["S", "M", "L", "XL", "XXL"].includes(String(s).toUpperCase()));
+    const guideToggle = $("#sizeGuideToggle");
+    if (guideToggle) {
+      guideToggle.classList.toggle("hidden", !hasApparelSizes);
+      guideToggle.setAttribute("aria-expanded", "false");
+      guideToggle.textContent = "ТАБЛИЦА РАЗМЕРОВ ▾";
+    }
+    const guide = $("#sizeGuide");
+    if (guide) guide.classList.add("hidden");
     $("#sheetDetails").innerHTML = `<strong>ДЕТАЛИ</strong><br>${(product.details || []).map(escapeHTML).join(" · ")}${product.media_note ? `<p class="media-note">${escapeHTML(product.media_note)}</p>` : ""}`;
     renderPersonalization(product);
     sheetProduct = product;
@@ -1552,13 +1572,23 @@
       if (card) openProduct(card.dataset.productId);
     });
 
+    $("#sizeGuideToggle")?.addEventListener("click", () => {
+      const guide = $("#sizeGuide");
+      if (!guide) return;
+      const isHidden = guide.classList.toggle("hidden");
+      $("#sizeGuideToggle").setAttribute("aria-expanded", String(!isHidden));
+      $("#sizeGuideToggle").textContent = isHidden ? "ТАБЛИЦА РАЗМЕРОВ ▾" : "СКРЫТЬ ТАБЛИЦУ ▴";
+      haptic("light");
+    });
+
     $("#sizeList").addEventListener("click", event => {
       const button = event.target.closest("[data-size]");
       if (!button) return;
       state.selectedSize = button.dataset.size;
       $$(".size-button", $("#sizeList")).forEach(node => { node.classList.toggle("selected", node === button); node.setAttribute("aria-pressed", String(node === button)); });
       updatePurchaseSummary();
-      $("#sizeHint").textContent = `Размер ${state.selectedSize} выбран.`;
+      const advice = SIZE_ADVICE[state.selectedSize.toUpperCase()];
+      $("#sizeHint").textContent = advice ? `Размер ${state.selectedSize}: ${advice}.` : `Размер ${state.selectedSize} выбран.`;
       $("#sizeHint").classList.remove("error");
       haptic("light");
     });
@@ -1636,6 +1666,13 @@
       $("#clearSearch").classList.toggle("hidden", !state.search);
       renderProducts();
     });
+    $("#searchInput").addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        $("#searchOverlay").classList.add("hidden");
+        $("#searchToggle").setAttribute("aria-expanded", "false");
+        scrollToId("catalog");
+      }
+    });
     $("#clearSearch").addEventListener("click", () => {
       state.search = "";
       $("#searchInput").value = "";
@@ -1647,6 +1684,8 @@
       $("#searchInput").value = state.search;
       $("#clearSearch").classList.remove("hidden");
       renderProducts();
+      $("#searchOverlay").classList.add("hidden");
+      $("#searchToggle").setAttribute("aria-expanded", "false");
       scrollToId("catalog");
     }));
 

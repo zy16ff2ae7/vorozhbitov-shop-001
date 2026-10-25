@@ -28,8 +28,8 @@
   --bone: #f4eee6;
   --paper: #efe6d8;
   --acid: #d6ff3c;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px), var(--tg-content-safe-area-inset-bottom, 0px));
+  --safe-top: max(env(safe-area-inset-top, 0px), var(--tg-safe-area-inset-top, 0px), var(--tg-content-safe-area-inset-top, 0px));
   --font-display: "Sila Chest", "Times New Roman", serif;
   --font-ui: "Sila Chest", "Times New Roman", serif;
   color-scheme: dark;
@@ -955,7 +955,30 @@ h1, h2 {
 .fact-row { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; }
 .fact-row span:first-child { color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
 .size-block { margin-top: 18px; }
-.size-heading { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 10px; letter-spacing: .14em; }
+.size-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 10px; letter-spacing: .14em; }
+.size-guide-toggle {
+  background: none; border: none; color: var(--muted);
+  font-size: 10px; letter-spacing: .08em; cursor: pointer;
+  padding: 2px 4px; text-decoration: underline; text-underline-offset: 3px;
+  font-family: inherit; transition: color .2s ease;
+}
+.size-guide-toggle:hover, .size-guide-toggle:focus-visible { color: var(--bone); }
+.size-guide {
+  margin: 4px 0 12px; padding: 10px 12px; background: rgba(255,255,255,.03);
+  border: 1px solid var(--line); font-size: 11px;
+}
+.size-guide-table { display: flex; flex-direction: column; gap: 3px; }
+.size-guide-row {
+  display: grid; grid-template-columns: 36px 1fr 1fr 52px; gap: 6px;
+  align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.05);
+  color: var(--bone); font-variant-numeric: tabular-nums;
+}
+.size-guide-header {
+  font-weight: 700; color: var(--muted); letter-spacing: .06em;
+  text-transform: uppercase; font-size: 9px; border-bottom: 1px solid var(--line);
+  padding-bottom: 4px;
+}
+.size-guide-note { margin: 8px 0 0; font-size: 10px; line-height: 1.45; color: var(--muted); }
 .size-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .size-button {
   min-height: 42px; color: var(--muted); border: 1px solid var(--line);

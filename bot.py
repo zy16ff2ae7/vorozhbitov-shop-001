@@ -4846,6 +4846,20 @@ class BrandBot:
         self.db.event(user_id, "support_open")
         self.api.send_message(chat_id, self.support_text(), self.support_menu())
 
+    def show_faq(self, chat_id: int, key: str, user_id: int | None = None) -> None:
+        item = next((i for i in self.faq_items() if str(i.get("key")) == key), None)
+        if not item:
+            self.show_support(chat_id, user_id or chat_id)
+            return
+        self.api.send_message(
+            chat_id,
+            f"<b>{esc(str(item.get('label')).upper())}</b>\n\n{esc(str(item.get('answer')))}",
+            inline_keyboard([
+                [(icon("support", "← Поддержка"), "support")],
+                nav_rows(("Главное меню", "menu"))[0],
+            ]),
+        )
+
     def support_orders(self, chat_id: int, user_id: int) -> None:
         """Вопрос по конкретной покупке: номер и состав не спрашиваем заново."""
         orders = self.db.orders_for_user(user_id)
@@ -6653,15 +6667,7 @@ class BrandBot:
             self.admin_draws(chat_id)
         elif data.startswith("faq:") and data != "faqadd":
             key = data.split(":", 1)[1]
-            item = next((i for i in self.faq_items() if str(i.get("key")) == key), None)
-            if not item:
-                self.show_support(chat_id, user_id)
-                return True
-            self.api.send_message(
-                chat_id,
-                f"<b>{esc(str(item.get('label')).upper())}</b>\n\n{esc(str(item.get('answer')))}",
-                inline_keyboard([[(icon("support", "← Поддержка"), "support")]]),
-            )
+            self.show_faq(chat_id, key, user_id)
             return True
         elif data == "faqadd" and self.is_admin(user_id):
             self.db.set_state(user_id, "faq_add", {"step": "label"})
@@ -6806,8 +6812,80 @@ class BrandBot:
             self.show_about(chat_id)
             return True
 
+        # 2.4 Размеры и сетка
+        if clean in {"размеры", "размер", "таблица размеров", "замеры", "сетка"}:
+            self.db.clear_state(user_id)
+            self.api.send_message(
+                chat_id,
+                "<b>ТАБЛИЦА РАЗМЕРОВ</b> · СИЛА И ЧЕСТЬ\n\n"
+                "Футболки имеют честную плотную посадку оверсайз (хлопок 240 г/м²):\n\n"
+                "• <b>S</b> — рост 165–174 см / вес 60–72 кг\n"
+                "• <b>M</b> — рост 172–182 см / вес 70–82 кг\n"
+                "• <b>L</b> — рост 178–188 см / вес 80–92 кг\n"
+                "• <b>XL</b> — рост 184–194 см / вес 90–105 кг\n"
+                "• <b>XXL</b> — рост 188–200 см / вес 100–120 кг\n\n"
+                "Если сомневаешься между двумя размерами — напиши менеджеру, поможем подобрать.",
+                inline_keyboard([
+                    [(icon("catalog", "Выбрать вещь в витрине"), "cat:drop")],
+                    [(icon("support", "Спросить менеджера"), "support")],
+                    nav_rows(("Главное меню", "menu"))[0]
+                ])
+            )
+            return True
+
+        # 2.5 Доставка и сроки
+        if clean in {"доставка", "сроки", "сроки доставки", "как доставляете", "сдэк", "яндекс", "куда доставка"}:
+            self.db.clear_state(user_id)
+            self.api.send_message(
+                chat_id,
+                "<b>ДОСТАВКА И СРОКИ</b> · СИЛА И ЧЕСТЬ\n\n"
+                "• Отправляем заказы по всей России через <b>СДЭК</b> и <b>Яндекс Доставку</b> (до ПВЗ или курьером до двери).\n"
+                "• Сборка и отправка: 1–2 рабочих дня с момента подтверждения оплаты.\n"
+                "• Сроки в пути: обычно 2–5 дней в зависимости от города.\n"
+                "• После отправки трек-номер для отслеживания посылки появится в твоих покупках и придёт в этот чат.\n\n"
+                "Самовывоза и офлайн-точек нет — только проверенная курьерская доставка.",
+                inline_keyboard([
+                    [(icon("orders", "📦 Мои покупки и трек"), "orders")],
+                    [(icon("catalog", "Выбрать вещь в витрине"), "cat:drop")],
+                    nav_rows(("Главное меню", "menu"))[0]
+                ])
+            )
+            return True
+
+        # 2.6 Отзывы и образы
+        if clean in {"отзывы", "отзыв", "где отзывы", "фото покупателей"}:
+            self.db.clear_state(user_id)
+            self.api.send_message(
+                chat_id,
+                "<b>ОТЗЫВЫ И ФОТО ПОКУПАТЕЛЕЙ</b>\n\n"
+                "Живые фотографии посадки, распаковки и отзывы ребят публикуются в нашем канале бренда и в комментариях.\n\n"
+                "Смотри образы в лукбуке или переходи в канал:",
+                inline_keyboard([
+                    [(icon("lookbook", "Смотреть лукбук"), "lookbook")],
+                    *self.channel_rows(),
+                    nav_rows(("Главное меню", "menu"))[0]
+                ])
+            )
+            return True
+
+        # 2.7 Материалы и качество
+        if clean in {"качество", "материал", "материалы", "состав", "хлопок", "ткань", "стирка", "как стирать"}:
+            self.db.clear_state(user_id)
+            self.api.send_message(
+                chat_id,
+                "<b>МАТЕРИАЛЫ И КАЧЕСТВО</b> · СИЛА И ЧЕСТЬ\n\n"
+                "• <b>Ткань</b>: 100% премиальный плотный хлопок (240–260 г/м² для футболок, 400 г/м² для худи). Держит правильную форму, не просвечивает и дышит.\n"
+                "• <b>Принт</b>: многослойная износостойкая шелкография. Не трескается и не выстирывается.\n"
+                "• <b>Уход</b>: бережная стирка при 30°C вывернутым наизнанку, отжим до 800 об/мин. Не гладить напрямую по принту.",
+                inline_keyboard([
+                    [(icon("catalog", "Выбрать вещь в витрине"), "cat:drop")],
+                    nav_rows(("Главное меню", "menu"))[0]
+                ])
+            )
+            return True
+
         # 3. Мои покупки
-        if clean in {"мои покупки", "покупки", "мои заказы", "заказы"}:
+        if clean in {"мои покупки", "покупки", "мои заказы", "заказы", "статус", "статус заказа", "где заказ", "где покупка", "трек", "трек-номер"}:
             self.db.clear_state(user_id)
             self.api.send_message(chat_id, "📦 Твои покупки:", self.buyer_reply_keyboard(chat_id))
             self.show_my_orders(chat_id, user_id)
@@ -6846,7 +6924,7 @@ class BrandBot:
             return True
 
         # 7. Поддержка
-        if clean in {"поддержка", "помощь", "менеджер", "связь"}:
+        if clean in {"поддержка", "помощь", "менеджер", "связь", "помоги", "не работает", "не загружается", "проблема", "ошибка"}:
             self.db.clear_state(user_id)
             self.show_support(chat_id, user_id)
             return True
@@ -6855,6 +6933,18 @@ class BrandBot:
         if clean in {"эмодзи", "эмодзи-пак", "пак", "стикеры"}:
             self.db.clear_state(user_id)
             self.show_emoji_pack(chat_id)
+            return True
+
+        # 7.2 Оплата
+        if clean in {"оплата", "как оплатить", "способы оплаты"}:
+            self.db.clear_state(user_id)
+            self.show_faq(chat_id, "pay")
+            return True
+
+        # 7.3 Возврат
+        if clean in {"возврат", "обмен", "как вернуть"}:
+            self.db.clear_state(user_id)
+            self.show_faq(chat_id, "refund")
             return True
 
         # 8. Управление магазином (админ)
@@ -7905,7 +7995,7 @@ def main() -> int:
                     {"chat_id": admin_id, "menu_button": CHAT_MENU_BUTTON},
                 )
             except Exception as exc:
-                LOG.warning("Could not set staff commands for %s: %s", admin_id, exc)
+                LOG.info("Pre-set staff commands for %s deferred (chat not started yet): %s", admin_id, exc)
     except Exception as exc:
         LOG.warning("Could not set Telegram commands or menu button: %s", exc)
     health_server = start_health_server(settings.health_port, catalog, settings, db, api)
