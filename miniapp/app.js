@@ -1321,7 +1321,7 @@
     const canPlay = welcomeCanPlay();
     const fallback = $("#welcomeFallback");
     const isPlaying = video.classList.contains("is-playing");
-    if (fallback) fallback.classList.toggle("hidden", isPlaying);
+    if (fallback) fallback.classList.toggle("hidden", canPlay || (!reducedMotion() && Boolean(welcomePlayback.source)));
     // Источник ставим сразу, не дожидаясь конца загрузки и гейта воспроизведения:
     // ролик буферизуется уже под бут-штампом и стартует мгновенно.
     if (!saverBlocked && !reducedMotion() && welcomePlayback.source && video.getAttribute("src") !== welcomePlayback.source) {
