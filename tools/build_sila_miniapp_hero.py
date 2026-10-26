@@ -20,13 +20,9 @@ SUBJECT_OUTPUT = ROOT / "miniapp/assets/drop/hero-sila-layer-subject-v3.webp"
 # face/shirt pixels stay untouched, only the backdrop behind him changes.
 CONCRETE_PLATE = ROOT / "miniapp/assets/product-proof/white-tee-concrete-bg-v1.png"
 
-# The mini-app mobile hero frame is 4:4.35. This crop keeps the complete head
-# and chest print while removing some empty gym background around the model.
-CROP = (60, 0, 820, 826)  # 760x826
+CROP = (60, 0, 820, 826)
 OUTPUT_SIZE = (900, 978)
 
-# A deliberately generous silhouette polygon protects all recognizable person
-# and shirt pixels from the background treatment. Feathering hides the mask edge.
 SUBJECT_POLYGON = [
     (150, 0), (400, 0), (450, 48), (480, 125), (492, 220), (478, 300),
     (445, 360), (510, 378), (610, 395), (690, 425), (742, 480),
@@ -42,13 +38,7 @@ def build_subject_mask(size: tuple[int, int], feather: float = 18) -> Image.Imag
     return mask.resize(size, Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(feather))
 
 
-# Tighter silhouette in OUTPUT_SIZE coordinates, traced on a coordinate grid
-# over the finished crop. Used only for the layered "living poster": the same
-# authentic pixels, split into background / typography / subject planes.
 CUTOUT_POLYGON = [
-    # Head contour measured row-by-row from luminance gradients of the source
-    # crop (+4px safety): the earlier loose contour dragged bright wall pixels
-    # into the subject layer, which glowed against the dark background plane.
     (235, 62), (325, 54), (415, 62), (442, 84), (452, 104), (456, 134),
     (460, 164), (493, 204), (522, 244), (522, 284), (503, 324), (508, 364),
     (518, 404), (549, 444), (575, 465), (650, 480), (760, 510),
@@ -64,7 +54,6 @@ def build_cutout_mask(size: tuple[int, int]) -> Image.Image:
     ImageDraw.Draw(mask).polygon(CUTOUT_POLYGON, fill=255)
     if size != OUTPUT_SIZE:
         mask = mask.resize(size, Image.Resampling.LANCZOS)
-    # Slight erosion + short feather: no bright halo against the typography.
     return mask.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(2.5))
 
 
@@ -74,9 +63,6 @@ def dilate_mask(mask: Image.Image, radius: int = 45, feather: float = 18) -> Ima
 
 def add_subtle_burgundy_background(image: Image.Image, subject: Image.Image) -> Image.Image:
     width, height = image.size
-    # Restrained red is confined to the out-of-focus background, never the face,
-    # shirt, or lettering. Strongest beside the head/shoulders and fading down,
-    # it reads as a subtle edge light in the brand palette, not as a filter.
     horizontal = Image.new("L", (width, 1), 0)
     draw = ImageDraw.Draw(horizontal)
     for x in range(width):
@@ -91,34 +77,34 @@ def add_subtle_burgundy_background(image: Image.Image, subject: Image.Image) -> 
     strength = ImageChops.multiply(horizontal, vertical).point(lambda v: v * 30 // 255)
     background = ImageOps.invert(subject)
     alpha = ImageChops.multiply(strength, background)
-    overlay = Image.new("RGB", (width, height), (96, 10, 22))
+    overlay = Image.new("RGB", (width, height), (192, 34, 23))
     return Image.composite(overlay, image, alpha)
 
 
-def apply_vignette(image: Image.Image, strength: float = 0.5) -> Image.Image:
-    """Darken frame edges toward the page black, keeping a soft pool of light
-    behind the head/shoulders. Applied to background planes only."""
+def apply_vignette(image: Image.Image, strength: float = 0.55) -> Image.Image:
     width, height = image.size
-    mask = Image.new("L", (width, height), 0)
-    draw = ImageDraw.Draw(mask)
-    draw.ellipse(
-        (-width * 0.25, -height * 0.32, width * 1.25, height * 1.05), fill=255
-    )
-    mask = mask.filter(ImageFilter.GaussianBlur(140))
-    multiplier = mask.point(lambda v: int(255 - (255 - v) * strength))
-    return ImageChops.multiply(image, multiplier.convert("RGB"))
+    vignette = Image.new("L", (width, height), 255)
+    draw = ImageDraw.Draw(vignette)
+    cx, cy = width / 2, height * 0.42
+    rx, ry = width * 0.58, height * 0.62
+    max_steps = 48
+    for i in range(max_steps):
+        t = i / max_steps
+        cur_rx = rx * (1.0 + 0.35 * (1.0 - t))
+        cur_ry = ry * (1.0 + 0.35 * (1.0 - t))
+        box = [cx - cur_rx * (1 - t * 0.6), cy - cur_ry * (1 - t * 0.6),
+               cx + cur_rx * (1 - t * 0.6), cy + cur_ry * (1 - t * 0.6)]
+        shade = int(255 * (1.0 - strength * (t ** 1.6)))
+        draw.ellipse(box, fill=shade)
+    vignette = vignette.filter(ImageFilter.GaussianBlur(36))
+    black = Image.new("RGB", (width, height), (7, 7, 8))
+    return Image.composite(image, black, vignette)
 
 
 def concrete_background(cutout: Image.Image) -> Image.Image:
-    """Brand concrete plate as the hero backdrop — the same wall the white
-    tee is shown against. Cover-cropped (anchored to the light pool at the
-    top), gently darkened, vignetted into the page black, with a soft
-    contact shadow inside the dilated silhouette so the figure sits on the
-    wall instead of floating over it."""
-    with Image.open(CONCRETE_PLATE) as plate_file:
-        plate = plate_file.convert("RGB")
     width, height = OUTPUT_SIZE
-    scale = max(width / plate.width, height / plate.height)
+    plate = Image.open(CONCRETE_PLATE).convert("RGB")
+    scale = max(width / plate.width, height / plate.height) * 1.05
     plate = plate.resize(
         (round(plate.width * scale), round(plate.height * scale)),
         Image.Resampling.LANCZOS,
@@ -135,13 +121,51 @@ def concrete_background(cutout: Image.Image) -> Image.Image:
 
 
 def dark_studio_background(crop: Image.Image, blur: float, brightness: float) -> Image.Image:
-    """Melt the room into a dark, desaturated haze: at desktop scale the old
-    light blur still read as a messy interior. No new detail is invented —
-    the real background is only defocused and darkened away."""
     background = crop.filter(ImageFilter.GaussianBlur(blur))
     background = ImageEnhance.Brightness(background).enhance(brightness)
     background = ImageEnhance.Color(background).enhance(0.52)
     return background
+
+
+def extract_neural_subject(source_image: Image.Image) -> Image.Image:
+    """Extract human subject using neural matting (u2net_human_seg) with anatomical refinement."""
+    import cv2
+    import numpy as np
+    import rembg
+
+    session = rembg.new_session("u2net_human_seg")
+    cutout = rembg.remove(source_image, session=session, decontaminate=True)
+    r, g, b, a = cutout.split()
+    alpha = np.array(a)
+
+    # Clean binary threshold to remove distant background haze
+    binary = (alpha > 120).astype(np.uint8) * 255
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    eroded = cv2.erode(binary, kernel, iterations=1)
+
+    # Anatomical neck contour refinement (clean gym wall behind neck)
+    for y in range(240, 360):
+        x_edge = int(495 + (y - 240) * (511 - 495) / (360 - 240))
+        eroded[y, x_edge + 1:] = 0
+
+    # Natural collar and shoulder slope
+    for x in range(511, 620):
+        t = (x - 511) / (620 - 511)
+        y_collar = int(360 + 25 * (t ** 0.8))
+        eroded[:y_collar, x] = 0
+
+    alpha_clean = cv2.GaussianBlur(eroded, (3, 3), 0.6)
+
+    # Crop to 900x978 hero frame
+    subject_frame = Image.merge("RGBA", (r, g, b, Image.fromarray(alpha_clean))).crop((0, 0, 900, 978))
+    sub_arr = np.array(subject_frame)
+
+    # Soft natural fade at bottom edge (y: 920..978)
+    for y in range(920, 978):
+        fade = 1.0 - (y - 920) / (978 - 920)
+        sub_arr[y, :, 3] = (sub_arr[y, :, 3] * fade).astype(np.uint8)
+
+    return Image.fromarray(sub_arr)
 
 
 def main() -> None:
@@ -150,58 +174,32 @@ def main() -> None:
         if original.width != 900 or original.height < 826:
             raise ValueError(f"Unexpected source dimensions: {original.size}")
 
-        crop = original.crop(CROP).resize(OUTPUT_SIZE, Image.Resampling.LANCZOS)
-        subject = build_subject_mask(OUTPUT_SIZE)
+        try:
+            subject_layer = extract_neural_subject(source)
+            cutout_mask = subject_layer.split()[3]
+        except Exception as err:
+            print(f"Neural extraction fallback: {err}")
+            crop = original.crop(CROP).resize(OUTPUT_SIZE, Image.Resampling.LANCZOS)
+            cutout_mask = build_cutout_mask(OUTPUT_SIZE)
+            subject_layer = crop.convert("RGBA")
+            subject_layer.putalpha(cutout_mask)
 
-        # Quiet the gym background while keeping the person crisp and unchanged.
-        softened = dark_studio_background(crop, blur=44, brightness=0.27)
-        softened = apply_vignette(softened, strength=0.62)
-        image = Image.composite(crop, softened, subject)
-        image = add_subtle_burgundy_background(image, subject)
+        # Save transparent subject layer
+        subject_layer.save(SUBJECT_OUTPUT, "WEBP", quality=95, method=6, alpha_quality=100)
 
-        # Gentle neutral grade. Lift only dark midtones so shirt texture reads;
-        # bright face and white chest lettering are essentially unaffected.
-        image = ImageEnhance.Color(image).enhance(0.96)
-        image = ImageEnhance.Contrast(image).enhance(1.035)
-        luminance = ImageOps.grayscale(image)
-        dark_mask = luminance.point(lambda value: max(0, min(255, (138 - value) * 2)))
-        shirt_region = Image.new("L", (760, 826), 0)
-        ImageDraw.Draw(shirt_region).polygon(
-            [(170, 390), (280, 350), (390, 355), (510, 375), (620, 395),
-             (710, 435), (760, 490), (760, 826), (20, 826), (42, 735),
-             (70, 625), (90, 525), (115, 465)], fill=255
-        )
-        shirt_region = shirt_region.resize(OUTPUT_SIZE, Image.Resampling.LANCZOS)
-        lift_mask = ImageChops.multiply(dark_mask, shirt_region).filter(ImageFilter.GaussianBlur(6))
-        lifted = ImageEnhance.Brightness(image).enhance(1.11)
-        image = Image.composite(lifted, image, lift_mask)
-
-        # --- Living-poster layers: identical pixels, split into planes. ---
-        # The flat OUTPUT is saved after the planes: it is the flattened poster
-        # (dark background plane + subject), so the fallback hero and the film
-        # opening frame show exactly the same treated background as the poster.
-        cutout = build_cutout_mask(OUTPUT_SIZE)
-        # Edge decontamination: the hand-traced contour keeps a rim of the
-        # original bright wall around the head. Against the concrete plane
-        # that rim would glow like a halo, so shade only the outer band of
-        # the silhouette; face and print pixels inside are untouched.
-        inner = cutout.filter(ImageFilter.MinFilter(21)).filter(ImageFilter.GaussianBlur(6))
-        band = ImageChops.subtract(cutout, inner).filter(ImageFilter.GaussianBlur(4))
-        shaded = ImageEnhance.Color(ImageEnhance.Brightness(image).enhance(0.45)).enhance(0.6)
-        cleaned = Image.composite(shaded, image, band)
-        subject_layer = cleaned.convert("RGBA")
-        subject_layer.putalpha(cutout)
-        subject_layer.save(SUBJECT_OUTPUT, "WEBP", quality=90, method=6, alpha_quality=100)
-
-        # Background plane: the brand concrete wall (same plate as the white
-        # tee's 360° media) with a baked contact shadow and vignette, so the
-        # typography can sit between the wall and the figure.
-        background = concrete_background(cutout)
+        # Background plane: brand concrete wall with contact shadow
+        background = concrete_background(cutout_mask)
         background.save(BACKGROUND_OUTPUT, "JPEG", quality=92, optimize=True, progressive=True)
 
-        flattened = background.convert("RGBA")
-        flattened.alpha_composite(subject_layer)
-        flattened.convert("RGB").save(OUTPUT, "JPEG", quality=94, optimize=True, progressive=True)
+        # Flat composite fallback
+        shadow_mask = cutout_mask.filter(ImageFilter.GaussianBlur(15))
+        bg_composite = background.copy().convert("RGBA")
+        shadow = Image.new("RGBA", OUTPUT_SIZE, (0, 0, 0, 140))
+        bg_composite.paste(shadow, (0, 4), mask=shadow_mask)
+
+        flattened = Image.alpha_composite(bg_composite, subject_layer).convert("RGB")
+        flattened.save(OUTPUT, "JPEG", quality=94, optimize=True, progressive=True)
+
     print(f"Wrote {OUTPUT.relative_to(ROOT)} ({OUTPUT_SIZE[0]}x{OUTPUT_SIZE[1]})")
     print(f"Wrote {BACKGROUND_OUTPUT.relative_to(ROOT)} + {SUBJECT_OUTPUT.relative_to(ROOT)}")
 
