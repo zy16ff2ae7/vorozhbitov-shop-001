@@ -117,6 +117,16 @@
     return product.card_image || imagesFor(product)[0];
   }
 
+  function backImageFor(product) {
+    const images = imagesFor(product);
+    if (!images || images.length < 2) return null;
+    const labels = product.image_labels || [];
+    let backIdx = labels.findIndex(lbl => /спина\s*·\s*исходный/i.test(lbl));
+    if (backIdx < 0) backIdx = labels.findIndex(lbl => /спина/i.test(lbl));
+    if (backIdx < 0 && images.length > 1) backIdx = 1;
+    return backIdx >= 0 && images[backIdx] ? images[backIdx] : null;
+  }
+
   function productById(id) {
     return state.data.products.find(product => product.id === id);
   }
@@ -513,15 +523,26 @@
   }
 
   function renderProductCard(product, index) {
+    const backImg = backImageFor(product);
+    const isLtd = product.stock_status === "limited" || (product.badge && product.badge.includes("ЛИМИТ"));
+    const scarcityPercent = product.stock_status === "sold_out" ? 100 : (isLtd ? 84 : 68);
+    const scarcityText = product.stock_status === "sold_out" ? "Тираж закрыт" : `Бронь тиража · ${scarcityPercent}%`;
+
     return `<article class="product-card" data-product-id="${escapeHTML(product.id)}" style="--i:${index}">
-      <div class="product-image">
-        <img src="${escapeHTML(imageFor(product))}" alt="${escapeHTML(product.name)}" ${index === 0 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>
+      <div class="product-image ${backImg ? 'has-back' : ''}">
+        <img class="product-img-front ${backImg ? 'has-back-pair' : ''}" src="${escapeHTML(imageFor(product))}" alt="${escapeHTML(product.name)}" ${index === 0 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>
+        ${backImg ? `<img class="product-img-back" src="${escapeHTML(backImg)}" alt="${escapeHTML(product.name)} (вид со спины)" loading="lazy">` : ''}
         <span class="product-badge">${escapeHTML(product.badge || "БАЗА")}</span>
+        ${backImg ? `<button type="button" class="badge-side" aria-label="Показать вид со спины" data-action="flip">СПИНА ↺</button>` : ''}
         ${Array.isArray(product.spin) && product.spin.length > 1 ? '<span class="badge-3d">ВРАЩЕНИЕ 360°</span>' : `<span class="badge-3d">${imagesFor(product).length} ФОТО</span>`}
         <span class="product-hover">ОТКРЫТЬ КАРТОЧКУ <b>↗</b></span>
       </div>
       <div class="product-info">
         <div class="product-topline"><span>${escapeHTML(categoryName(product.category))}</span><span class="product-stock">${escapeHTML(product.stock_label || "В наличии")}</span></div>
+        <div class="product-scarcity" aria-hidden="true">
+          <div class="scarcity-bar"><div class="scarcity-fill" style="width: ${scarcityPercent}%"></div></div>
+          <span class="scarcity-label">${scarcityText}</span>
+        </div>
         <h3><button type="button" class="product-open" aria-label="Открыть ${escapeHTML(product.name)}">${escapeHTML(product.name)}</button></h3>
         <div class="product-sizes">${(product.sizes || []).map(escapeHTML).join(" · ") || "Ждём пополнение"}</div>
         <div class="product-bottom"><strong class="product-price">${escapeHTML(product.price)}</strong><span class="product-fit">${escapeHTML(product.fit || "Свободный крой")}</span></div>
@@ -2455,6 +2476,62 @@
     }
   }
 
+  function setupOwnerTilt() {
+    const wrap = $("#ownerCanvasWrap");
+    if (!wrap || wrap.dataset.tiltBound) return;
+    wrap.dataset.tiltBound = "1";
+
+    function handleMove(e) {
+      const rect = wrap.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const px = Math.max(0, Math.min(100, (x / rect.width) * 100));
+      const py = Math.max(0, Math.min(100, (y / rect.height) * 100));
+      const rotX = ((py - 50) / 50) * -7;
+      const rotY = ((px - 50) / 50) * 7;
+
+      wrap.style.setProperty("--holo-x", `${px.toFixed(1)}%`);
+      wrap.style.setProperty("--holo-y", `${py.toFixed(1)}%`);
+      wrap.style.transform = `perspective(800px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`;
+      wrap.classList.add("is-tilting");
+    }
+
+    function handleLeave() {
+      wrap.style.transform = "perspective(800px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)";
+      wrap.classList.remove("is-tilting");
+    }
+
+    wrap.addEventListener("mousemove", handleMove);
+    wrap.addEventListener("mouseleave", handleLeave);
+
+    wrap.addEventListener("touchmove", e => {
+      if (e.touches && e.touches[0]) {
+        handleMove(e.touches[0]);
+      }
+    }, { passive: true });
+    wrap.addEventListener("touchend", handleLeave);
+
+    if (typeof window !== "undefined" && window.DeviceOrientationEvent && !reducedMotion()) {
+      window.addEventListener("deviceorientation", e => {
+        const modal = $("#ownerCardModal");
+        if (!modal || modal.classList.contains("hidden")) return;
+        if (e.gamma === null || e.beta === null) return;
+        const tiltX = Math.max(-25, Math.min(25, e.gamma));
+        const tiltY = Math.max(-25, Math.min(25, e.beta - 45));
+        const px = ((tiltX + 25) / 50) * 100;
+        const py = ((tiltY + 25) / 50) * 100;
+        const rotY = (tiltX / 25) * 7;
+        const rotX = -(tiltY / 25) * 7;
+
+        wrap.style.setProperty("--holo-x", `${px.toFixed(1)}%`);
+        wrap.style.setProperty("--holo-y", `${py.toFixed(1)}%`);
+        wrap.style.transform = `perspective(800px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg)`;
+        wrap.classList.add("is-tilting");
+      });
+    }
+  }
+
   function bindEvents() {
     $("#retryCatalog").addEventListener("click", loadCatalog);
     renderSkeletons();
@@ -2513,9 +2590,52 @@
     });
 
     $("#productGrid").addEventListener("click", event => {
+      const flipBtn = event.target.closest('[data-action="flip"]');
+      if (flipBtn) {
+        event.stopPropagation();
+        const card = flipBtn.closest(".product-card");
+        if (card) {
+          const isFlipped = card.classList.toggle("is-flipped");
+          flipBtn.textContent = isFlipped ? "ПЕРЕД ↺" : "СПИНА ↺";
+          flipBtn.setAttribute("aria-label", isFlipped ? "Показать вид спереди" : "Показать вид со спины");
+          haptic("light");
+        }
+        return;
+      }
       const card = event.target.closest("[data-product-id]");
       if (card) openProduct(card.dataset.productId);
     });
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    $("#productGrid").addEventListener("touchstart", event => {
+      const imgWrap = event.target.closest(".product-image.has-back");
+      if (!imgWrap || !event.touches[0]) return;
+      touchStartX = event.touches[0].clientX;
+      touchStartY = event.touches[0].clientY;
+    }, { passive: true });
+
+    $("#productGrid").addEventListener("touchend", event => {
+      const imgWrap = event.target.closest(".product-image.has-back");
+      if (!imgWrap || !event.changedTouches || !event.changedTouches[0]) return;
+      const dx = event.changedTouches[0].clientX - touchStartX;
+      const dy = event.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        const card = imgWrap.closest(".product-card");
+        if (card) {
+          const flipBtn = card.querySelector('[data-action="flip"]');
+          const shouldFlip = dx < 0;
+          if (card.classList.contains("is-flipped") !== shouldFlip) {
+            card.classList.toggle("is-flipped", shouldFlip);
+            if (flipBtn) {
+              flipBtn.textContent = shouldFlip ? "ПЕРЕД ↺" : "СПИНА ↺";
+              flipBtn.setAttribute("aria-label", shouldFlip ? "Показать вид спереди" : "Показать вид со спины");
+            }
+            haptic("light");
+          }
+        }
+      }
+    }, { passive: true });
 
     $("#sizeGuideToggle")?.addEventListener("click", () => {
       const guide = $("#sizeGuide");
@@ -2815,6 +2935,7 @@
   setupHeroParallax();
   syncHeroPoster();
   setupHeroCarousel();
+  setupOwnerTilt();
   renderDropEvent();
   renderCommunity();
   renderClub();

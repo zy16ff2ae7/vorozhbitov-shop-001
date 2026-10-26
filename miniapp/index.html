@@ -130,6 +130,30 @@
           <button class="button button-ghost" id="dropEventButton" type="button">К ВЕЩАМ</button>
         </div>
       </section>
+      <div class="brand-marquee" aria-hidden="true">
+        <div class="marquee-track">
+          <span class="marquee-item">СИЛА И ЧЕСТЬ</span>
+          <span class="marquee-sep">/</span>
+          <span class="marquee-item">ДИСЦИПЛИНА КАЖДЫЙ ДЕНЬ</span>
+          <span class="marquee-sep">/</span>
+          <span class="marquee-item">ПЕРВЫЙ ДРОП 001</span>
+          <span class="marquee-sep">/</span>
+          <span class="marquee-item">ПЛОТНЫЙ ХЛОПОК 240G</span>
+          <span class="marquee-sep">/</span>
+          <span class="marquee-item">ОГРАНИЧЕННЫЙ ТИРАЖ</span>
+          <span class="marquee-sep">/</span>
+          <span class="marquee-item">СИЛА И ЧЕСТЬ</span>
+          <span class="marquee-sep">/</span>
+          <span class="marquee-item">ДИСЦИПЛИНА КАЖДЫЙ ДЕНЬ</span>
+          <span class="marquee-sep">/</span>
+          <span class="marquee-item">ПЕРВЫЙ ДРОП 001</span>
+          <span class="marquee-sep">/</span>
+          <span class="marquee-item">ПЛОТНЫЙ ХЛОПОК 240G</span>
+          <span class="marquee-sep">/</span>
+          <span class="marquee-item">ОГРАНИЧЕННЫЙ ТИРАЖ</span>
+          <span class="marquee-sep">/</span>
+        </div>
+      </div>
       <section class="section-pad catalog-section" id="catalog">
         <div class="section-heading">
           <div>
@@ -545,7 +569,10 @@
         <button class="sheet-close" data-close="ownerCardModal" type="button" aria-label="Закрыть">×</button>
       </div>
       <div class="owner-body">
-        <canvas id="ownerCanvas" width="900" height="1200" role="img" aria-label="Сгенерированная карта владельца по зарегистрированному заказу"></canvas>
+        <div class="owner-canvas-wrap" id="ownerCanvasWrap">
+          <canvas id="ownerCanvas" width="900" height="1200" role="img" aria-label="Сгенерированная карта владельца по зарегистрированному заказу"></canvas>
+          <div class="owner-holo-glare" aria-hidden="true"></div>
+        </div>
         <div class="owner-actions">
           <a class="button button-primary" id="ownerDownload" href="#" download="sila-i-chest-owner-card.png">СКАЧАТЬ КАРТУ</a>
           <button class="button button-ghost" id="ownerShare" type="button">ПОДЕЛИТЬСЯ</button>
