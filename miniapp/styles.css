@@ -1028,8 +1028,8 @@ h1, h2 {
   -webkit-user-drag: none;
 }
 .spin-frame-next { opacity: 0; }
-.product-image img[src*="/product-proof/"] { object-fit: contain; background: transparent; }
-.sheet-photo[src*="/product-proof/"] { object-fit: contain; background: #080809; }
+.product-image img[src*="/product-proof/"] { object-fit: cover; background: transparent; }
+.sheet-photo[src*="/product-proof/"] { object-fit: contain; background: #171719 url("./assets/product-proof/white-tee-concrete-bg-v1.png") center / cover no-repeat; }
 .product-image img[src*="/odin-voin-source-"],
 .sheet-photo[src*="/odin-voin-source-"] { object-fit: contain; background: #080809; }
 .sheet-photo[src*="/tee-flatlay-v2.jpg"],
@@ -1896,7 +1896,8 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .spin-frame[src*="/odin-voin-source-"] { object-fit: contain; background: #080809; }
 /* The white-shirt source angles include the new wall plate; contain the full
    garment and continue the concrete texture into any letterboxed side space. */
-.sheet-photo[src*="/odin-voin-concrete-"] {
+.sheet-photo[src*="/odin-voin-concrete-"],
+.sheet-photo[src*="/product-proof/"] {
   object-fit: contain;
   background: #171719 url("./assets/product-proof/white-tee-concrete-bg-v1.png") center / cover no-repeat;
 }

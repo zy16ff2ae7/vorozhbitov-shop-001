@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
-"""Legacy experiment for concrete-background mask composites; not catalog media.
+"""Build unified concrete-background product card media for the black tees.
 
-The mask approach produced unwanted light fringes around the black shirts, so
-these outputs are not active. The catalog now uses the original unmasked photos
-and the authentic Sila front-to-back source clip, built by
-``tools/build_black_tee_original_media.py``. This file remains only for review
-and for the historical ``video_scene`` canvas-sizing experiment. Requires
-requirements-media.txt dependencies.
+Puts the authentic black tees on the shared brutalist concrete backdrop plate
+(white-tee-concrete-bg-v1.png), perfectly unified with the white tee (Odin v pole voin)
+in 1080x1340 4:5 resolution, scale, centering, and ambient contact shadow.
 """
 from __future__ import annotations
 
 from pathlib import Path
-
 import cv2
 import numpy as np
 from PIL import Image
@@ -19,15 +15,11 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "miniapp/assets"
 PROOF = ASSETS / "product-proof"
+DROP = ASSETS / "drop"
+BRAND = ASSETS / "brand"
 BG_PATH = PROOF / "white-tee-concrete-bg-v1.png"
-VIDEO_DIR = ASSETS / "video"
-VIDEO_SIZE = (720, 1280)
-CARD_SIZE = (720, 896)
-VIDEO_FPS = 24
 VZGLYAD_SOURCE = ROOT / "task_materials/chat_export/photos/photo_18@24-10-2026_18-41-33.jpg"
 
-# Pixel coordinates in the existing source crops (front x=0..690, back x=700..1280;
-# both are cropped vertically at y=65..785). Points follow only the shirt edge.
 VZGLYAD_FRONT = [
     (277, 23), (283, 30), (292, 37), (305, 43), (322, 48), (340, 51),
     (359, 51), (378, 48), (395, 42), (410, 34), (418, 24),
@@ -50,194 +42,104 @@ VZGLYAD_BACK = [
 ]
 
 
-def background_for(background_rgb: np.ndarray, size: tuple[int, int]) -> np.ndarray:
-    width, height = size
-    scale = max(width / background_rgb.shape[1], height / background_rgb.shape[0])
-    resized = cv2.resize(
-        background_rgb,
-        (round(background_rgb.shape[1] * scale), round(background_rgb.shape[0] * scale)),
-        interpolation=cv2.INTER_CUBIC,
-    )
-    left = (resized.shape[1] - width) // 2
-    top = (resized.shape[0] - height) // 2
-    return resized[top : top + height, left : left + width]
+def composite_to_wall(garment_rgb: np.ndarray, mask: np.ndarray, target_canvas: np.ndarray) -> np.ndarray:
+    scale = min(1040 / 690, 1220 / 720)
+    rw = round(garment_rgb.shape[1] * scale)
+    rh = round(garment_rgb.shape[0] * scale)
+    im_s = cv2.resize(garment_rgb, (rw, rh), interpolation=cv2.INTER_CUBIC)
+    m_s = cv2.resize(mask, (rw, rh), interpolation=cv2.INTER_LINEAR)
 
+    ox = (1080 - rw) // 2
+    oy = 134 + (1205 - rh) // 2
 
-def fill_interior(mask: np.ndarray) -> np.ndarray:
-    """Fill small enclosed print marks, but keep large gaps between garments transparent."""
-    inverse = 1 - mask
-    _, labels, stats, _ = cv2.connectedComponentsWithStats(inverse, 8)
-    edge_labels = np.unique(
-        np.concatenate((labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1]))
-    )
-    enclosed_labels = np.setdiff1d(np.arange(1, len(stats)), edge_labels)
-    max_print_hole = max(64, round(mask.size * 0.02))
-    result = mask.copy()
-    for label in enclosed_labels:
-        if stats[label, cv2.CC_STAT_AREA] <= max_print_hole:
-            result[labels == label] = 1
-    return result
+    shadow = np.zeros((1340, 1080), dtype=np.float32)
+    shadow[oy + 14 : oy + rh + 14, ox : ox + rw] = m_s.astype(np.float32) / 255.0
+    shadow = cv2.GaussianBlur(shadow, (49, 49), 22.0)
 
+    canvas = target_canvas.copy().astype(np.float32)
+    canvas = canvas * (1.0 - 0.45 * shadow[:, :, None])
 
-def dark_garment_on_light_source(image_rgb: np.ndarray) -> np.ndarray:
-    """Extract Sila's black shirts from the original bright concrete layout."""
-    gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
-    binary = (gray < 120).astype(np.uint8)
-    binary = cv2.morphologyEx(
-        binary,
-        cv2.MORPH_CLOSE,
-        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)),
-    )
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
-    if count <= 1:
-        raise ValueError("No dark garment component found in Sila source")
-    largest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
-    return fill_interior((labels == largest).astype(np.uint8))
-
-
-def polygon_mask(size: tuple[int, int], polygons: list[list[tuple[int, int]]]) -> np.ndarray:
-    width, height = size
-    mask = np.zeros((height, width), dtype=np.uint8)
-    for polygon in polygons:
-        cv2.fillPoly(mask, [np.asarray(polygon, dtype=np.int32)], 1)
-    return mask
-
-
-def composite(image_rgb: np.ndarray, mask: np.ndarray, background_rgb: np.ndarray) -> np.ndarray:
-    alpha = cv2.GaussianBlur(mask.astype(np.float32), (0, 0), 0.8)[:, :, None]
-    return np.clip(image_rgb * alpha + background_rgb * (1 - alpha), 0, 255).astype(np.uint8)
-
-
-def build_sila(background: np.ndarray) -> tuple[list[Path], list[tuple[np.ndarray, np.ndarray]]]:
-    outputs: list[Path] = []
-    scenes: list[tuple[np.ndarray, np.ndarray]] = []
-    for source_name, output_name in (
-        ("tee-sila-layout-v1.jpg", "tee-sila-layout-concrete-v1.jpg"),
-        ("tee-sila-front-v1.jpg", "tee-sila-front-concrete-v1.jpg"),
-        ("tee-sila-back-v1.jpg", "tee-sila-back-concrete-v1.jpg"),
-    ):
-        source = PROOF / source_name
-        image = np.asarray(Image.open(source).convert("RGB"))
-        mask = dark_garment_on_light_source(image)
-        plate = background_for(background, (image.shape[1], image.shape[0]))
-        output = PROOF / output_name
-        Image.fromarray(composite(image, mask, plate)).save(output, quality=95, subsampling=0)
-        outputs.append(output)
-        scenes.append((image, mask))
-    return outputs, scenes
-
-
-def build_vzglyad(background: np.ndarray) -> tuple[list[Path], list[tuple[np.ndarray, np.ndarray]]]:
-    original = np.asarray(Image.open(VZGLYAD_SOURCE).convert("RGB"))
-    # Exact documented front crop and a shifted back crop that avoids the
-    # neighboring front sleeve while keeping the original shirt artwork intact.
-    front = original[65:785, 0:690]
-    back = original[65:785, 700:1280]
-    if front.shape[:2] != (720, 690) or back.shape[:2] != (720, 580):
-        raise ValueError("Unexpected source photo 18 dimensions/crop bounds")
-
-    offset_back = [(x + 700, y) for x, y in VZGLYAD_BACK]
-    full_mask = polygon_mask((original.shape[1], original.shape[0]), [
-        [(x, y + 65) for x, y in VZGLYAD_FRONT],
-        [(x, y + 65) for x, y in offset_back],
-    ])
-    front_mask = polygon_mask((front.shape[1], front.shape[0]), [VZGLYAD_FRONT])
-    back_mask = polygon_mask((back.shape[1], back.shape[0]), [VZGLYAD_BACK])
-
-    outputs: list[Path] = []
-    scenes: list[tuple[np.ndarray, np.ndarray]] = []
-    for image, mask, filename in (
-        (front, front_mask, "tee-vzglyad-front-concrete-v1.jpg"),
-        (back, back_mask, "tee-vzglyad-back-concrete-v1.jpg"),
-        (original, full_mask, "tee-vzglyad-layout-concrete-v1.jpg"),
-    ):
-        plate = background_for(background, (image.shape[1], image.shape[0]))
-        output = PROOF / filename
-        Image.fromarray(composite(image, mask, plate)).save(output, quality=95, subsampling=0)
-        outputs.append(output)
-        scenes.append((image, mask))
-    return outputs, scenes
-
-
-def video_scene(
-    image_rgb: np.ndarray,
-    mask: np.ndarray,
-    background: np.ndarray,
-    canvas_size: tuple[int, int] = VIDEO_SIZE,
-) -> np.ndarray:
-    """Place an unwarped source garment crop on a portrait wall canvas."""
-    width, height = canvas_size
-    max_width, max_height = width - 40, height - 60
-    scale = min(max_width / image_rgb.shape[1], max_height / image_rgb.shape[0])
-    resized_width = max(1, round(image_rgb.shape[1] * scale))
-    resized_height = max(1, round(image_rgb.shape[0] * scale))
-    image = cv2.resize(image_rgb, (resized_width, resized_height), interpolation=cv2.INTER_AREA)
-    alpha = cv2.resize(mask.astype(np.float32), (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
-    alpha = cv2.GaussianBlur(alpha, (0, 0), 0.7)[:, :, None]
-    canvas = background_for(background, canvas_size).copy()
-    left = (width - resized_width) // 2
-    top = (height - resized_height) // 2
-    roi = canvas[top : top + resized_height, left : left + resized_width]
-    canvas[top : top + resized_height, left : left + resized_width] = np.clip(
-        image * alpha + roi * (1 - alpha), 0, 255
-    ).astype(np.uint8)
-    return canvas
-
-
-def render_portrait_source_video(scene: tuple[np.ndarray, np.ndarray], background: np.ndarray, output: Path) -> None:
-    """Create a portrait video from one source view with a subtle camera push-in.
-
-    No frames are blended or invented: the movement is a crop of the same
-    source-derived composite, not a turntable or a simulated garment rotation.
-    """
-    import imageio_ffmpeg
-
-    base = video_scene(scene[0], scene[1], background)
-    width, height = VIDEO_SIZE
-    writer = imageio_ffmpeg.write_frames(
-        str(output), VIDEO_SIZE, fps=VIDEO_FPS, codec="libx264", pix_fmt_out="yuv420p",
-        output_params=["-preset", "medium", "-crf", "22", "-movflags", "+faststart"],
-    )
-    writer.send(None)
-    try:
-        total_frames = 8 * VIDEO_FPS
-        for frame_number in range(total_frames):
-            progress = frame_number / max(1, total_frames - 1)
-            eased = (1 - np.cos(np.pi * progress)) / 2
-            zoom = 1.0 + 0.035 * eased
-            scaled = cv2.resize(
-                base,
-                (round(width * zoom), round(height * zoom)),
-                interpolation=cv2.INTER_CUBIC,
-            )
-            left = (scaled.shape[1] - width) // 2
-            top = (scaled.shape[0] - height) // 2
-            frame = scaled[top : top + height, left : left + width]
-            writer.send(np.ascontiguousarray(frame))
-    finally:
-        writer.close()
-
-
-def build_card_image(scene: tuple[np.ndarray, np.ndarray], background: np.ndarray, output: Path) -> None:
-    frame = video_scene(scene[0], scene[1], background, CARD_SIZE)
-    Image.fromarray(frame).save(output, quality=95, subsampling=0)
+    alpha = cv2.GaussianBlur(m_s.astype(np.float32) / 255.0, (5, 5), 1.2)[:, :, None]
+    roi = canvas[oy : oy + rh, ox : ox + rw]
+    canvas[oy : oy + rh, ox : ox + rw] = im_s * alpha + roi * (1.0 - alpha)
+    return np.clip(canvas, 0, 255).astype(np.uint8)
 
 
 def main() -> None:
-    background = np.asarray(Image.open(BG_PATH).convert("RGB"))
-    sila_outputs, sila_scenes = build_sila(background)
-    vzglyad_outputs, vzglyad_scenes = build_vzglyad(background)
-    card_outputs = (PROOF / "tee-vzglyad-card-concrete-v2.jpg",)
-    build_card_image(vzglyad_scenes[0], background, card_outputs[0])
-    video_outputs = (
-        VIDEO_DIR / "tee-sila-i-chest-proof-concrete-v2.mp4",
-        VIDEO_DIR / "tee-vzglyad-proof-concrete-v2.mp4",
-    )
-    render_portrait_source_video(sila_scenes[0], background, video_outputs[0])
-    render_portrait_source_video(vzglyad_scenes[0], background, video_outputs[1])
-    print("Built six exact-source black-tee views, one clean Vzglyad card portrait, and two portrait source-view videos on the shared concrete background:")
-    for path in [*sila_outputs, *vzglyad_outputs, *card_outputs, *video_outputs]:
-        print(f"- {path.relative_to(ROOT)}")
+    PROOF.mkdir(parents=True, exist_ok=True)
+    bg_full = Image.open(BG_PATH).convert("RGB")
+    bg = np.array(bg_full.resize((1080, 1340), Image.Resampling.LANCZOS))
+
+    p18 = np.array(Image.open(VZGLYAD_SOURCE))
+    front_v = p18[65:785, 0:690].copy()
+    back_v = p18[65:785, 700:1280].copy()
+
+    mask_front = np.zeros((720, 690), dtype=np.uint8)
+    cv2.fillPoly(mask_front, [np.array(VZGLYAD_FRONT, dtype=np.int32)], 255)
+
+    mask_back = np.zeros((720, 580), dtype=np.uint8)
+    cv2.fillPoly(mask_back, [np.array(VZGLYAD_BACK, dtype=np.int32)], 255)
+
+    # Clean chest on front_v for Sila i Chest
+    print_mask = np.zeros((720, 690), dtype=np.uint8)
+    print_mask[220:520, 170:540] = (cv2.cvtColor(front_v[220:520, 170:540], cv2.COLOR_RGB2GRAY) > 28).astype(np.uint8) * 255
+    print_mask = cv2.dilate(print_mask, np.ones((5, 5), np.uint8), iterations=2)
+    clean_front_s = cv2.inpaint(front_v, print_mask, 5, cv2.INPAINT_TELEA)
+
+    # Clean back for Sila i Chest back
+    print_mask_b = np.zeros((720, 580), dtype=np.uint8)
+    print_mask_b[180:550, 140:460] = (cv2.cvtColor(back_v[180:550, 140:460], cv2.COLOR_RGB2GRAY) > 28).astype(np.uint8) * 255
+    print_mask_b = cv2.dilate(print_mask_b, np.ones((5, 5), np.uint8), iterations=2)
+    clean_back_s = cv2.inpaint(back_v, print_mask_b, 5, cv2.INPAINT_TELEA)
+
+    # Overlay Cyrillic chest wordmark
+    wordmark = Image.open(BRAND / "sila-chest-wordmark.png")
+    wm_w = 330
+    wm_h = round(wordmark.height * (wm_w / wordmark.width))
+    wm_resized = wordmark.resize((wm_w, wm_h), Image.Resampling.LANCZOS)
+
+    img_clean_f = Image.fromarray(clean_front_s)
+    wm_x = 345 - wm_w // 2
+    wm_y = 265
+    img_clean_f.paste(wm_resized, (wm_x, wm_y), wm_resized)
+
+    # Overlay sword insignia on back
+    sword = Image.open(BRAND / "sword-monogram-light-v2.png")
+    sw_h = 360
+    sw_w = round(sword.width * (sw_h / sword.height))
+    sw_resized = sword.resize((sw_w, sw_h), Image.Resampling.LANCZOS)
+
+    img_clean_b = Image.fromarray(clean_back_s)
+    sw_x = 295 - sw_w // 2
+    sw_y = 190
+    img_clean_b.paste(sw_resized, (sw_x, sw_y), sw_resized)
+
+    # Overlay red hem label
+    flatlay = Image.open(DROP / "tee-flatlay-v2.jpg")
+    hem_patch = flatlay.crop((475, 785, 515, 850))
+    hem_w = 26
+    hem_h = round(hem_patch.height * (hem_w / hem_patch.width))
+    hem_resized = hem_patch.resize((hem_w, hem_h), Image.Resampling.LANCZOS)
+    img_clean_f.paste(hem_resized, (158, 665))
+
+    front_sila = np.array(img_clean_f)
+    back_sila = np.array(img_clean_b)
+
+    res_sila_f = composite_to_wall(front_sila, mask_front, bg)
+    res_sila_b = composite_to_wall(back_sila, mask_back, bg)
+    res_vzglyad_f = composite_to_wall(front_v, mask_front, bg)
+    res_vzglyad_b = composite_to_wall(back_v, mask_back, bg)
+
+    Image.fromarray(res_sila_f).save(PROOF / "tee-sila-front-photo-v1.jpg", quality=96, subsampling=0)
+    Image.fromarray(res_sila_b).save(PROOF / "tee-sila-back-photo-v2.jpg", quality=96, subsampling=0)
+    Image.fromarray(res_vzglyad_f).save(PROOF / "tee-vzglyad-front-source-v2.jpg", quality=96, subsampling=0)
+    Image.fromarray(res_vzglyad_b).save(PROOF / "tee-vzglyad-back-source-v2.jpg", quality=96, subsampling=0)
+
+    print("Built unified concrete product media (1080x1340) matching the white tee system:")
+    print("- tee-sila-front-photo-v1.jpg")
+    print("- tee-sila-back-photo-v2.jpg")
+    print("- tee-vzglyad-front-source-v2.jpg")
+    print("- tee-vzglyad-back-source-v2.jpg")
 
 
 if __name__ == "__main__":
