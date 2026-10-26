@@ -1560,6 +1560,148 @@
 
   /* --- Живой постер 001: реальные слои одного исходного фото --- */
 
+  const HERO_SLIDES = [
+    {
+      kicker: "НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ",
+      productId: "tee-sila-i-chest",
+      isLivingPoster: true
+    },
+    {
+      kicker: "02/05 · СИЛА И ЧЕСТЬ / ХЛОПОК 240Г",
+      productId: "tee-sila-i-chest"
+    },
+    {
+      kicker: "03/05 · КЛИНОК НА СПИНЕ · 001",
+      productId: "tee-sila-i-chest"
+    },
+    {
+      kicker: "04/05 · МОДЕЛЬ «ВЗГЛЯД»",
+      productId: "tee-vzglyad"
+    },
+    {
+      kicker: "05/05 · ОДИН В ПОЛЕ ВОИН / 360°",
+      productId: "tee-odin-v-pole-voin"
+    }
+  ];
+
+  let heroCarouselTimer = null;
+  let heroCarouselIndex = 0;
+  let heroCarouselPaused = false;
+
+  function showHeroSlide(index, manual = false) {
+    const media = $("#heroMedia");
+    if (!media) return;
+    const count = HERO_SLIDES.length;
+    heroCarouselIndex = ((index % count) + count) % count;
+    const slide = HERO_SLIDES[heroCarouselIndex];
+
+    if (slide.isLivingPoster) {
+      media.classList.add("hero-mode-living");
+      media.classList.remove("hero-mode-product");
+    } else {
+      media.classList.remove("hero-mode-living");
+      media.classList.add("hero-mode-product");
+    }
+
+    const slideItems = $$("#heroMedia .hero-slide-item");
+    slideItems.forEach(el => {
+      const idx = Number(el.dataset.heroSlide);
+      const isActive = idx === heroCarouselIndex;
+      el.classList.toggle("active", isActive);
+      const video = el.querySelector("video");
+      if (video) {
+        if (isActive) {
+          try { video.currentTime = 0; video.play().catch(() => {}); } catch (_) {}
+        } else {
+          try { video.pause(); } catch (_) {}
+        }
+      }
+    });
+
+    const badgeText = $("#heroLiveText");
+    if (badgeText) badgeText.textContent = slide.kicker;
+
+    const progress = $("#heroCarouselProgress");
+    if (progress) {
+      const duration = heroCarouselIndex === 4 ? 6500 : 4800;
+      progress.style.setProperty("--hero-slide-duration", `${duration}ms`);
+      progress.innerHTML = HERO_SLIDES.map((_, i) =>
+        `<span class="${i < heroCarouselIndex ? "done" : i === heroCarouselIndex ? "current" : ""}"><i></i></span>`
+      ).join("");
+    }
+
+    if (manual) haptic("selection");
+
+    window.clearTimeout(heroCarouselTimer);
+    if (!heroCarouselPaused && !reducedMotion()) {
+      const duration = heroCarouselIndex === 4 ? 6500 : 4800;
+      heroCarouselTimer = window.setTimeout(() => {
+        if (!document.hidden && !heroCarouselPaused) showHeroSlide(heroCarouselIndex + 1);
+      }, duration);
+    }
+  }
+
+  function setupHeroCarousel() {
+    const media = $("#heroMedia");
+    if (!media || media.dataset.carouselBound) return;
+    media.dataset.carouselBound = "1";
+
+    const prevBtn = $("#heroCarouselPrev");
+    const nextBtn = $("#heroCarouselNext");
+
+    if (prevBtn) {
+      prevBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        showHeroSlide(heroCarouselIndex - 1, true);
+      });
+    }
+    if (nextBtn) {
+      nextBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        showHeroSlide(heroCarouselIndex + 1, true);
+      });
+    }
+
+    media.addEventListener("pointerenter", () => { heroCarouselPaused = true; });
+    media.addEventListener("pointerleave", () => {
+      heroCarouselPaused = false;
+      showHeroSlide(heroCarouselIndex);
+    });
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    media.addEventListener("touchstart", e => {
+      if (!e.touches.length) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      heroCarouselPaused = true;
+    }, { passive: true });
+
+    media.addEventListener("touchend", e => {
+      heroCarouselPaused = false;
+      if (!e.changedTouches.length) return;
+      const diffX = e.changedTouches[0].clientX - touchStartX;
+      const diffY = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
+        if (diffX < 0) showHeroSlide(heroCarouselIndex + 1, true);
+        else showHeroSlide(heroCarouselIndex - 1, true);
+      } else {
+        showHeroSlide(heroCarouselIndex);
+      }
+    }, { passive: true });
+
+    media.addEventListener("click", e => {
+      if (e.target.closest("#heroCarouselPrev") || e.target.closest("#heroCarouselNext")) return;
+      const slide = HERO_SLIDES[heroCarouselIndex];
+      if (slide && slide.productId && !slide.isLivingPoster) {
+        haptic("light");
+        openProduct(slide.productId);
+      }
+    });
+
+    showHeroSlide(0);
+  }
+
   function syncHeroPoster() {
     const media = $("#heroMedia");
     const bg = $("#heroBackground");
@@ -1608,6 +1750,19 @@
       apply(x, y);
     }, { passive: true });
     media.addEventListener("pointerleave", queueScroll);
+
+    // Mobile gyroscope tilt (DeviceOrientation)
+    if (typeof window !== "undefined" && window.DeviceOrientationEvent && !reducedMotion()) {
+      let baseG = null, baseB = null;
+      window.addEventListener("deviceorientation", event => {
+        if (event.gamma === null || event.beta === null) return;
+        if (baseG === null) { baseG = event.gamma; baseB = event.beta; }
+        const dx = Math.max(-1, Math.min(1, (event.gamma - baseG) / 22));
+        const dy = Math.max(-1, Math.min(1, (event.beta - baseB) / 22));
+        apply(dx, dy);
+      }, { passive: true });
+    }
+
     queueScroll();
   }
 
@@ -2306,8 +2461,14 @@
     const personInput = $("#personInput");
     if (personInput) personInput.addEventListener("input", drawPersonPreview);
     $("#heroProductButton").addEventListener("click", () => {
-      browseCollection();
-      scrollToId("catalog");
+      haptic("light");
+      const slide = HERO_SLIDES[heroCarouselIndex];
+      if (slide && slide.productId && heroCarouselIndex > 0) {
+        openProduct(slide.productId);
+      } else {
+        browseCollection();
+        scrollToId("catalog");
+      }
     });
     if ($("#dropFilmButton")) $("#dropFilmButton").addEventListener("click", () => openStories(0));
     $("#zoomProduct").addEventListener("click", zoomProduct);
@@ -2379,6 +2540,14 @@
     if ($("#fitFinder")) $("#fitFinder").addEventListener("click", event => {
       const choice = event.target.closest("[data-fit-choice]");
       if (choice) setFitChoice(choice.dataset.fitChoice);
+      const preset = event.target.closest("[data-fit-preset]");
+      if (preset) {
+        const [h, w] = preset.dataset.fitPreset.split(",");
+        if ($("#fitHeight")) $("#fitHeight").value = h;
+        if ($("#fitWeight")) $("#fitWeight").value = w;
+        recommendFit();
+        haptic("selection");
+      }
     });
     if ($("#fitRecommend")) $("#fitRecommend").addEventListener("click", recommendFit);
 
@@ -2389,8 +2558,8 @@
     $("#sheetImage").addEventListener("click", zoomProduct);
 
     $("#sheetQty").addEventListener("click", event => {
-      if (event.target.closest("[data-sheet-qty='plus']")) state.qty = Math.min(20, state.qty + 1);
-      if (event.target.closest("[data-sheet-qty='minus']")) state.qty = Math.max(1, state.qty - 1);
+      if (event.target.closest("[data-sheet-qty='plus']")) { state.qty = Math.min(20, state.qty + 1); haptic("light"); }
+      if (event.target.closest("[data-sheet-qty='minus']")) { state.qty = Math.max(1, state.qty - 1); haptic("light"); }
       $("#qtyValue").textContent = String(state.qty);
     });
 
@@ -2645,6 +2814,7 @@
   bindEvents();
   setupHeroParallax();
   syncHeroPoster();
+  setupHeroCarousel();
   renderDropEvent();
   renderCommunity();
   renderClub();

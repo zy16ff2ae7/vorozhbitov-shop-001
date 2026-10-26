@@ -82,13 +82,30 @@
 
     <main>
       <section class="hero" id="home" aria-labelledby="heroTitle">
-        <div class="hero-media" id="heroMedia">
-          <img class="hero-layer hero-layer-fallback" src="assets/drop/hero-sila-miniapp-v3.jpg" alt="Никита Ворожбитов в футболке «СИЛА И ЧЕСТЬ» — лицо и футболка из исходного фото без изменений, фон — бетонная стена бренда, как у белой футболки" fetchpriority="high" decoding="async" id="heroFallback" width="900" height="978">
-          <img class="hero-layer hero-layer-bg" src="assets/drop/hero-sila-layer-bg-v3.jpg" alt="" aria-hidden="true" decoding="async" id="heroBackground" width="900" height="978">
-          <div class="hero-poster-type" aria-hidden="true"><span>СИЛА</span><span>ЧЕСТЬ</span></div>
-          <img class="hero-layer hero-layer-subject" src="assets/drop/hero-sila-layer-subject-v3.webp" alt="" aria-hidden="true" decoding="async" id="heroSubject" width="900" height="978">
+        <div class="hero-media hero-mode-living" id="heroMedia" role="region" aria-label="Галерея дропа 001">
+          <div class="hero-carousel-progress" id="heroCarouselProgress" aria-hidden="true"></div>
+          <div class="hero-living-poster" id="heroLivingPoster">
+            <img class="hero-layer hero-layer-fallback" src="assets/drop/hero-sila-miniapp-v3.jpg" alt="Никита Ворожбитов в футболке «СИЛА И ЧЕСТЬ» — лицо и футболка из исходного фото без изменений, фон — бетонная стена бренда, как у белой футболки" fetchpriority="high" decoding="async" id="heroFallback" width="900" height="978">
+            <img class="hero-layer hero-layer-bg" src="assets/drop/hero-sila-layer-bg-v3.jpg" alt="" aria-hidden="true" decoding="async" id="heroBackground" width="900" height="978">
+            <div class="hero-poster-type" aria-hidden="true"><span>СИЛА</span><span>ЧЕСТЬ</span></div>
+            <img class="hero-layer hero-layer-subject" src="assets/drop/hero-sila-layer-subject-v3.webp" alt="" aria-hidden="true" decoding="async" id="heroSubject" width="900" height="978">
+          </div>
+          <div class="hero-slide-item" data-hero-slide="1" aria-hidden="true">
+            <img src="assets/product-proof/tee-sila-front-photo-v1.jpg" alt="Футболка «СИЛА И ЧЕСТЬ» перед" loading="lazy">
+          </div>
+          <div class="hero-slide-item" data-hero-slide="2" aria-hidden="true">
+            <img src="assets/product-proof/tee-sila-back-photo-v2.jpg" alt="Клинок на спине" loading="lazy">
+          </div>
+          <div class="hero-slide-item" data-hero-slide="3" aria-hidden="true">
+            <img src="assets/product-proof/tee-vzglyad-front-source-v2.jpg" alt="Футболка «ВЗГЛЯД»" loading="lazy">
+          </div>
+          <div class="hero-slide-item" data-hero-slide="4" aria-hidden="true">
+            <video src="assets/video/tee-odin-v-pole-voin-rotation-concrete-v1.mp4" muted loop playsinline preload="metadata" aria-label="360° вращение белой футболки"></video>
+          </div>
           <div class="hero-shade"></div>
-          <div class="hero-live"><span class="pulse-dot"></span> НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ</div>
+          <button class="hero-carousel-nav hero-carousel-prev" id="heroCarouselPrev" type="button" aria-label="Предыдущий кадр">‹</button>
+          <button class="hero-carousel-nav hero-carousel-next" id="heroCarouselNext" type="button" aria-label="Следующий кадр">›</button>
+          <div class="hero-live" id="heroLiveBadge"><span class="pulse-dot"></span> <span id="heroLiveText">НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ</span></div>
         </div>
         <div class="hero-copy">
           <div class="eyebrow"><span>ОДЕЖДА С ХАРАКТЕРОМ</span><span>СИЛА И ЧЕСТЬ</span></div>
@@ -371,6 +388,12 @@
               <button type="button" data-fit-choice="close" aria-pressed="false">Плотнее</button>
               <button type="button" data-fit-choice="regular" class="active" aria-pressed="true">Обычно</button>
               <button type="button" data-fit-choice="oversize" aria-pressed="false">Оверсайз</button>
+            </div>
+            <div class="fit-presets" role="group" aria-label="Быстрый выбор по комплекции">
+              <button class="fit-preset-btn" type="button" data-fit-preset="175,74"><strong>M</strong> 172–177 см · 70–76 кг</button>
+              <button class="fit-preset-btn" type="button" data-fit-preset="182,84"><strong>L</strong> 178–184 см · 80–88 кг</button>
+              <button class="fit-preset-btn" type="button" data-fit-preset="188,94"><strong>XL</strong> 185–192 см · 89–98 кг</button>
+              <button class="fit-preset-btn" type="button" data-fit-preset="193,105"><strong>XXL</strong> 190+ см · 100+ кг</button>
             </div>
             <button class="button button-ghost full-button" id="fitRecommend" type="button">ПОДОБРАТЬ РАЗМЕР</button>
             <p class="fit-result" id="fitResult" aria-live="polite">Подберём по опубликованной таблице и сразу выберем размер выше.</p>

@@ -2247,6 +2247,34 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 }
 
 /* ---------- Живой постер 001: фон / типографика / фигура ---------- */
+.hero-media {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+}
+.hero-living-poster {
+  position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%;
+  transition: opacity .45s ease, transform .45s ease;
+  pointer-events: none;
+}
+.hero-slide-item {
+  position: absolute; inset: 0; z-index: 2; opacity: 0; width: 100%; height: 100%;
+  transition: opacity .45s ease; pointer-events: none;
+}
+.hero-slide-item img, .hero-slide-item video {
+  width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%;
+  animation: none;
+}
+.hero-slide-item.active {
+  opacity: 1; pointer-events: auto;
+}
+.hero-media.hero-mode-living .hero-living-poster {
+  opacity: 1; pointer-events: auto;
+}
+.hero-media.hero-mode-product .hero-living-poster {
+  opacity: 0; pointer-events: none;
+}
 .hero-media .hero-layer {
   position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0;
   object-fit: cover; object-position: 50% 10%;
@@ -2272,11 +2300,74 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   z-index: 3; opacity: 0;
   transform: scale(1.012) translate3d(var(--poster-subject-x, 0px), var(--poster-subject-y, 0px), 0);
   transition: opacity .45s ease;
+  filter: drop-shadow(0 12px 28px rgba(0,0,0,0.65)) drop-shadow(0 0 2px rgba(192, 34, 23, 0.40));
 }
 .hero-media.poster-ready .hero-layer-bg,
 .hero-media.poster-ready .hero-poster-type,
 .hero-media.poster-ready .hero-layer-subject { opacity: 1; }
 .hero-media .hero-shade { z-index: 4; }
+
+/* Stories Progress Indicators on Hero */
+.hero-carousel-progress {
+  position: absolute; top: 12px; left: 14px; right: 14px; z-index: 6;
+  display: flex; gap: 4px; pointer-events: none;
+}
+.hero-carousel-progress span {
+  flex: 1; height: 2.5px; background: rgba(255, 255, 255, .22);
+  border-radius: 2px; overflow: hidden; position: relative;
+}
+.hero-carousel-progress span i {
+  position: absolute; inset: 0; width: 100%;
+  background: #f4eee6; transform-origin: 0 50%; transform: scaleX(0);
+}
+.hero-carousel-progress span.done i {
+  transform: scaleX(1);
+}
+.hero-carousel-progress span.current i {
+  animation: hero-progress-fill var(--hero-slide-duration, 4800ms) linear forwards;
+}
+@keyframes hero-progress-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Carousel Navigation Arrows */
+.hero-carousel-nav {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 6;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(12, 12, 14, .65); backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, .15); color: #fff;
+  font-size: 24px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0; transition: opacity .25s ease, background .2s ease;
+  padding: 0;
+}
+.hero-media:hover .hero-carousel-nav,
+.hero-carousel-nav:focus-visible {
+  opacity: .85;
+}
+.hero-carousel-nav:hover {
+  background: rgba(192, 34, 23, .85); opacity: 1;
+}
+.hero-carousel-prev { left: 10px; padding-right: 2px; }
+.hero-carousel-next { right: 10px; padding-left: 2px; }
+@media (max-width: 768px) {
+  .hero-carousel-nav { opacity: .45; width: 30px; height: 30px; font-size: 20px; }
+}
+
+/* Quick Size Presets in Finder */
+.fit-presets {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 10px; margin-bottom: 10px;
+}
+.fit-preset-btn {
+  padding: 8px 10px; border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(255, 255, 255, .04); border-radius: 8px;
+  color: var(--fg); font-size: 11px; text-align: left; cursor: pointer;
+  transition: all .2s ease; line-height: 1.3;
+}
+.fit-preset-btn strong { display: block; color: var(--red); font-size: 12px; }
+.fit-preset-btn:hover, .fit-preset-btn:focus-visible {
+  border-color: var(--red); background: rgba(192, 34, 23, .12);
+}
 @media (min-width: 960px) {
   /* Левый край фото растворяется в фоне страницы — без жёсткого шва колонок. */
   .hero-media .hero-shade {
