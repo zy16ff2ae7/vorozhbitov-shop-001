@@ -534,6 +534,7 @@
         ${backImg ? `<img class="product-img-back" src="${escapeHTML(backImg)}" alt="${escapeHTML(product.name)} (вид со спины)" loading="lazy">` : ''}
         <span class="product-badge">${escapeHTML(product.badge || "БАЗА")}</span>
         ${backImg ? `<button type="button" class="badge-side" aria-label="Показать вид со спины" data-action="flip">СПИНА ↺</button>` : ''}
+        ${backImg ? `<div class="card-dots" aria-hidden="true"><span class="card-dot active"></span><span class="card-dot"></span></div>` : ''}
         ${Array.isArray(product.spin) && product.spin.length > 1 ? '<span class="badge-3d">ВРАЩЕНИЕ 360°</span>' : `<span class="badge-3d">${imagesFor(product).length} ФОТО</span>`}
         <span class="product-hover">ОТКРЫТЬ КАРТОЧКУ <b>↗</b></span>
       </div>
@@ -597,8 +598,13 @@
     if (!product) return;
     const images = imagesFor(product);
     state.galleryIndex = (index + images.length) % images.length;
-    $("#sheetImage").src = images[state.galleryIndex];
-    $("#sheetImage").alt = `${product.name} — ${galleryLabel(product, state.galleryIndex)}`;
+    const sheetImg = $("#sheetImage");
+    if (sheetImg) {
+      sheetImg.style.opacity = "0.7";
+      sheetImg.src = images[state.galleryIndex];
+      sheetImg.alt = `${product.name} — ${galleryLabel(product, state.galleryIndex)}`;
+      window.requestAnimationFrame(() => { sheetImg.style.opacity = "1"; });
+    }
     $$("#galleryDots button").forEach((node, i) => {
       node.classList.toggle("active", i === state.galleryIndex);
       node.setAttribute("aria-pressed", String(i === state.galleryIndex));
@@ -1609,6 +1615,12 @@
   let heroCarouselIndex = 0;
   let heroCarouselPaused = false;
 
+  function getHeroSlideDuration(index) {
+    if (index === 0) return 2600; // Динамичный интро-кикер основателя (не висит статично!)
+    if (index === 4) return 6200; // 360-видео с полным оборотом белой футболки
+    return 3600; // Предметные кадры вещей первого дропа
+  }
+
   function showHeroSlide(index, manual = false) {
     const media = $("#heroMedia");
     if (!media) return;
@@ -1644,10 +1656,10 @@
 
     const progress = $("#heroCarouselProgress");
     if (progress) {
-      const duration = heroCarouselIndex === 4 ? 6500 : 4800;
+      const duration = getHeroSlideDuration(heroCarouselIndex);
       progress.style.setProperty("--hero-slide-duration", `${duration}ms`);
       progress.innerHTML = HERO_SLIDES.map((_, i) =>
-        `<span class="${i < heroCarouselIndex ? "done" : i === heroCarouselIndex ? "current" : ""}"><i></i></span>`
+        `<span class="${i < heroCarouselIndex ? "done" : i === heroCarouselIndex ? "current" : ""}" data-hero-target="${i}" role="button" aria-label="Слайд ${i + 1}"><i></i></span>`
       ).join("");
     }
 
@@ -1655,7 +1667,7 @@
 
     window.clearTimeout(heroCarouselTimer);
     if (!heroCarouselPaused && !reducedMotion()) {
-      const duration = heroCarouselIndex === 4 ? 6500 : 4800;
+      const duration = getHeroSlideDuration(heroCarouselIndex);
       heroCarouselTimer = window.setTimeout(() => {
         if (!document.hidden && !heroCarouselPaused) showHeroSlide(heroCarouselIndex + 1);
       }, duration);
@@ -1669,6 +1681,20 @@
 
     const prevBtn = $("#heroCarouselPrev");
     const nextBtn = $("#heroCarouselNext");
+    const progress = $("#heroCarouselProgress");
+
+    if (progress) {
+      progress.addEventListener("click", e => {
+        const bar = e.target.closest("[data-hero-target]");
+        if (bar) {
+          e.stopPropagation();
+          const target = Number(bar.dataset.heroTarget);
+          if (Number.isInteger(target)) {
+            showHeroSlide(target, true);
+          }
+        }
+      });
+    }
 
     if (prevBtn) {
       prevBtn.addEventListener("click", e => {
@@ -2676,6 +2702,26 @@
       if (button) setGallery(Number(button.dataset.gallery));
     });
     $("#sheetImage").addEventListener("click", zoomProduct);
+
+    let sheetTouchStartX = 0;
+    let sheetTouchStartY = 0;
+    const sheetImgWrap = $(".sheet-image");
+    if (sheetImgWrap) {
+      sheetImgWrap.addEventListener("touchstart", event => {
+        if (!event.touches || !event.touches[0]) return;
+        sheetTouchStartX = event.touches[0].clientX;
+        sheetTouchStartY = event.touches[0].clientY;
+      }, { passive: true });
+      sheetImgWrap.addEventListener("touchend", event => {
+        if (state.stage !== "photo" || !event.changedTouches || !event.changedTouches[0]) return;
+        const dx = event.changedTouches[0].clientX - sheetTouchStartX;
+        const dy = event.changedTouches[0].clientY - sheetTouchStartY;
+        if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+          stepMedia(dx < 0 ? 1 : -1);
+          haptic("light");
+        }
+      }, { passive: true });
+    }
 
     $("#sheetQty").addEventListener("click", event => {
       if (event.target.closest("[data-sheet-qty='plus']")) { state.qty = Math.min(20, state.qty + 1); haptic("light"); }

@@ -662,9 +662,31 @@ h1, h2 {
   .product-card:hover .product-image img { transform: scale(1.025); }
   .product-card:hover .product-img-front.has-back-pair { opacity: 0; }
   .product-card:hover .product-img-back { opacity: 1; }
+  .product-card:hover .card-dot:first-child { width: 4px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
+  .product-card:hover .card-dot:last-child { width: 13px; border-radius: 2px; background: #f4eee6; }
 }
 .product-card.is-flipped .product-img-front { opacity: 0 !important; }
 .product-card.is-flipped .product-img-back { opacity: 1 !important; }
+
+/* Flip indicator dots on cards */
+.card-dots {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px; z-index: 3; pointer-events: none;
+}
+.card-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  transition: width .25s cubic-bezier(0.16, 1, 0.3, 1), background .25s ease, border-radius .25s ease;
+}
+.card-dot:first-child {
+  width: 13px; border-radius: 2px; background: #f4eee6;
+}
+.product-card.is-flipped .card-dot:first-child {
+  width: 4px; border-radius: 50%; background: rgba(255, 255, 255, 0.35);
+}
+.product-card.is-flipped .card-dot:last-child {
+  width: 13px; border-radius: 2px; background: #f4eee6;
+}
 
 .badge-side {
   position: absolute; right: 8px; top: 8px; z-index: 3;
@@ -2359,19 +2381,23 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 }
 .hero-living-poster {
   position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%;
-  transition: opacity .45s ease, transform .45s ease;
+  transition: opacity .55s cubic-bezier(0.16, 1, 0.3, 1), transform .55s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: none;
 }
 .hero-slide-item {
   position: absolute; inset: 0; z-index: 2; opacity: 0; width: 100%; height: 100%;
-  transition: opacity .45s ease; pointer-events: none;
+  transform: scale(1.02);
+  transition: opacity .55s cubic-bezier(0.16, 1, 0.3, 1), transform .55s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
 }
 .hero-slide-item img, .hero-slide-item video {
   width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%;
   animation: none;
 }
 .hero-slide-item.active {
-  opacity: 1; pointer-events: auto;
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
 }
 .hero-media.hero-mode-living .hero-living-poster {
   opacity: 1; pointer-events: auto;
@@ -2414,14 +2440,21 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 /* Stories Progress Indicators on Hero */
 .hero-carousel-progress {
   position: absolute; top: 12px; left: 14px; right: 14px; z-index: 6;
-  display: flex; gap: 4px; pointer-events: none;
+  display: flex; gap: 4px; pointer-events: auto;
 }
 .hero-carousel-progress span {
-  flex: 1; height: 2.5px; background: rgba(255, 255, 255, .22);
+  flex: 1; height: 3px; background: rgba(255, 255, 255, .22);
   border-radius: 2px; overflow: hidden; position: relative;
+  cursor: pointer;
+  padding: 8px 0;
+  background-clip: content-box;
+  transition: background .2s ease;
+}
+.hero-carousel-progress span:hover {
+  background-color: rgba(255, 255, 255, .45);
 }
 .hero-carousel-progress span i {
-  position: absolute; inset: 0; width: 100%;
+  position: absolute; inset: 8px 0; width: 100%;
   background: #f4eee6; transform-origin: 0 50%; transform: scaleX(0);
 }
 .hero-carousel-progress span.done i {
