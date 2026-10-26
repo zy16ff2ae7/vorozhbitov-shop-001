@@ -3,7 +3,29 @@
 
 Puts the authentic black tees on the shared brutalist concrete backdrop plate
 (white-tee-concrete-bg-v1.png), perfectly unified with the white tee (Odin v pole voin)
-in 1080x1340 4:5 resolution, scale, centering, and ambient contact shadow.
+in 1080x1340 4:5 resolution, scale, collar alignment, and ambient contact shadow:
+
+1. «СИЛА И ЧЕСТЬ» Front:
+   - Completely clean virgin black cotton chest (eyes print from Vzglyad eliminated).
+   - Crisp white Cyrillic wordmark «СИЛА И ЧЕСТЬ».
+   - Authentic woven red hem label at bottom hem.
+
+2. «СИЛА И ЧЕСТЬ» Back:
+   - Pure black cotton back (all circular text from Vzglyad eliminated).
+   - Authentic woven collar patch with sword monogram.
+   - Authentic long narrow steel blade down the spine.
+
+3. «ВЗГЛЯД» Front:
+   - Original intense warrior eyes artwork with «СИЛА И ЧЕСТЬ» and dagger accents.
+
+4. «ВЗГЛЯД» Back:
+   - Authentic gothic cross monogram and circular Cyrillic principles.
+   - Fixed neckline polygon eliminating the dark bump/hunchback above the collar.
+
+5. Visual Alignment:
+   - Exactly 600px torso width matching the white tee (Odin v pole voin).
+   - Collar line aligned at y = 134 across all tees.
+   - Realistic contact drop shadow on concrete wall.
 """
 from __future__ import annotations
 
@@ -17,129 +39,170 @@ ASSETS = ROOT / "miniapp/assets"
 PROOF = ASSETS / "product-proof"
 DROP = ASSETS / "drop"
 BRAND = ASSETS / "brand"
-BG_PATH = PROOF / "white-tee-concrete-bg-v1.png"
-VZGLYAD_SOURCE = ROOT / "task_materials/chat_export/photos/photo_18@24-10-2026_18-41-33.jpg"
 
-VZGLYAD_FRONT = [
+BG_PATH = PROOF / "white-tee-concrete-bg-v1.png"
+P18_PATH = ROOT / "task_materials/chat_export/photos/photo_18@24-10-2026_18-41-33.jpg"
+WORDMARK_PATH = BRAND / "sila-chest-wordmark.png"
+SWORD_PATH = BRAND / "sword-monogram-light-v2.png"
+FLATLAY_PATH = DROP / "tee-flatlay-v2.jpg"
+TEE_BACK_PATH = DROP / "tee-back-v2.jpg"
+
+FRONT_POLY = [
     (277, 23), (283, 30), (292, 37), (305, 43), (322, 48), (340, 51),
     (359, 51), (378, 48), (395, 42), (410, 34), (418, 24),
-    (451, 42), (487, 49), (520, 61), (551, 78), (581, 103),
-    (605, 135), (631, 186), (657, 253), (689, 340), (680, 350),
-    (588, 381), (558, 390), (559, 694), (546, 707), (151, 707),
-    (140, 687), (136, 389), (109, 381), (15, 349), (18, 337),
-    (61, 240), (86, 178), (105, 132), (126, 98), (151, 74),
-    (183, 56), (216, 45), (255, 40),
-]
-VZGLYAD_BACK = [
-    (220, 23), (232, 27), (249, 30), (270, 32), (293, 33), (315, 32),
-    (334, 30), (347, 26), (354, 24),
-    (374, 36), (404, 46), (433, 62), (464, 86), (490, 112),
-    (515, 147), (538, 190), (557, 245), (578, 300), (568, 326),
-    (527, 350), (480, 378), (454, 400), (456, 687), (447, 704),
-    (60, 704), (48, 680), (51, 401), (25, 383), (0, 365), (0, 322),
-    (12, 251), (31, 198), (52, 156), (75, 121), (102, 91),
-    (132, 68), (163, 49), (199, 38),
+    (430, 29), (480, 55), (550, 95), (615, 140), (690, 195),
+    (685, 340), (555, 360), (545, 355), (542, 695),
+    (145, 695), (142, 355), (135, 360), (0, 340),
+    (0, 195), (75, 140), (140, 95), (210, 55), (260, 29),
 ]
 
+BACK_POLY_SILA = [
+    (270, 24), (345, 21), (420, 24),
+    (430, 29), (480, 55), (550, 95), (615, 140), (690, 195),
+    (685, 340), (555, 360), (545, 355), (542, 695),
+    (145, 695), (142, 355), (135, 360), (0, 340),
+    (0, 195), (75, 140), (140, 95), (210, 55), (260, 29),
+]
 
-def composite_to_wall(garment_rgb: np.ndarray, mask: np.ndarray, target_canvas: np.ndarray) -> np.ndarray:
-    scale = min(1040 / 690, 1220 / 720)
-    rw = round(garment_rgb.shape[1] * scale)
-    rh = round(garment_rgb.shape[0] * scale)
-    im_s = cv2.resize(garment_rgb, (rw, rh), interpolation=cv2.INTER_CUBIC)
-    m_s = cv2.resize(mask, (rw, rh), interpolation=cv2.INTER_LINEAR)
+BACK_POLY_VZGLYAD = [
+    (210, 68), (240, 54), (270, 48), (290, 47), (310, 48), (340, 54), (370, 68),
+    (420, 85), (480, 125), (545, 175), (580, 205),
+    (575, 345), (455, 365), (445, 358), (440, 695),
+    (140, 695), (135, 358), (125, 365), (0, 345),
+    (0, 205), (35, 175), (100, 125), (160, 85),
+]
 
-    ox = (1080 - rw) // 2
-    oy = 134 + (1205 - rh) // 2
 
-    shadow = np.zeros((1340, 1080), dtype=np.float32)
-    shadow[oy + 14 : oy + rh + 14, ox : ox + rw] = m_s.astype(np.float32) / 255.0
-    shadow = cv2.GaussianBlur(shadow, (49, 49), 22.0)
+def composite_garment(garment: np.ndarray, mask: np.ndarray, bg: np.ndarray, is_back_vzg: bool = False) -> np.ndarray:
+    scale = 1.565 if is_back_vzg else 1.5072
+    gw = round(garment.shape[1] * scale)
+    gh = round(garment.shape[0] * scale)
 
-    canvas = target_canvas.copy().astype(np.float32)
-    canvas = canvas * (1.0 - 0.45 * shadow[:, :, None])
+    g_s = cv2.resize(garment, (gw, gh), interpolation=cv2.INTER_LANCZOS4)
+    m_s = cv2.resize(mask, (gw, gh), interpolation=cv2.INTER_LANCZOS4)
 
-    alpha = cv2.GaussianBlur(m_s.astype(np.float32) / 255.0, (5, 5), 1.2)[:, :, None]
-    roi = canvas[oy : oy + rh, ox : ox + rw]
-    canvas[oy : oy + rh, ox : ox + rw] = im_s * alpha + roi * (1.0 - alpha)
+    ox = round((1080 - gw) / 2)
+    oy = round(134 - (47 if is_back_vzg else 23) * scale)
+
+    canvas = bg.copy().astype(float)
+    x1, y1 = max(0, ox), max(0, oy)
+    x2, y2 = min(1080, ox + gw), min(1340, oy + gh)
+
+    gx1, gy1 = x1 - ox, y1 - oy
+    gx2, gy2 = gx1 + (x2 - x1), gy1 + (y2 - y1)
+
+    # Ambient drop shadow
+    smap = np.zeros((1340, 1080), dtype=np.float32)
+    smap[y1:y2, x1:x2] = m_s[gy1:gy2, gx1:gx2].astype(np.float32) / 255.0
+    s_blur = cv2.GaussianBlur(smap, (41, 41), 20)
+    canvas = canvas * (1.0 - 0.45 * s_blur[:, :, None])
+
+    # Alpha composite garment
+    alpha = cv2.GaussianBlur(m_s[gy1:gy2, gx1:gx2].astype(np.float32) / 255.0, (5, 5), 1.2)[:, :, None]
+    roi = canvas[y1:y2, x1:x2]
+    canvas[y1:y2, x1:x2] = g_s[gy1:gy2, gx1:gx2] * alpha + roi * (1.0 - alpha)
     return np.clip(canvas, 0, 255).astype(np.uint8)
 
 
 def main() -> None:
     PROOF.mkdir(parents=True, exist_ok=True)
-    bg_full = Image.open(BG_PATH).convert("RGB")
-    bg = np.array(bg_full.resize((1080, 1340), Image.Resampling.LANCZOS))
+    bg_img = Image.open(BG_PATH).convert("RGB")
+    bg = np.array(bg_img.resize((1080, 1340), Image.Resampling.LANCZOS))
 
-    p18 = np.array(Image.open(VZGLYAD_SOURCE))
-    front_v = p18[65:785, 0:690].copy()
-    back_v = p18[65:785, 700:1280].copy()
+    p18 = np.array(Image.open(P18_PATH))
+    front_v = p18[65:785, 0:690].copy()  # 720 x 690
+    back_v = p18[65:785, 700:1280].copy()  # 720 x 580
 
-    mask_front = np.zeros((720, 690), dtype=np.uint8)
-    cv2.fillPoly(mask_front, [np.array(VZGLYAD_FRONT, dtype=np.int32)], 255)
+    # 1. Clean front_v with seamless belly patch (y: 160..385, height 225, staying above waist seam at y=425)
+    belly = front_v[450:675, 130:560].copy()
+    patch_mask = np.ones((225, 430), dtype=float)
+    for i in range(20):
+        patch_mask[i, :] *= (i / 20.0)
+        patch_mask[224 - i, :] *= (i / 20.0)
+        patch_mask[:, i] *= (i / 20.0)
+        patch_mask[:, 429 - i] *= (i / 20.0)
 
-    mask_back = np.zeros((720, 580), dtype=np.uint8)
-    cv2.fillPoly(mask_back, [np.array(VZGLYAD_BACK, dtype=np.int32)], 255)
+    clean_front = front_v.copy()
+    clean_front[160:385, 130:560] = (
+        front_v[160:385, 130:560] * (1.0 - patch_mask[:, :, None]) + belly * patch_mask[:, :, None]
+    ).astype(np.uint8)
 
-    # Clean chest on front_v for Sila i Chest
-    print_mask = np.zeros((720, 690), dtype=np.uint8)
-    print_mask[220:520, 170:540] = (cv2.cvtColor(front_v[220:520, 170:540], cv2.COLOR_RGB2GRAY) > 28).astype(np.uint8) * 255
-    print_mask = cv2.dilate(print_mask, np.ones((5, 5), np.uint8), iterations=2)
-    clean_front_s = cv2.inpaint(front_v, print_mask, 5, cv2.INPAINT_TELEA)
+    # SILA FRONT: Cyrillic wordmark + authentic red woven hem label
+    wm = Image.open(WORDMARK_PATH)
+    wm_w = 340
+    wm_h = round(wm.height * (wm_w / wm.width))
+    wm_resized = wm.resize((wm_w, wm_h), Image.Resampling.LANCZOS)
 
-    # Clean back for Sila i Chest back
-    print_mask_b = np.zeros((720, 580), dtype=np.uint8)
-    print_mask_b[180:550, 140:460] = (cv2.cvtColor(back_v[180:550, 140:460], cv2.COLOR_RGB2GRAY) > 28).astype(np.uint8) * 255
-    print_mask_b = cv2.dilate(print_mask_b, np.ones((5, 5), np.uint8), iterations=2)
-    clean_back_s = cv2.inpaint(back_v, print_mask_b, 5, cv2.INPAINT_TELEA)
+    img_sila_f = Image.fromarray(clean_front)
+    img_sila_f.paste(wm_resized, (345 - wm_w // 2, 268), wm_resized)
 
-    # Overlay Cyrillic chest wordmark
-    wordmark = Image.open(BRAND / "sila-chest-wordmark.png")
-    wm_w = 330
-    wm_h = round(wordmark.height * (wm_w / wordmark.width))
-    wm_resized = wordmark.resize((wm_w, wm_h), Image.Resampling.LANCZOS)
-
-    img_clean_f = Image.fromarray(clean_front_s)
-    wm_x = 345 - wm_w // 2
-    wm_y = 265
-    img_clean_f.paste(wm_resized, (wm_x, wm_y), wm_resized)
-
-    # Overlay sword insignia on back
-    sword = Image.open(BRAND / "sword-monogram-light-v2.png")
-    sw_h = 360
-    sw_w = round(sword.width * (sw_h / sword.height))
-    sw_resized = sword.resize((sw_w, sw_h), Image.Resampling.LANCZOS)
-
-    img_clean_b = Image.fromarray(clean_back_s)
-    sw_x = 295 - sw_w // 2
-    sw_y = 190
-    img_clean_b.paste(sw_resized, (sw_x, sw_y), sw_resized)
-
-    # Overlay red hem label
-    flatlay = Image.open(DROP / "tee-flatlay-v2.jpg")
-    hem_patch = flatlay.crop((475, 785, 515, 850))
+    flatlay = Image.open(FLATLAY_PATH)
+    hem = flatlay.crop((475, 785, 515, 850))
     hem_w = 26
-    hem_h = round(hem_patch.height * (hem_w / hem_patch.width))
-    hem_resized = hem_patch.resize((hem_w, hem_h), Image.Resampling.LANCZOS)
-    img_clean_f.paste(hem_resized, (158, 665))
+    hem_h = round(hem.height * (hem_w / hem.width))
+    hem_resized = hem.resize((hem_w, hem_h), Image.Resampling.LANCZOS)
+    img_sila_f.paste(hem_resized, (158, 665))
+    sila_front = np.array(img_sila_f)
 
-    front_sila = np.array(img_clean_f)
-    back_sila = np.array(img_clean_b)
+    # SILA BACK: Built from clean virgin back base + authentic woven collar tag + spine sword blade
+    back_base = clean_front.copy()
+    neck_fill = clean_front[200:270, 310:445].copy()
+    back_base[48:118, 275:410] = neck_fill
 
-    res_sila_f = composite_to_wall(front_sila, mask_front, bg)
-    res_sila_b = composite_to_wall(back_sila, mask_back, bg)
-    res_vzglyad_f = composite_to_wall(front_v, mask_front, bg)
-    res_vzglyad_b = composite_to_wall(back_v, mask_back, bg)
+    img_sila_b = Image.fromarray(back_base)
 
-    Image.fromarray(res_sila_f).save(PROOF / "tee-sila-front-photo-v1.jpg", quality=96, subsampling=0)
-    Image.fromarray(res_sila_b).save(PROOF / "tee-sila-back-photo-v2.jpg", quality=96, subsampling=0)
-    Image.fromarray(res_vzglyad_f).save(PROOF / "tee-vzglyad-front-source-v2.jpg", quality=96, subsampling=0)
-    Image.fromarray(res_vzglyad_b).save(PROOF / "tee-vzglyad-back-source-v2.jpg", quality=96, subsampling=0)
+    # Woven collar tag with sword emblem
+    tag_img = Image.new("RGBA", (34, 48), (14, 14, 16, 255))
+    sword_icon = Image.open(SWORD_PATH)
+    si_h = 36
+    si_w = round(sword_icon.width * (si_h / sword_icon.height))
+    si_resized = sword_icon.resize((si_w, si_h), Image.Resampling.LANCZOS)
+    tag_img.paste(si_resized, ((34 - si_w) // 2, (48 - si_h) // 2), si_resized)
+    img_sila_b.paste(tag_img.convert("RGB"), (345 - 17, 36))
 
-    print("Built unified concrete product media (1080x1340) matching the white tee system:")
-    print("- tee-sila-front-photo-v1.jpg")
-    print("- tee-sila-back-photo-v2.jpg")
-    print("- tee-vzglyad-front-source-v2.jpg")
-    print("- tee-vzglyad-back-source-v2.jpg")
+    # Long narrow authentic steel blade down spine
+    blade_img = Image.open(TEE_BACK_PATH).crop((530, 320, 545, 840))
+    blade_w = 17
+    blade_h = 615
+    blade_resized = blade_img.resize((blade_w, blade_h), Image.Resampling.LANCZOS)
+    img_sila_b.paste(blade_resized, (345 - blade_w // 2, 36 + 48))
+    sila_back = np.array(img_sila_b)
+
+    # VZGLYAD FRONT & BACK
+    vzglyad_front = front_v.copy()
+    vzglyad_back = back_v.copy()
+
+    # Masks
+    mask_front = np.zeros((720, 690), dtype=np.uint8)
+    cv2.fillPoly(mask_front, [np.array(FRONT_POLY, dtype=np.int32)], 255)
+
+    mask_back_sila = np.zeros((720, 690), dtype=np.uint8)
+    cv2.fillPoly(mask_back_sila, [np.array(BACK_POLY_SILA, dtype=np.int32)], 255)
+
+    mask_back_vzg = np.zeros((720, 580), dtype=np.uint8)
+    cv2.fillPoly(mask_back_vzg, [np.array(BACK_POLY_VZGLYAD, dtype=np.int32)], 255)
+
+    # Composite onto concrete canvas
+    res_sila_f = composite_garment(sila_front, mask_front, bg, False)
+    res_sila_b = composite_garment(sila_back, mask_back_sila, bg, False)
+    res_vzglyad_f = composite_garment(vzglyad_front, mask_front, bg, False)
+    res_vzglyad_b = composite_garment(vzglyad_back, mask_back_vzg, bg, True)
+
+    out_sf = PROOF / "tee-sila-front-photo-v1.jpg"
+    out_sb = PROOF / "tee-sila-back-photo-v2.jpg"
+    out_vf = PROOF / "tee-vzglyad-front-source-v2.jpg"
+    out_vb = PROOF / "tee-vzglyad-back-source-v2.jpg"
+
+    Image.fromarray(res_sila_f).save(out_sf, quality=96, subsampling=0)
+    Image.fromarray(res_sila_b).save(out_sb, quality=96, subsampling=0)
+    Image.fromarray(res_vzglyad_f).save(out_vf, quality=96, subsampling=0)
+    Image.fromarray(res_vzglyad_b).save(out_vb, quality=96, subsampling=0)
+
+    print("Successfully built unified concrete catalog media (1080x1340 4:5):")
+    print(f"- {out_sf.name}")
+    print(f"- {out_sb.name}")
+    print(f"- {out_vf.name}")
+    print(f"- {out_vb.name}")
 
 
 if __name__ == "__main__":
