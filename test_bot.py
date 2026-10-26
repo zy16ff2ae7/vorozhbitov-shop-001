@@ -111,7 +111,7 @@ class BotTests(unittest.TestCase):
         crop_builder = (root / "tools/build_sila_miniapp_hero.py").read_text(encoding="utf-8")
         self.assertIn("tee-real-8272.jpg", crop_builder)
         self.assertIn("no face or garment pixels are generated", crop_builder)
-        self.assertIn("лицо и футболка из исходного фото без изменений", index)
+        self.assertIn('alt="Никита Ворожбитов в футболке «СИЛА И ЧЕСТЬ»"', index)
         self.assertIn("white-tee-concrete-bg-v1.png", crop_builder)
         self.assertIn("НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ", index)
 

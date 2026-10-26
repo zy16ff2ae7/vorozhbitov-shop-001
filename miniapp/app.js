@@ -2088,7 +2088,7 @@
       video.classList.add("hidden");
       image.classList.remove("hidden");
       image.src = scene.image || scene.poster || "";
-      image.alt = `${scene.title} — реальное медиа из каталога`;
+      image.alt = `${scene.title} — кадр первого дропа`;
       image.classList.toggle("contain", /product-proof|\/spin\//.test(image.src));
     }
     $("#filmKicker").textContent = scene.kicker;
@@ -2337,7 +2337,7 @@
     const entries = (Array.isArray(state.data.community) ? state.data.community : [])
       .filter(item => item && typeof item.image === "string" && item.image);
     if (!entries.length) {
-      grid.innerHTML = `<div class="community-empty"><span>ПОКА ПУСТО — И ЭТО ЧЕСТНО</span><strong>Стань первым своим.</strong><span>Здесь появятся реальные фото покупателей после проверки и разрешения автора.</span></div>`;
+      grid.innerHTML = `<div class="community-empty"><span>ПЕРВЫЙ ВЫПУСК</span><strong>Стань первым своим.</strong><span>Здесь появятся фотографии покупателей первого дропа.</span></div>`;
       return;
     }
     grid.innerHTML = entries.map(item => {
@@ -2345,7 +2345,7 @@
       const title = String(item.caption || item.name || (product && product.name) || "Свой человек");
       const city = String(item.city || "СИЛА И ЧЕСТЬ").toUpperCase();
       const attrs = product ? `data-community-product="${escapeHTML(product.id)}" role="button" tabindex="0"` : "";
-      return `<figure class="community-card" ${attrs}><img src="${escapeHTML(item.image)}" alt="${escapeHTML(title)} — реальное фото из раздела «Свои»" loading="lazy" decoding="async"><figcaption><span>${escapeHTML(city)}</span><strong>${escapeHTML(title)}</strong></figcaption></figure>`;
+      return `<figure class="community-card" ${attrs}><img src="${escapeHTML(item.image)}" alt="${escapeHTML(title)} — сообщество «Свои»" loading="lazy" decoding="async"><figcaption><span>${escapeHTML(city)}</span><strong>${escapeHTML(title)}</strong></figcaption></figure>`;
     }).join("");
   }
 
