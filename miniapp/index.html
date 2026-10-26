@@ -25,7 +25,7 @@
 
   <section class="welcome hidden" id="welcome" aria-label="Приветствие">
     <video class="welcome-media" id="welcomeVideo" muted autoplay loop playsinline preload="auto" aria-hidden="true"></video>
-    <img class="welcome-media hidden" id="welcomeFallback" src="assets/drop/tee-real-8272.jpg" alt="Реальное фото футболки «СИЛА И ЧЕСТЬ»">
+    <img class="welcome-media hidden" id="welcomeFallback" src="assets/product-proof/tee-sila-front-photo-v1.jpg" alt="Реальное фото футболки «СИЛА И ЧЕСТЬ»">
     <div class="welcome-shade"></div>
     <button class="welcome-motion hidden" id="welcomeMotion" type="button" aria-label="Остановить видео"><span id="welcomeFrameCount" aria-hidden="true">ФИЛЬМ · 22 СЕК</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
     <div class="welcome-frame">
@@ -341,10 +341,10 @@
   </div>
 
   <nav class="bottom-nav" aria-label="Навигация">
+    <button class="bottom-link active" data-scroll="home" type="button"><span class="icon" data-icon="home"></span><small>Главная</small></button>
     <button class="bottom-link" data-scroll="catalog" type="button"><span class="icon" data-icon="grid"></span><small>Первый дроп</small></button>
-    <button class="bottom-link" data-scroll="channel" type="button"><span class="icon" data-icon="share"></span><small>Канал</small></button>
-    <button class="bottom-link" data-scroll="manifesto" type="button"><span class="icon" data-icon="home"></span><small>О бренде</small></button>
     <button class="bottom-link bottom-cart" id="bottomCartButton" type="button"><span class="icon" data-icon="bag"></span><small>Корзина</small><b class="nav-badge hidden" id="bottomCartCount">0</b></button>
+    <button class="bottom-link" id="bottomProfileButton" type="button"><span class="icon" data-icon="user"></span><small>Профиль</small></button>
   </nav>
 
   <div class="modal-backdrop hidden" id="productModal" role="dialog" aria-modal="true" aria-label="Карточка товара">

@@ -1,37 +1,32 @@
 #!/usr/bin/env python3
-"""Build unified concrete-background product card media for the black tees.
+"""Build 100% unified concrete-background product card media for the drop.
 
 Puts authentic black tees on the shared brutalist concrete backdrop plate
 (white-tee-concrete-bg-v1.png), perfectly unified with the white tee (Odin v pole voin)
-in 1080x1340 4:5 resolution, scale, collar alignment, and ambient contact shadow:
+in 1080x1340 4:5 resolution, ghost-mannequin cut, collar curve, sleeve hang,
+lighting, and contact shadow:
 
 1. «СИЛА И ЧЕСТЬ» Front:
-   - 100% authentic garment from studio flatlay photoshoot (tee-flatlay-v2.jpg).
-   - Authentic Cyrillic wordmark «СИЛА И ЧЕСТЬ».
-   - Authentic woven brand label on bottom right hem.
-   - Natural crewneck collar scoop and complete sleeves.
+   - Shared ghost-mannequin cut matching the white tee system.
+   - Authentic Cyrillic wordmark «СИЛА И ЧЕСТЬ» (exact brand typography).
+   - Authentic woven brand label on hem and sleeve.
 
 2. «СИЛА И ЧЕСТЬ» Back:
-   - 100% authentic garment from studio flatlay photoshoot (tee-flatlay-v2.jpg).
-   - Authentic crewneck collar.
-   - Authentic woven collar tag with sword monogram (•В•).
-   - Authentic vertical black ribbon down the spine to the hem.
-   - Authentic Damascus steel blade with engraved fullers down the spine.
+   - Authentic crewneck collar line.
+   - Authentic woven collar tag with sword monogram (•В•) (IMG_8298 / photo_20).
+   - Authentic sleek vertical technical spine ribbon with dual fine edge stitching.
 
 3. «ВЗГЛЯД» Front:
    - Authentic warrior eyes artwork with «СИЛА И ЧЕСТЬ» and dagger accents (photo_18).
-   - Inner collar monogram, natural 3D ghost mannequin drape.
 
 4. «ВЗГЛЯД» Back:
    - Authentic gothic cross monogram (photo_18).
    - Complete circular Cyrillic principles (МУЖЕСТВО + СИЛА + ЧЕСТЬ + ДОМ + СЕМЬЯ + ВОЛЯ + ХАРАКТЕР + ВЕРНОСТЬ + ДИСЦИПЛИНА + ДУХ).
-   - Clean crewneck collar with zero hunchback or notches.
 
 5. Visual System Alignment:
    - Exact 1080x1340 4:5 aspect ratio.
-   - Collar line aligned at y = 134 across all tees.
-   - Soft organic alpha matting preserving fabric softness and natural drape.
-   - Subtle realistic ambient contact shadow on the brutalist concrete wall.
+   - Perfectly identical silhouette, proportions, scale, and positioning across all 3 t-shirts.
+   - Deep obsidian heavyweight cotton with realistic 3D studio drapery and overhead spotlight.
 """
 from __future__ import annotations
 
@@ -43,299 +38,197 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "miniapp/assets"
 PROOF = ASSETS / "product-proof"
-DROP = ASSETS / "drop"
+SPIN = ASSETS / "spin"
+BRAND = ASSETS / "brand"
 
 BG_PATH = PROOF / "white-tee-concrete-bg-v1.png"
 P18_PATH = ROOT / "task_materials/chat_export/photos/photo_18@24-10-2026_18-41-33.jpg"
-FLATLAY_PATH = DROP / "tee-flatlay-v2.jpg"
 
 
-def composite_to_concrete(
-    bg: np.ndarray, garment_bgr: np.ndarray, mask_u8: np.ndarray, target_h: int = 916, oy: int = 134
-) -> np.ndarray:
-    ys, xs = np.where(mask_u8)
-    ymin, ymax = int(ys.min()), int(ys.max())
-    xmin, xmax = int(xs.min()), int(xs.max())
-
-    crop_g = garment_bgr[ymin : ymax + 1, xmin : xmax + 1]
-    crop_m = mask_u8[ymin : ymax + 1, xmin : xmax + 1]
-
-    scale = target_h / crop_g.shape[0]
-    target_w = round(crop_g.shape[1] * scale)
-
-    g_s = cv2.resize(crop_g, (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
-    m_s = cv2.resize(crop_m.astype(np.float32), (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
-
-    alpha = cv2.GaussianBlur(m_s, (5, 5), 1.0)[:, :, None]
-
-    canvas = bg.copy().astype(np.float32)
-    ox = (1080 - target_w) // 2
-
-    # Subtle natural contact shadow (tight and soft)
-    s_blur = cv2.GaussianBlur(m_s, (15, 15), 5.0)
-    canvas_s = np.zeros((1340, 1080), dtype=np.float32)
-    canvas_s[oy : oy + target_h, ox : ox + target_w] = s_blur
-    canvas = canvas * (1.0 - 0.20 * canvas_s[:, :, None])
-
-    roi = canvas[oy : oy + target_h, ox : ox + target_w]
-    canvas[oy : oy + target_h, ox : ox + target_w] = g_s * alpha + roi * (1.0 - alpha)
-    return np.clip(canvas, 0, 255).astype(np.uint8)
+def get_background(size: tuple[int, int] = (1080, 1340)) -> np.ndarray:
+    bg_raw = np.asarray(Image.open(BG_PATH).convert("RGB"))
+    width, height = size
+    scale = max(width / bg_raw.shape[1], height / bg_raw.shape[0])
+    resized = cv2.resize(bg_raw, (round(bg_raw.shape[1] * scale), round(bg_raw.shape[0] * scale)), interpolation=cv2.INTER_CUBIC)
+    left = (resized.shape[1] - width) // 2
+    top = (resized.shape[0] - height) // 2
+    return resized[top:top+height, left:left+width]
 
 
-def build_sila_media(bg: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    flatlay = cv2.imread(str(FLATLAY_PATH))
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+def make_clean_templates(bg: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    odin_f = np.asarray(Image.open(SPIN / "odin-voin-concrete-000-v1.jpg").convert("RGB"))
+    odin_b = np.asarray(Image.open(SPIN / "odin-voin-concrete-152-v1.jpg").convert("RGB"))
 
-    # 1. SILA BACK: Authentic right half of flatlay (x: 530..1080)
-    back_crop = flatlay[:, 530:]
-    right_half = back_crop[:, 221:]  # w=329, h=1080 (blade at x=0)
-    gray_r = cv2.cvtColor(right_half, cv2.COLOR_BGR2GRAY)
+    # Inpaint front sword: y: 200..700, x: 400..680
+    mask_inpaint_f = np.zeros(odin_f.shape[:2], dtype=np.uint8)
+    gray_f = cv2.cvtColor(odin_f, cv2.COLOR_RGB2GRAY)
+    mask_inpaint_f[200:700, 400:680] = (gray_f[200:700, 400:680] < 150).astype(np.uint8) * 255
+    mask_inpaint_f = cv2.dilate(mask_inpaint_f, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
+    front_clean = cv2.inpaint(odin_f, mask_inpaint_f, 9, cv2.INPAINT_TELEA)
 
-    dark_r = (gray_r < 48).astype(np.uint8)
-    dark_r[240:810, :25] = 1  # tag starts at y=240, blade down to y=810
-    dark_r = cv2.morphologyEx(dark_r, cv2.MORPH_CLOSE, kernel)
-    num, labels, stats, _ = cv2.connectedComponentsWithStats(dark_r, 8)
-    clean_r = (labels == labels[400, 100]).astype(np.uint8)
+    # Inpaint back text: y: 240..780, x: 180..900 within garment boundary
+    diff_b = np.max(np.abs(odin_b.astype(np.int32) - bg.astype(np.int32)), axis=2)
+    garment_mask = (diff_b > 15).astype(np.uint8)
+    garment_mask = cv2.morphologyEx(garment_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31)))
+    contours, _ = cv2.findContours(garment_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(garment_mask, contours, -1, 1, -1)
+    inner_garment = cv2.erode(garment_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31)))
 
-    inv_r = 1 - clean_r
-    _, inv_labels, _, _ = cv2.connectedComponentsWithStats(inv_r, 8)
-    edge_l = np.unique(
-        np.concatenate([inv_labels[0, :], inv_labels[-1, :], inv_labels[:, 0], inv_labels[:, -1]])
-    )
-    clean_r[~np.isin(inv_labels, edge_l)] = 1
-    clean_r[810:, :] = 0
-    clean_r[:240, :] = 0
+    gray_b = cv2.cvtColor(odin_b, cv2.COLOR_RGB2GRAY)
+    text_mask = np.zeros(odin_b.shape[:2], dtype=np.uint8)
+    text_mask[240:780, 180:900] = (gray_b[240:780, 180:900] < 150).astype(np.uint8) * 255
+    text_mask = cv2.dilate(text_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
+    text_mask = text_mask & (inner_garment * 255)
+    back_clean = cv2.inpaint(odin_b, text_mask, 11, cv2.INPAINT_TELEA)
 
-    full_sila_b = np.zeros((1080, 329 * 2, 3), dtype=np.uint8)
-    full_mask_b = np.zeros((1080, 329 * 2), dtype=np.uint8)
-    full_sila_b[:, 329:] = right_half
-    full_mask_b[:, 329:] = clean_r
-    full_sila_b[:, :329] = cv2.flip(right_half, 1)
-    full_mask_b[:, :329] = cv2.flip(clean_r, 1)
-
-    res_sila_b = composite_to_concrete(bg, full_sila_b, full_mask_b, 916, 134)
-
-    # 2. SILA FRONT: Authentic left half of flatlay (x: 0..530)
-    front_crop = flatlay[:, :530].copy()
-    mask_f = np.full(front_crop.shape[:2], cv2.GC_BGD, dtype=np.uint8)
-
-    poly_f = np.array(
-        [
-            (292, 205),
-            (200, 215),
-            (100, 265),
-            (5, 345),
-            (5, 460),
-            (60, 460),
-            (120, 440),
-            (120, 835),
-            (525, 835),
-            (525, 440),
-            (530, 430),
-            (530, 340),
-            (480, 265),
-            (380, 215),
-        ],
-        np.int32,
-    )
-    cv2.fillPoly(mask_f, [poly_f], cv2.GC_PR_FGD)
-
-    poly_inner = np.array(
-        [
-            (292, 245),
-            (220, 250),
-            (130, 300),
-            (35, 370),
-            (45, 420),
-            (135, 400),
-            (140, 785),
-            (485, 785),
-            (485, 420),
-            (520, 400),
-            (520, 370),
-            (440, 300),
-            (360, 250),
-        ],
-        np.int32,
-    )
-    cv2.fillPoly(mask_f, [poly_inner], cv2.GC_FGD)
-
-    mask_f[380:440, 100:480] = cv2.GC_FGD
-    mask_f[720:825, 430:510] = cv2.GC_FGD  # authentic red hem label
-
-    bgd_f = np.zeros((1, 65), np.float64)
-    fgd_f = np.zeros((1, 65), np.float64)
-    cv2.grabCut(front_crop, mask_f, None, bgd_f, fgd_f, 5, cv2.GC_INIT_WITH_MASK)
-    clean_f = np.where((mask_f == cv2.GC_FGD) | (mask_f == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
-
-    full_sila_f = np.zeros((1080, 292 + 282, 3), dtype=np.uint8)
-    full_mask_f = np.zeros((1080, 292 + 282), dtype=np.uint8)
-    full_sila_f[:, :530] = front_crop
-    full_mask_f[:, :530] = clean_f
-
-    left_cuff = front_crop[:, 10:54]
-    left_cuff_m = clean_f[:, 10:54]
-    full_sila_f[:, 530:] = cv2.flip(left_cuff, 1)
-    full_mask_f[:, 530:] = cv2.flip(left_cuff_m, 1)
-
-    res_sila_f = composite_to_concrete(bg, full_sila_f, full_mask_f, 916, 134)
-    return res_sila_f, res_sila_b
+    return front_clean, back_clean, odin_f, odin_b
 
 
-def build_vzglyad_media(bg: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    p18 = cv2.imread(str(P18_PATH))
+def to_black_cotton(white_img: np.ndarray, bg_img: np.ndarray) -> np.ndarray:
+    diff = np.max(np.abs(white_img.astype(np.int32) - bg_img.astype(np.int32)), axis=2)
+    garment_mask = (diff > 15).astype(np.uint8)
+    garment_mask = cv2.morphologyEx(garment_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31)))
+    contours, _ = cv2.findContours(garment_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(garment_mask, contours, -1, 1, -1)
+    alpha = cv2.GaussianBlur(garment_mask.astype(np.float32), (5, 5), 1.0)[:, :, None]
 
-    # 1. VZGLYAD BACK: Authentic right half of photo_18
-    back_v = p18[:, 660:].copy()  # h: 853, w: 620
-    outer_poly_b = np.array(
-        [
-            (305, 75),
-            (240, 85),
-            (170, 115),
-            (90, 175),
-            (0, 290),
-            (0, 340),
-            (0, 480),
-            (50, 490),
-            (95, 485),
-            (95, 790),
-            (490, 790),
-            (490, 485),
-            (560, 490),
-            (620, 480),
-            (620, 340),
-            (615, 290),
-            (520, 175),
-            (440, 115),
-            (370, 85),
-        ],
-        np.int32,
-    )
-    mask_vb = np.full(back_v.shape[:2], cv2.GC_BGD, dtype=np.uint8)
-    cv2.fillPoly(mask_vb, [outer_poly_b], cv2.GC_PR_FGD)
+    gray = cv2.cvtColor(white_img, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
+    l_black = 16.0 + 40.0 * (gray ** 1.35)
+    b_garment = np.zeros_like(white_img, dtype=np.float32)
+    b_garment[:, :, 0] = l_black * 0.96
+    b_garment[:, :, 1] = l_black * 0.98
+    b_garment[:, :, 2] = l_black * 1.02
 
-    inner_poly_b = np.array(
-        [
-            (305, 115),
-            (250, 125),
-            (190, 150),
-            (120, 200),
-            (40, 330),
-            (50, 440),
-            (115, 460),
-            (115, 760),
-            (475, 760),
-            (475, 460),
-            (560, 440),
-            (570, 330),
-            (490, 200),
-            (420, 150),
-            (360, 125),
-        ],
-        np.int32,
-    )
-    cv2.fillPoly(mask_vb, [inner_poly_b], cv2.GC_FGD)
-
-    bgd_b = np.zeros((1, 65), np.float64)
-    fgd_b = np.zeros((1, 65), np.float64)
-    cv2.grabCut(back_v, mask_vb, None, bgd_b, fgd_b, 5, cv2.GC_INIT_WITH_MASK)
-    final_mask_vb = np.where((mask_vb == cv2.GC_FGD) | (mask_vb == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
-    poly_mask_b = np.zeros(back_v.shape[:2], np.uint8)
-    cv2.fillPoly(poly_mask_b, [outer_poly_b], 1)
-    final_mask_vb = final_mask_vb & poly_mask_b
-
-    res_vzg_b = composite_to_concrete(bg, back_v, final_mask_vb, 916, 134)
-
-    # 2. VZGLYAD FRONT: Authentic left half of photo_18
-    front_v = p18[:, :660].copy()  # h: 853, w: 660
-    outer_poly_f = np.array(
-        [
-            (340, 75),
-            (270, 85),
-            (200, 115),
-            (120, 175),
-            (5, 290),
-            (0, 340),
-            (0, 480),
-            (50, 490),
-            (105, 485),
-            (105, 790),
-            (535, 790),
-            (535, 485),
-            (600, 490),
-            (660, 480),
-            (660, 340),
-            (655, 290),
-            (560, 175),
-            (480, 115),
-            (410, 85),
-        ],
-        np.int32,
-    )
-    mask_vf = np.full(front_v.shape[:2], cv2.GC_BGD, dtype=np.uint8)
-    cv2.fillPoly(mask_vf, [outer_poly_f], cv2.GC_PR_FGD)
-
-    inner_poly_f = np.array(
-        [
-            (340, 115),
-            (280, 125),
-            (220, 150),
-            (150, 200),
-            (40, 330),
-            (50, 440),
-            (125, 460),
-            (125, 760),
-            (515, 760),
-            (515, 460),
-            (600, 440),
-            (610, 330),
-            (530, 200),
-            (460, 150),
-            (400, 125),
-        ],
-        np.int32,
-    )
-    cv2.fillPoly(mask_vf, [inner_poly_f], cv2.GC_FGD)
-
-    bgd_f = np.zeros((1, 65), np.float64)
-    fgd_f = np.zeros((1, 65), np.float64)
-    cv2.grabCut(front_v, mask_vf, None, bgd_f, fgd_f, 5, cv2.GC_INIT_WITH_MASK)
-    final_mask_vf = np.where((mask_vf == cv2.GC_FGD) | (mask_vf == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
-    poly_mask_f = np.zeros(front_v.shape[:2], np.uint8)
-    cv2.fillPoly(poly_mask_f, [outer_poly_f], 1)
-    final_mask_vf = final_mask_vf & poly_mask_f
-
-    res_vzg_f = composite_to_concrete(bg, front_v, final_mask_vf, 916, 134)
-    return res_vzg_f, res_vzg_b
+    comp = np.clip(b_garment * alpha + bg_img.astype(np.float32) * (1.0 - alpha), 0, 255).astype(np.uint8)
+    return comp
 
 
-def main() -> None:
-    PROOF.mkdir(parents=True, exist_ok=True)
-    bg_img = Image.open(BG_PATH).convert("RGB")
-    bg = np.array(bg_img.resize((1080, 1340), Image.Resampling.LANCZOS))
+def build_all() -> None:
+    bg = get_background()
+    front_clean, back_clean, odin_f, odin_b = make_clean_templates(bg)
 
-    print("Building authentic Sila media on concrete backdrop...")
-    res_sila_f, res_sila_b = build_sila_media(bg)
+    b_front = to_black_cotton(front_clean, bg)
+    b_back = to_black_cotton(back_clean, bg)
 
-    print("Building authentic Vzglyad media on concrete backdrop...")
-    res_vzg_f, res_vzg_b = build_vzglyad_media(bg)
+    # 1. SILA FRONT
+    wordmark = Image.open(BRAND / "sila-chest-wordmark.png").convert("RGBA")
+    wm_w = 460
+    wm_h = int(wordmark.height * (wm_w / wordmark.width))
+    wordmark = wordmark.resize((wm_w, wm_h), Image.Resampling.LANCZOS)
 
+    sila_f = b_front.copy().astype(np.float32)
+    x0 = 540 - wm_w // 2
+    y0 = 360
+    wm_arr = np.asarray(wordmark)
+    wm_rgb = wm_arr[:, :, :3].astype(np.float32)
+    wm_a = (wm_arr[:, :, 3].astype(np.float32) / 255.0)[:, :, None]
+
+    patch_f = sila_f[y0:y0+wm_h, x0:x0+wm_w]
+    wm_print = np.clip(wm_rgb * 0.94, 0, 255)
+    sila_f[y0:y0+wm_h, x0:x0+wm_w] = patch_f * (1.0 - wm_a) + wm_print * wm_a
+    sila_f = np.clip(sila_f, 0, 255).astype(np.uint8)
+
+    # 2. SILA BACK
+    sila_b = b_back.copy().astype(np.float32)
+    tag_w = 46
+    tag_h = 72
+    tag_x0 = 540 - tag_w // 2
+    tag_y0 = 172
+
+    tag_bg = np.zeros((tag_h, tag_w, 3), dtype=np.float32) + 14.0
+    tag_mask = np.ones((tag_h, tag_w), dtype=np.uint8) * 255
+    cv2.ellipse(tag_mask, (tag_w // 2, tag_h - tag_w // 2), (tag_w // 2, tag_w // 2), 0, 0, 180, 255, -1)
+
+    cv2.ellipse(tag_bg, (tag_w // 2, tag_h - tag_w // 2), (tag_w // 2 - 2, tag_w // 2 - 2), 0, 0, 180, (45, 45, 45), 1)
+    cv2.line(tag_bg, (2, 0), (2, tag_h - tag_w // 2), (45, 45, 45), 1)
+    cv2.line(tag_bg, (tag_w - 3, 0), (tag_w - 3, tag_h - tag_w // 2), (45, 45, 45), 1)
+
+    mono = Image.open(BRAND / "monogram-v4.png").convert("RGBA")
+    mono_h = 46
+    mono_w = int(mono.width * (mono_h / mono.height))
+    mono = mono.resize((mono_w, mono_h), Image.Resampling.LANCZOS)
+    mono_arr = np.asarray(mono)
+    mono_a = (mono_arr[:, :, 3].astype(np.float32) / 255.0)[:, :, None]
+    mono_rgb = mono_arr[:, :, :3].astype(np.float32)
+
+    mx0 = (tag_w - mono_w) // 2
+    my0 = (tag_h - mono_h) // 2 - 2
+    tag_bg[my0:my0+mono_h, mx0:mx0+mono_w] = tag_bg[my0:my0+mono_h, mx0:mx0+mono_w] * (1.0 - mono_a) + mono_rgb * 0.90 * mono_a
+
+    tag_a = (cv2.GaussianBlur(tag_mask.astype(np.float32), (3, 3), 0.5) / 255.0)[:, :, None]
+    patch_tag = sila_b[tag_y0:tag_y0+tag_h, tag_x0:tag_x0+tag_w]
+    sila_b[tag_y0:tag_y0+tag_h, tag_x0:tag_x0+tag_w] = patch_tag * (1.0 - tag_a) + tag_bg * tag_a
+
+    # Spine ribbon
+    ribbon_y0 = tag_y0 + tag_h - 4
+    ribbon_y1 = 1205
+    ribbon_w = 20
+    rx0 = 540 - ribbon_w // 2
+
+    ribbon = np.zeros((ribbon_y1 - ribbon_y0, ribbon_w, 3), dtype=np.float32)
+    ribbon[:, :, :] = 25.0
+    ribbon[:, 1:3, :] = 190.0
+    ribbon[:, -3:-1, :] = 190.0
+    ribbon[:, ribbon_w//2-1:ribbon_w//2+1, :] = 14.0
+
+    patch_ribbon = sila_b[ribbon_y0:ribbon_y1, rx0:rx0+ribbon_w]
+    sila_b[ribbon_y0:ribbon_y1, rx0:rx0+ribbon_w] = patch_ribbon * 0.10 + ribbon * 0.90
+    sila_b = np.clip(sila_b, 0, 255).astype(np.uint8)
+
+    # 3. VZGLYAD FRONT
+    p18 = np.asarray(Image.open(P18_PATH).convert("RGB"))
+    vzg_f_raw = p18[220:460, 150:550]
+    vzg_f = b_front.copy().astype(np.float32)
+    vf_w = 480
+    vf_h = int(vzg_f_raw.shape[0] * (vf_w / vzg_f_raw.shape[1]))
+    vzg_f_resized = cv2.resize(vzg_f_raw, (vf_w, vf_h), interpolation=cv2.INTER_LANCZOS4)
+
+    gray_vf = cv2.cvtColor(vzg_f_resized, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    alpha_vf = np.clip((gray_vf - 12.0) / 25.0, 0.0, 1.0)[:, :, None]
+    eyes_mask = np.zeros((vf_h, vf_w, 1), dtype=np.float32)
+    eyes_mask[int(vf_h*0.1):int(vf_h*0.52), int(vf_w*0.05):int(vf_w*0.95)] = 1.0
+    alpha_vf = np.maximum(alpha_vf, eyes_mask)
+
+    vfx0 = 540 - vf_w // 2
+    vfy0 = 300
+    patch_vf = vzg_f[vfy0:vfy0+vf_h, vfx0:vfx0+vf_w]
+    vf_print = np.clip(vzg_f_resized.astype(np.float32) * 1.15, 0, 255)
+    vzg_f[vfy0:vfy0+vf_h, vfx0:vfx0+vf_w] = patch_vf * (1.0 - alpha_vf) + vf_print * alpha_vf
+    vzg_f = np.clip(vzg_f, 0, 255).astype(np.uint8)
+
+    # 4. VZGLYAD BACK
+    vzg_b_raw = p18[160:720, 740:1160]
+    vzg_b = b_back.copy().astype(np.float32)
+    vb_w = 510
+    vb_h = int(vzg_b_raw.shape[0] * (vb_w / vzg_b_raw.shape[1]))
+    vzg_b_resized = cv2.resize(vzg_b_raw, (vb_w, vb_h), interpolation=cv2.INTER_LANCZOS4)
+
+    gray_vb = cv2.cvtColor(vzg_b_resized, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    red_diff = vzg_b_resized[:, :, 0].astype(np.float32) - np.mean(vzg_b_resized[:, :, 1:], axis=2)
+    alpha_vb = np.clip(np.maximum((gray_vb - 14.0) / 20.0, (red_diff - 10.0) / 15.0), 0.0, 1.0)[:, :, None]
+
+    vbx0 = 540 - vb_w // 2
+    vby0 = 205
+    patch_vb = vzg_b[vby0:vby0+vb_h, vbx0:vbx0+vb_w]
+    vb_print = vzg_b_resized.astype(np.float32)
+    vb_print[:, :, 0] = np.clip(vb_print[:, :, 0] * 1.35, 0, 255)
+    vb_print[:, :, 1:] = np.clip(vb_print[:, :, 1:] * 1.20, 0, 255)
+
+    vzg_b[vby0:vby0+vb_h, vbx0:vbx0+vb_w] = patch_vb * (1.0 - alpha_vb) + vb_print * alpha_vb
+    vzg_b = np.clip(vzg_b, 0, 255).astype(np.uint8)
+
+    # Save to product-proof directory
     out_sf = PROOF / "tee-sila-front-photo-v1.jpg"
     out_sb = PROOF / "tee-sila-back-photo-v2.jpg"
     out_vf = PROOF / "tee-vzglyad-front-source-v2.jpg"
     out_vb = PROOF / "tee-vzglyad-back-source-v2.jpg"
 
-    Image.fromarray(res_sila_f).save(out_sf, quality=96, subsampling=0)
-    Image.fromarray(res_sila_b).save(out_sb, quality=96, subsampling=0)
-    Image.fromarray(res_vzg_f).save(out_vf, quality=96, subsampling=0)
-    Image.fromarray(res_vzg_b).save(out_vb, quality=96, subsampling=0)
-
-    print("Successfully built authentic unified concrete catalog media (1080x1340 4:5):")
-    print(f"- {out_sf}")
-    print(f"- {out_sb}")
-    print(f"- {out_vf}")
-    print(f"- {out_vb}")
+    Image.fromarray(sila_f).save(out_sf, quality=95, subsampling=0)
+    Image.fromarray(sila_b).save(out_sb, quality=95, subsampling=0)
+    Image.fromarray(vzg_f).save(out_vf, quality=95, subsampling=0)
+    Image.fromarray(vzg_b).save(out_vb, quality=95, subsampling=0)
+    print("Successfully built all 4 concrete product card images!")
 
 
 if __name__ == "__main__":
-    main()
+    build_all()

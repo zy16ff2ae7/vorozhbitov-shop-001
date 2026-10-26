@@ -1330,7 +1330,7 @@
     const media = (state.data && state.data.media) || {};
     return {
       welcomeLoop: media.welcome_motion === false ? "" : (media.welcome_loop || "assets/video/welcome-no-intro-22s.mp4"),
-      welcomePoster: media.welcome_poster || "assets/drop/tee-real-8272.jpg"
+      welcomePoster: media.welcome_poster || "assets/product-proof/tee-sila-front-photo-v1.jpg"
     };
   }
 
@@ -2739,6 +2739,7 @@
     $("#cartButton").addEventListener("click", openCart);
     $("#bottomCartButton").addEventListener("click", openCart);
     if ($("#profileButton")) $("#profileButton").addEventListener("click", openProfile);
+    if ($("#bottomProfileButton")) $("#bottomProfileButton").addEventListener("click", openProfile);
     $$("#profileModal input").forEach(input => {
       input.addEventListener("pointerdown", e => e.stopPropagation());
       input.addEventListener("click", e => e.stopPropagation());
