@@ -33,8 +33,38 @@
     this.img = root.querySelector(".spin-frame-current");
     this.nextImg = root.querySelector(".spin-frame-next");
     this.error = root.querySelector(".spin-error");
-    this.img.onload = () => { root.setAttribute("aria-busy", "false"); this.error.classList.add("hidden"); };
-    this.img.onerror = () => { root.setAttribute("aria-busy", "false"); this.error.classList.remove("hidden"); };
+    this.lastGoodSource = "";
+    this.lastGoodIndex = 0;
+    this.restoringLastGood = false;
+    this.img.onload = () => {
+      root.setAttribute("aria-busy", "false");
+      this.img.style.opacity = "1";
+      if (this.restoringLastGood) {
+        this.restoringLastGood = false;
+        return;
+      }
+      this.lastGoodSource = this.img.getAttribute("src") || "";
+      this.lastGoodIndex = this.displayIndex;
+      this.error.classList.add("hidden");
+    };
+    this.img.onerror = () => {
+      root.setAttribute("aria-busy", "false");
+      this.error.classList.remove("hidden");
+      // Never leave the browser's broken-image icon (or alt text) in the viewer.
+      // If an angle fails after a successful one, return to that known-good
+      // angle while keeping the visible error message until the user steps on.
+      this.img.style.opacity = "0";
+      if (this.lastGoodSource && this.img.getAttribute("src") !== this.lastGoodSource) {
+        this.index = this.lastGoodIndex;
+        this.displayIndex = this.lastGoodIndex;
+        this.lastEventIndex = this.lastGoodIndex;
+        this.restoringLastGood = true;
+        this.img.setAttribute("src", this.lastGoodSource);
+        this.root.dispatchEvent(new CustomEvent("framechange", {
+          detail: { index: this.lastGoodIndex, total: this.frames.length },
+        }));
+      }
+    };
     this.nextImg.onerror = () => { this.nextImg.style.opacity = "0"; };
     root.addEventListener("pointerdown", this.onDown);
     window.addEventListener("pointermove", this.onMove);
@@ -50,6 +80,10 @@
     this.index = 0;
     this.displayIndex = 0;
     this.lastEventIndex = -1;
+    this.lastGoodSource = "";
+    this.lastGoodIndex = 0;
+    this.restoringLastGood = false;
+    this.img.style.opacity = "1";
     this.vel = 0;
     this.rotating = false;
     this.preloads.clear();

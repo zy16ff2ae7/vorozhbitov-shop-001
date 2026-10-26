@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Build an 18-second teaser version from the corrected product artwork.
+"""ARCHIVE ONLY: rebuild the rejected v5 teaser; do not use for active media.
 
+Current source-only teaser is built by tools/build_source_proof_teaser_v2.py. This archived v5 builder contains retired render packs and must not be used for active product media.
 The previous teaser and its audio are preserved.  This is a montage of still
 visualisations, not a claim of new live footage.  Requires Pillow, NumPy-free
 image operations only, and FFmpeg (or imageio-ffmpeg).
@@ -21,9 +22,9 @@ APPROVAL = ROOT / "approval"
 REGULAR = MINIAPP / "fonts/sila-chest-400.woff2"
 BOLD = MINIAPP / "fonts/sila-chest-700.woff2"
 SOURCE_VIDEO = ASSETS / "video/drop-vzglyad-18s.mp4"
-OUTPUT_VIDEO = ASSETS / "video/drop-vzglyad-18s-v3.mp4"
-OUTPUT_THUMB = ASSETS / "video/drop-vzglyad-18s-v3-thumb.jpg"
-OUTPUT_SHEET = APPROVAL / "drop-vzglyad-logo-v3-18s-contact-sheet.jpg"
+OUTPUT_VIDEO = ASSETS / "video/drop-vzglyad-18s-v5.mp4"
+OUTPUT_THUMB = ASSETS / "video/drop-vzglyad-18s-v5-thumb.jpg"
+OUTPUT_SHEET = APPROVAL / "drop-vzglyad-logo-v5-18s-contact-sheet.jpg"
 BG = (9, 9, 11)
 INK = (244, 238, 230)
 MUTED = (165, 159, 151)
@@ -120,10 +121,10 @@ def main() -> None:
         ("drop/tee-gym-retouched-final.jpg", "СИЛА И ЧЕСТЬ", "ОДЕЖДА С ХАРАКТЕРОМ", True, True),
         ("spin/tee-sich-01-v4.jpg", "СИЛА И ЧЕСТЬ", "ФУТБОЛКА · ПЕРВЫЙ ТИРАЖ", False, False),
         ("spin/tee-sich-05-v4.jpg", "УЗКИЙ КЛИНОК", "МОНОГРАММА · ПОТЁРТАЯ ФАКТУРА", False, False),
-        ("drop/tee-detail-v6.jpg", "ДЕТАЛИ", "ФИРМЕННАЯ НАШИВКА", False, False),
+        ("drop/tee-flatlay-v2.jpg", "ПЕРЕД И СПИНА", "ИСХОДНАЯ РАСКЛАДКА · ПРИНТ И ПОСАДКА", False, False),
         ("spin/tee-vzglyad-01-v3.jpg", "ВЗГЛЯД", "ФУТБОЛКА · ПРЕДЗАКАЗ", False, False),
         ("drop/tee-vzglyad-detail-v3.jpg", "СИЛА И ЧЕСТЬ", "ГРАФИКА · ЗНАК · МОНОГРАММА", False, False),
-        ("spin/tee-vzglyad-05-v3.jpg", "КРУГ ЦЕННОСТЕЙ", "СИЛА · ЧЕСТЬ · ВЕРНОСТЬ", False, False),
+        ("spin/tee-vzglyad-05-v3.jpg", "КРУГ ЦЕННОСТЕЙ", "СИЛА · ЧЕСТЬ · ВЕРА", False, False),
         ("dual", "ДВЕ ФУТБОЛКИ", "ОДИН ДРОП · ОДИН ЗНАК", False, False),
         ("drop/hero-sila-chest-v2.jpg", "СИЛА И ЧЕСТЬ", "ПЕРВЫЙ ДРОП · 001", True, True),
     ]

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import csv
 from collections import OrderedDict
+import gzip
 import hashlib
 import hmac
 import html
@@ -34,6 +35,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -77,10 +79,16 @@ class RateLimiter:
             while self.hits and next(iter(self.hits.values()))[-1] <= edge:
                 self.hits.popitem(last=False)
             recent = [hit for hit in self.hits.get(key, ()) if hit > edge]
+            if key in self.hits:
+                # Store the pruned list back: keeps prefix expiry correct and
+                # memory bounded even for keys that only get rejected.
+                self.hits[key] = recent
             if len(recent) >= self.limit:
                 return False
             if key not in self.hits and len(self.hits) >= self.max_keys:
-                return False
+                # Full table: evict the least recently active key instead of
+                # rejecting every new customer until entries expire on their own.
+                self.hits.popitem(last=False)
             recent.append(stamp)
             self.hits[key] = recent
             self.hits.move_to_end(key)
@@ -116,11 +124,69 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def club_now() -> datetime:
+    """Current moment for club/drop windows in the brand's main timezone."""
+    try:
+        tz = ZoneInfo("Europe/Moscow")
+    except Exception:  # deployment without tzdata
+        tz = timezone(timedelta(hours=3))
+    return datetime.now(tz)
+
+
+def club_today() -> str:
+    """Club day boundary follows the brand's Europe/Moscow audience."""
+    return club_now().date().isoformat()
+
+
+def parse_drop_moment(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        moment = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=club_now().tzinfo)
+    return moment
+
+
+def _drop_moment_state(value: Any) -> tuple[datetime | None, bool]:
+    """(moment, invalid): invalid=True when a non-empty value cannot be parsed."""
+    text = str(value or "").strip()
+    if not text:
+        return None, False
+    moment = parse_drop_moment(text)
+    return moment, moment is None
+
+
+def drop_gate_error(event: dict[str, Any] | None, early_access: bool, now: datetime | None = None) -> str:
+    """Server-side drop window for web checkout; empty dates mean open."""
+    config = event if isinstance(event, dict) else {}
+    moment = now or club_now()
+    ends, ends_bad = _drop_moment_state(config.get("ends_at"))
+    starts, starts_bad = _drop_moment_state(config.get("starts_at"))
+    early_starts, early_bad = _drop_moment_state(config.get("early_starts_at"))
+    if ends_bad or starts_bad or early_bad:
+        # A mistyped drop date must close sales, not open them to everyone.
+        LOG.error("Дата дропа не разбирается (ends=%r starts=%r early=%r) — продажи закрыты",
+                  config.get("ends_at"), config.get("starts_at"), config.get("early_starts_at"))
+        return "Дроп временно недоступен. Напиши менеджеру."
+    if ends and moment > ends:
+        return "Дроп закрыт. Этот выпуск завершён."
+    if starts and moment < starts:
+        if early_access and early_starts and moment >= early_starts:
+            return ""
+        return "Дроп ещё не открыт. Ранний доступ — у участников клуба, закрывших все 7 дней."
+    return ""
+
+
 def load_dotenv(path: Path) -> None:
     if not path.exists():
         return
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
@@ -360,6 +426,16 @@ class Catalog:
                     product_id,
                     product["price"],
                 )
+            stock = product.get("stock_by_size")
+            if stock is not None:
+                if not isinstance(stock, dict):
+                    raise ValueError(f"stock_by_size must be an object for {product_id}")
+                known_sizes = {str(size) for size in product.get("sizes", [])}
+                for size, count in stock.items():
+                    if str(size) not in known_sizes:
+                        raise ValueError(f"stock_by_size key {size!r} is not a size of {product_id}")
+                    if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 100000:
+                        raise ValueError(f"stock_by_size[{size!r}] must be an int 0..100000 for {product_id}")
             products[product_id] = product
         raw.setdefault("lookbook", [])
         return raw, products
@@ -529,6 +605,31 @@ class InvoiceMismatch(ValueError):
 
 class GiftUnavailable(ValueError):
     """The automatic gift was sold out between catalog read and checkout."""
+
+
+class SizeUnavailable(ValueError):
+    """A tracked size sold out between catalog read and checkout."""
+
+
+def size_stock_totals(products: Iterable[dict[str, Any]]) -> dict[tuple[str, str], int]:
+    """{(product_id, size): total} for products that declare stock_by_size.
+
+    Products without the field stay unlimited (current behaviour); declaring
+    counts in the catalog turns on atomic per-size reservation for them.
+    """
+    totals: dict[tuple[str, str], int] = {}
+    for product in products:
+        raw = product.get("stock_by_size")
+        if not isinstance(raw, dict):
+            continue
+        for size, count in raw.items():
+            try:
+                total = int(count)
+            except (TypeError, ValueError):
+                continue
+            if total >= 0:
+                totals[(str(product.get("id")), str(size))] = total
+    return totals
 
 
 class Database:
@@ -710,6 +811,21 @@ class Database:
                 notified_at TEXT,
                 UNIQUE(user_id, product_id, size)
             );
+            CREATE TABLE IF NOT EXISTS club_members (
+                user_id INTEGER PRIMARY KEY,
+                started_on TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(user_id)
+            );
+            CREATE TABLE IF NOT EXISTS club_checkins (
+                user_id INTEGER NOT NULL,
+                day_date TEXT NOT NULL,
+                task_index INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(user_id, day_date),
+                FOREIGN KEY(user_id) REFERENCES users(user_id)
+            );
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
@@ -785,6 +901,14 @@ class Database:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS size_stock (
+                product_id TEXT NOT NULL,
+                size TEXT NOT NULL,
+                total INTEGER NOT NULL CHECK(total >= 0),
+                available INTEGER NOT NULL CHECK(available >= 0 AND available <= total),
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (product_id, size)
             );
             CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
             CREATE INDEX IF NOT EXISTS idx_events_event ON events(event);
@@ -1223,6 +1347,97 @@ class Database:
         self.event(None, "gift_released", {"payment_id": payment_id, "product_id": row["gift_product_id"]})
         return True
 
+    # -- Per-size stock (opt-in via catalog stock_by_size) --------------------
+
+    def _sync_size_stock_rows(self, totals: dict[tuple[str, str], int]) -> None:
+        """Seed rows and follow catalog total changes (restock / correction)."""
+        conn = self.connection()
+        now = utc_now()
+        for (product_id, size), total in totals.items():
+            conn.execute(
+                "INSERT OR IGNORE INTO size_stock(product_id, size, total, available, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (product_id, size, total, total, now),
+            )
+            row = conn.execute(
+                "SELECT total, available FROM size_stock WHERE product_id=? AND size=?",
+                (product_id, size),
+            ).fetchone()
+            if row and int(row["total"]) != total:
+                available = max(0, min(total, int(row["available"]) + (total - int(row["total"]))))
+                conn.execute(
+                    "UPDATE size_stock SET total=?, available=?, updated_at=? WHERE product_id=? AND size=?",
+                    (total, available, now, product_id, size),
+                )
+
+    def sync_size_stock(self, products: list[dict[str, Any]]) -> None:
+        totals = size_stock_totals(products)
+        if not totals:
+            return
+        conn = self.connection()
+        owns = not conn.in_transaction
+        try:
+            if owns:
+                conn.execute("BEGIN IMMEDIATE")
+            self._sync_size_stock_rows(totals)
+            if owns:
+                conn.execute("COMMIT")
+        except Exception:
+            if owns and conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+
+    def size_stock_snapshot(self, products: list[dict[str, Any]]) -> dict[tuple[str, str], int]:
+        """Remaining counts for tracked sizes; seeds rows on first read."""
+        totals = size_stock_totals(products)
+        if not totals:
+            return {}
+        self.sync_size_stock(products)
+        conn = self.connection()
+        snapshot: dict[tuple[str, str], int] = {}
+        for row in conn.execute("SELECT product_id, size, available FROM size_stock"):
+            key = (str(row["product_id"]), str(row["size"]))
+            if key in totals:
+                snapshot[key] = max(0, int(row["available"]))
+        return snapshot
+
+    def _reserve_size_stock(self, lines: list[dict[str, Any]], totals: dict[tuple[str, str], int]) -> None:
+        """Atomically take tracked sizes inside the checkout transaction."""
+        if not totals:
+            return
+        wanted: dict[tuple[str, str], int] = {}
+        names: dict[tuple[str, str], str] = {}
+        for line in lines:
+            key = (str(line["product_id"]), str(line["size"]))
+            if key in totals:
+                wanted[key] = wanted.get(key, 0) + max(1, int(line["quantity"]))
+                names[key] = str(line.get("name") or line["product_id"])
+        if not wanted:
+            return
+        self._sync_size_stock_rows(totals)
+        conn = self.connection()
+        now = utc_now()
+        for (product_id, size), quantity in wanted.items():
+            changed = conn.execute(
+                "UPDATE size_stock SET available=available-?, updated_at=? "
+                "WHERE product_id=? AND size=? AND available>=?",
+                (quantity, now, product_id, size, quantity),
+            )
+            if changed.rowcount != 1:
+                raise SizeUnavailable(
+                    f"Размер {size} вещи «{names[(product_id, size)]}» только что закончился. Выбери другой размер."
+                )
+
+    def _release_size_stock_lines(self, lines: list[dict[str, Any]]) -> None:
+        """Return quantities for cancelled order lines (tracked sizes only)."""
+        conn = self.connection()
+        now = utc_now()
+        for line in lines:
+            conn.execute(
+                "UPDATE size_stock SET available=MIN(total, available+?), updated_at=? "
+                "WHERE product_id=? AND size=?",
+                (max(1, int(line["quantity"])), now, str(line["product_id"]), str(line["size"])),
+            )
+
     def checkout_receipt(self, user_id: int, request_id: str, fingerprint: str) -> dict[str, Any] | None:
         row = self.connection().execute(
             "SELECT fingerprint, receipt FROM checkouts WHERE user_id=? AND request_id=?",
@@ -1239,6 +1454,7 @@ class Database:
         lines: list[dict[str, Any]], amount_stars: int,
         queue_notifications: Callable[[dict[str, Any]], None] | None = None,
         gift: dict[str, Any] | None = None,
+        stock_totals: dict[tuple[str, str], int] | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Commit one immutable receipt, payment and all order lines together."""
         conn = self.connection()
@@ -1262,6 +1478,7 @@ class Database:
             }
             # Reservation, payment, order lines, receipt and outbox share one
             # SQLite transaction: a failed checkout cannot consume a gift.
+            self._reserve_size_stock(lines, stock_totals or {})
             reserved_gift = self._reserve_gift(gift)
             self.create_payment(payment_id, user_id, total, amount_stars, gift=reserved_gift)
             order_ids = []
@@ -1330,10 +1547,18 @@ class Database:
                 )
                 if changed.rowcount != 1:
                     continue
+                stock_lines = [
+                    {"product_id": item["product_id"], "size": item["size"], "quantity": item["quantity"]}
+                    for item in conn.execute(
+                        "SELECT product_id, size, quantity FROM orders WHERE payment_id=? AND status='awaiting_payment'",
+                        (row["payment_id"],),
+                    )
+                ]
                 conn.execute(
                     "UPDATE orders SET status='cancelled' WHERE payment_id=? AND status='awaiting_payment'",
                     (row["payment_id"],),
                 )
+                self._release_size_stock_lines(stock_lines)
                 conn.execute("DELETE FROM payment_methods WHERE payment_id=?", (row["payment_id"],))
                 self._release_gift(str(row["payment_id"]))
                 self.event(int(row["user_id"]), "payment_expired", {"payment_id": row["payment_id"]})
@@ -1652,6 +1877,64 @@ class Database:
         )
         return cursor.rowcount > 0
 
+    def club_state(self, user_id: int) -> dict[str, Any]:
+        """Club progress for one member: join date plus one check-in per day."""
+        conn = self.connection()
+        member = conn.execute(
+            "SELECT user_id, started_on, created_at FROM club_members WHERE user_id=?",
+            (user_id,),
+        ).fetchone()
+        checkins = [
+            {"date": str(row[0]), "task_index": int(row[1])}
+            for row in conn.execute(
+                "SELECT day_date, task_index FROM club_checkins WHERE user_id=? ORDER BY day_date",
+                (user_id,),
+            )
+        ]
+        total = len(checkins)
+        return {
+            "joined": member is not None,
+            "started_on": str(member[1]) if member else "",
+            "checkins": checkins,
+            "total": total,
+            "completed": total >= 7,
+            "early_access": total >= 7,
+            # The mini app must judge "today" by the server day (Europe/Moscow),
+            # not the device timezone, or streaks drift around midnight.
+            "today": club_now().date().isoformat(),
+        }
+
+    def club_join(self, user_id: int, today: str | None = None) -> dict[str, Any]:
+        day = today or club_today()
+        now = utc_now()
+        self.connection().execute(
+            """
+            INSERT INTO club_members(user_id, started_on, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET updated_at=excluded.updated_at
+            """,
+            (user_id, day, now, now),
+        )
+        return self.club_state(user_id)
+
+    def club_checkin(self, user_id: int, today: str | None = None) -> dict[str, Any]:
+        """Record today's task. Idempotent per day; auto-joins on first check-in."""
+        day = today or club_today()
+        state = self.club_join(user_id, day)
+        if state["completed"] or any(row["date"] == day for row in state["checkins"]):
+            return state
+        self.connection().execute(
+            """
+            INSERT OR IGNORE INTO club_checkins(user_id, day_date, task_index, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, day, min(int(state["total"]), 6), utc_now()),
+        )
+        self.connection().execute(
+            "UPDATE club_members SET updated_at=? WHERE user_id=?", (utc_now(), user_id)
+        )
+        return self.club_state(user_id)
+
     def waitlist_user_ids(self, product_id: str, size: str) -> list[int]:
         return [
             row[0]
@@ -1941,6 +2224,21 @@ class Database:
                             queue_paid(row["payment_id"])
                     conn.execute("DELETE FROM payment_methods WHERE payment_id=?", (row["payment_id"],))
             conn.execute("UPDATE orders SET status=? WHERE id=?", (status, order_id))
+            if status == "cancelled":
+                # Return tracked sizes: this order plus any siblings the
+                # payment branches above cancelled in the same transaction.
+                # The current==status early return keeps this exactly-once.
+                if row["payment_id"]:
+                    released = [
+                        {"product_id": item["product_id"], "size": item["size"], "quantity": item["quantity"]}
+                        for item in conn.execute(
+                            "SELECT product_id, size, quantity FROM orders WHERE payment_id=? AND status='cancelled'",
+                            (row["payment_id"],),
+                        )
+                    ]
+                else:
+                    released = [{"product_id": row["product_id"], "size": row["size"], "quantity": row["quantity"]}]
+                self._release_size_stock_lines(released)
             conn.execute(
                 "INSERT INTO events(user_id, event, payload, created_at) VALUES (?, ?, ?, ?)",
                 (row["user_id"], "order_status_changed", compact_json({"order_id": order_id, "status": status}), utc_now()),
@@ -2914,6 +3212,7 @@ def public_order_payload(row: sqlite3.Row) -> dict[str, Any]:
         "id": int(row["id"]),
         "status": status,
         "status_label": PUBLIC_ORDER_STATUS_LABELS.get(status, status),
+        "product_id": str(row["product_id"]) if "product_id" in keys else "",
         "product_name": str(row["product_name"]),
         "size": str(row["size"]),
         "quantity": int(row["quantity"] or 1),
@@ -4297,8 +4596,9 @@ class BrandBot:
                 stars_amount(amount, self.settings.stars_rub_per_star) if self.settings.stars_enabled else 0,
                 queue_notifications=lambda receipt: self.queue_checkout_notifications(receipt, user_id, phone, "", chat_id, "бота"),
                 gift=self.gift_for_checkout(),
+                stock_totals=size_stock_totals([product]),
             )
-        except GiftUnavailable as exc:
+        except (GiftUnavailable, SizeUnavailable) as exc:
             self.api.send_message(chat_id, esc(str(exc)), self.main_menu(chat_id))
             return
         self.flush_notifications()
@@ -6326,6 +6626,7 @@ class BrandBot:
             user_id, request_base, fingerprint, lines, stars,
             queue_notifications=lambda receipt: self.queue_checkout_notifications(receipt, user_id, phone, note, notify_user),
             gift=self.gift_for_checkout(),
+            stock_totals=size_stock_totals([item[0] for item in valid_items]),
         )
         payment_id = receipt["payment_id"]
         total = receipt["amount_rub"]
@@ -6398,6 +6699,8 @@ class BrandBot:
             return self._checkout_web_payload(user, payload, notify_user)
         except GiftUnavailable as exc:
             return {"ok": False, "error": str(exc), "code": "gift_unavailable"}
+        except SizeUnavailable as exc:
+            return {"ok": False, "error": str(exc), "code": "size_unavailable"}
         except (ValueError, PriceError) as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -6437,6 +6740,14 @@ class BrandBot:
             return {"ok": False, "error": "Некоторые вещи уже закончились. Обнови витрину и выбери снова."}
         for product, _, quantity, _ in valid_items:
             self.line_amount(product, quantity)
+        with self.catalog.lock:
+            drop_event = dict(self.catalog.data.get("drop_event") or {})
+        gate = drop_gate_error(
+            drop_event,
+            bool(self.db.club_state(int(user["id"]))["early_access"]),
+        )
+        if gate:
+            return {"ok": False, "error": gate, "code": "drop_closed"}
         self.db.upsert_user(user)
         return self.accept_checkout(user, customer, phone, valid_items, payload, notify_user=notify_user)
 
@@ -7132,6 +7443,11 @@ class StorefrontHandler(BaseHTTPRequestHandler):
     db: Database | None = None
     api: TelegramAPI | None = None
     static_root = BASE_DIR / "miniapp"
+    server_version = "SilaChest/1"
+    sys_version = ""
+    # StreamRequestHandler applies this to the socket: a client that connects
+    # and never finishes the request must not hold a worker thread forever.
+    timeout = 30
 
     # Витрина живёт внутри Telegram и подключает только свои файлы плюс SDK
     # telegram.org. CSP — второй рубеж: в app.js много innerHTML, и если где-то
@@ -7140,7 +7456,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         "default-src 'self'; "
         "script-src 'self' https://telegram.org; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: https:; "
+        "img-src 'self' data: https://*.telegram.org https://telegram.org; "
+        "media-src 'self'; "
         "font-src 'self'; "
         "connect-src 'self'; "
         "base-uri 'none'; "
@@ -7156,10 +7473,26 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return f"{self.CSP_BASE}; {self.CSP_FRAME_TELEGRAM}"
         return self.CSP_BASE
 
-    def _write(self, body: bytes, content_type: str, status: int = 200, cache_control: str = "no-cache") -> None:
+    _COMPRESSIBLE = ("text/", "application/json", "application/javascript", "image/svg+xml")
+
+    def _write(self, body: bytes, content_type: str, status: int = 200, cache_control: str = "no-cache", etag: str = "") -> None:
+        encoding = ""
+        if (
+            status == 200
+            and len(body) > 1024
+            and content_type.startswith(self._COMPRESSIBLE)
+            and "gzip" in (self.headers.get("Accept-Encoding") or "")
+        ):
+            body = gzip.compress(body, compresslevel=6, mtime=0)
+            encoding = "gzip"
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        if encoding:
+            self.send_header("Content-Encoding", encoding)
+            self.send_header("Vary", "Accept-Encoding")
+        if etag and not encoding:
+            self.send_header("ETag", etag)
         self.send_header("Cache-Control", cache_control)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy", self._csp())
@@ -7168,6 +7501,23 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         self.end_headers()
         if not getattr(self, "_head_only", False):
             self.wfile.write(body)
+
+    def _write_file(self, path: Path, content_type: str, cache_control: str, size: int, etag: str) -> None:
+        """Stream a large static file instead of loading it whole into RAM."""
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(size))
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", cache_control)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", self._csp())
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()")
+        self.end_headers()
+        if getattr(self, "_head_only", False):
+            return
+        with path.open("rb") as stream:
+            shutil.copyfileobj(stream, self.wfile, 256 * 1024)
 
     def _json(self, payload: dict[str, Any], status: int = 200) -> None:
         self._write(
@@ -7218,7 +7568,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             return None
-        if length < 0 or length > 8192:
+        if length < 0 or length > 32768:
             return None
         raw = self.rfile.read(length) if length else b"{}"
         try:
@@ -7407,6 +7757,41 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         added = self.db.add_to_waitlist(int(user["id"]), product, size)
         self._json({"ok": True, "added": added})
 
+    def _club_get(self) -> None:
+        empty = {"joined": False, "started_on": "", "checkins": [], "total": 0,
+                 "completed": False, "early_access": False}
+        if not self.db or not self.settings or not self.settings.token:
+            self._json({"ok": True, "club": empty, "source": "preview"})
+            return
+        user = self._webapp_user()
+        if not user:
+            self._json({"error": "Открой витрину из бота — тогда подтянется клуб."}, 401)
+            return
+        if not self._rate_ok(READ_LIMITER, "club", user):
+            return
+        self._json({"ok": True, "club": self.db.club_state(int(user["id"])), "source": "bot"})
+
+    def _club_post(self) -> None:
+        if not self.db or not self.settings or not self.settings.token:
+            self._json({"error": "Открой витрину из бота, чтобы вступить в клуб."}, 401)
+            return
+        user = self._webapp_user()
+        if not user:
+            self._json({"error": "Открой витрину из бота, чтобы вступить в клуб."}, 401)
+            return
+        if not self._rate_ok(CHECKOUT_LIMITER, "club", user):
+            return
+        payload = self._read_json_body() or {}
+        action = str(payload.get("action") or "")
+        if action not in {"join", "checkin"}:
+            self._json({"error": "Неизвестное действие клуба."}, 400)
+            return
+        self.db.upsert_user(user)
+        user_id = int(user["id"])
+        state = self.db.club_join(user_id) if action == "join" else self.db.club_checkin(user_id)
+        self.db.event(user_id, f"club_{action}", {"total": state["total"]})
+        self._json({"ok": True, "club": state, "source": "bot"})
+
     def _checkout(self) -> None:
         if not self.db or not self.settings or not self.settings.token:
             self._json({"error": "В предпросмотре оплата недоступна."}, 400)
@@ -7429,7 +7814,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if not result.get("ok"):
             self._json(
                 {"error": result.get("error") or "Не получилось принять заказ.", "code": result.get("code", "")},
-                409 if result.get("code") == "gift_unavailable" else 400,
+                409 if result.get("code") in ("gift_unavailable", "size_unavailable") else 400,
             )
             return
         self._json(result)
@@ -7528,6 +7913,18 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         self._provider_webhook_response(payment_id, "crypto", invoice_id, amount_rub, currency, raw)
 
     def do_GET(self) -> None:
+        try:
+            self._handle_get()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception:
+            LOG.exception("Storefront GET failed: %s", self.path)
+            try:
+                self._json({"error": "server_error"}, 500)
+            except Exception:
+                pass
+
+    def _handle_get(self) -> None:
         path = urllib.parse.urlparse(self.path).path
         if path == "/health":
             checks: dict[str, str] = {}
@@ -7557,6 +7954,9 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/my-orders":
             self._my_orders()
+            return
+        if path == "/api/club":
+            self._club_get()
             return
         if path == "/api/emoji-pack":
             pack_name = self.settings.custom_emoji_pack if self.settings else "sila_chest_merch"
@@ -7594,11 +7994,15 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                     "channel_url": settings.channel_url if settings else "",
                     "privacy_url": settings.privacy_url if settings else "",
                     "support_username": settings.support_username if settings else "",
-                    "products": self._stamp_product_videos([
+                    "products": self._stamp_product_media([
                         product for product in catalog.data.get("products", []) if product.get("active", True)
                     ]),
                     "categories": catalog.categories,
                     "lookbook": catalog.data.get("lookbook", []),
+                    "drop_event": catalog.data.get("drop_event", {}),
+                    "film": catalog.data.get("film", []),
+                    "club": catalog.data.get("club", {}),
+                    "community": catalog.data.get("community", []),
                     "media": self._stamp_media(catalog.data.get("media", {})),
                 }
                 gift_product = catalog.get(settings.gift_product_id) if settings else None
@@ -7610,6 +8014,24 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                         "remaining": int(gift_product.get("gift_stock", 0)), "available": True,
                     }
                 payload["gift"] = gift
+            if self.db:
+                # Tracked sizes: hide sold-out ones and expose exact remains.
+                try:
+                    snapshot = self.db.size_stock_snapshot(payload["products"])
+                except Exception:
+                    LOG.warning("size_stock snapshot failed", exc_info=True)
+                    snapshot = {}
+                if snapshot:
+                    for item in payload["products"]:
+                        totals = item.get("stock_by_size")
+                        if not isinstance(totals, dict):
+                            continue
+                        remaining = {
+                            str(size): snapshot.get((str(item.get("id")), str(size)), 0)
+                            for size in totals
+                        }
+                        item["stock_by_size"] = remaining
+                        item["sizes"] = [size for size in item.get("sizes", []) if remaining.get(str(size), 1) > 0]
             self._write(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
 
@@ -7637,18 +8059,9 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if suffix in VIDEO_SUFFIXES:
             self._serve_video(candidate)
             return
-        try:
-            body = candidate.read_bytes()
-        except OSError:
-            self._not_found()
-            return
         content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
         if content_type.startswith("text/") or content_type in {"application/javascript", "image/svg+xml"}:
             content_type += "; charset=utf-8"
-        if candidate.name in ("index.html", "styles.css"):
-            # WebView Telegram держит app.js и styles.css в кеше и после правок
-            # показывает старую версию. Клеим метку версии по времени файла.
-            body = self._stamp_fonts(self._stamp_assets(body))
         if candidate.name != "index.html" and self._has_current_asset_version(candidate):
             cache = "public, max-age=31536000, immutable"
         elif suffix in {".jpg", ".jpeg", ".png", ".webp", ".svg"}:
@@ -7658,25 +8071,58 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             cache = "public, max-age=31536000, immutable"
         else:
             cache = "no-cache"
-        self._write(body, content_type, 200, cache)
+        # WebView Telegram держит app.js и styles.css в кеше и после правок
+        # показывает старую версию. Клеим метку версии по времени файла —
+        # поэтому index/styles штампуются и не участвуют в ETag/стриме.
+        stamped = candidate.name in ("index.html", "styles.css")
+        etag = ""
+        try:
+            stat = candidate.stat()
+        except OSError:
+            self._not_found()
+            return
+        if not stamped:
+            etag = f'"{int(stat.st_mtime):x}-{stat.st_size:x}"'
+            if (self.headers.get("If-None-Match") or "").strip() == etag:
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", cache)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            if stat.st_size > 512 * 1024 and not content_type.startswith(("text/", "application/javascript")):
+                self._write_file(candidate, content_type, cache, stat.st_size, etag)
+                return
+        try:
+            body = candidate.read_bytes()
+        except OSError:
+            self._not_found()
+            return
+        if stamped:
+            body = self._stamp_fonts(self._stamp_assets(body))
+        self._write(body, content_type, 200, cache, etag)
 
-    def _stamp_product_videos(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Версионировать MP4 и медиа товаров, не меняя остальной каталог в памяти."""
+    def _stamp_product_media(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Версионировать товарные media URL, не меняя каталог в памяти.
+
+        Telegram WebView и браузеры кешируют изображения независимо от JS.
+        Привязка URL к mtime не даёт продолжать запрашивать старый/отсутствующий
+        кадр после публикации обновлённой серии с тем же именем.
+        """
         stamped_products: list[dict[str, Any]] = []
         for product in products:
             stamped = dict(product)
-            if product.get("video"):
-                stamped["video"] = self._stamp_media({"value": product["video"]})["value"]
-            if product.get("image"):
-                stamped["image"] = self._stamp_media({"value": product["image"]})["value"]
-            if product.get("images"):
-                stamped["images"] = [
-                    self._stamp_media({"value": img})["value"] for img in product["images"]
-                ]
-            if product.get("spin"):
-                stamped["spin"] = [
-                    self._stamp_media({"value": s})["value"] for s in product["spin"]
-                ]
+            for key in ("image", "images", "spin", "video"):
+                value = product.get(key)
+                if isinstance(value, str):
+                    stamped[key] = self._stamp_media({"value": value})["value"]
+                elif isinstance(value, list):
+                    stamped[key] = [
+                        self._stamp_media({"value": item})["value"] if isinstance(item, str) else item
+                        for item in value
+                    ]
+            stamped_products.append(stamped)
+        return stamped_products
             stamped_products.append(stamped)
         return stamped_products
 
@@ -7815,12 +8261,27 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             LOG.warning("Не удалось отдать видео %s", candidate.name, exc_info=True)
 
     def do_POST(self) -> None:
+        try:
+            self._handle_post()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception:
+            LOG.exception("Storefront POST failed: %s", self.path)
+            try:
+                self._json({"error": "server_error"}, 500)
+            except Exception:
+                pass
+
+    def _handle_post(self) -> None:
         path = urllib.parse.urlparse(self.path).path
         if path == "/api/my-orders/cancel":
             self._cancel_my_order()
             return
         if path == "/api/waitlist":
             self._waitlist()
+            return
+        if path == "/api/club":
+            self._club_post()
             return
         if path == "/api/checkout":
             self._checkout()
@@ -7895,6 +8356,12 @@ def notification_loop(bot: BrandBot) -> None:
 
 def polling_loop(api: TelegramAPI, bot: BrandBot) -> None:
     offset = 0
+    try:
+        # Survive restarts: Telegram keeps updates ~24h, so starting from 0
+        # after an OOM/redeploy would replay a day of callbacks and checkouts.
+        offset = max(0, int(bot.db.kv_get("updates_offset") or 0))
+    except Exception:
+        offset = 0
     retry_delay = 1
     while not STOP_EVENT.is_set():
         try:
@@ -7931,7 +8398,13 @@ def polling_loop(api: TelegramAPI, bot: BrandBot) -> None:
                 elif isinstance(raw_id, str) and raw_id.isdigit():
                     raw_id = int(raw_id)
                 if isinstance(raw_id, int):
-                    offset = max(offset, raw_id + 1)
+                    new_offset = max(offset, raw_id + 1)
+                    if new_offset != offset:
+                        offset = new_offset
+                        try:
+                            bot.db.kv_set("updates_offset", str(offset))
+                        except Exception:
+                            LOG.warning("Не удалось сохранить updates_offset", exc_info=True)
                 else:
                     LOG.warning("Обновление без update_id пропущено: %.120r", update)
         except Exception as exc:
@@ -7974,6 +8447,10 @@ def main() -> int:
         return 2
     try:
         db = Database(settings.database_path)
+        try:
+            db.sync_size_stock(catalog.data.get("products", []))
+        except Exception:
+            LOG.warning("Не удалось синхронизировать остатки по размерам", exc_info=True)
         api = TelegramAPI(settings.token)
         identity = api.call("getMe")
         api.call("deleteWebhook", {"drop_pending_updates": False})
