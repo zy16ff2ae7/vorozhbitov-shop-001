@@ -145,32 +145,71 @@ def fix_tee_vzglyad():
 
 def fix_tee_odin():
     print("Fixing tee-odin-v-pole-voin...")
-    # 1. Detail image bottom right: clean white cotton back text without grey inpaint box
-    detail = Image.open(DROP / "odin-voin-detail-v3.jpg")
-    back_clean = Image.open(DROP / "odin-voin-back-v3.jpg")
-    crop_back = back_clean.crop((160, 150, 540, 420)).resize((540, 360), Image.Resampling.LANCZOS)
-    detail.paste(crop_back, (540, 360))
-    detail.save(DROP / "odin-voin-detail-v3.jpg", quality=96)
-    print("  -> Updated odin-voin-detail-v3.jpg")
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    from refine_white_spin import concrete_plate, garment_cutout, composite
+    from PIL import ImageOps, ImageFilter
 
-    # 2. Back spin frame 05-v8: seamless feathered blend of back typography
-    crop_back_text = back_clean.crop((170, 150, 530, 420)).resize((260, 195), Image.Resampling.LANCZOS)
-    h, w = 195, 260
-    mask = np.ones((h, w), dtype=np.float32)
-    feather = 15
-    for i in range(feather):
-        mask[i, :] = np.minimum(mask[i, :], i / feather)
-        mask[h - 1 - i, :] = np.minimum(mask[h - 1 - i, :], i / feather)
-        mask[:, i] = np.minimum(mask[:, i], i / feather)
-        mask[:, w - 1 - i] = np.minimum(mask[:, w - 1 - i], i / feather)
-    mask = cv2.GaussianBlur(mask, (5, 5), 1.0)
-    crop_rgba = crop_back_text.convert("RGBA")
-    crop_rgba.putalpha(Image.fromarray((mask * 255).astype(np.uint8)))
+    src_path = DROP / "odin-v-pole-voin.jpg"
+    src = Image.open(src_path)
 
-    odin_05 = Image.open(SPIN / "odin-voin-05-v8.jpg").convert("RGBA")
-    odin_05.alpha_composite(crop_rgba, (410, 175))
-    odin_05.convert("RGB").save(SPIN / "odin-voin-05-v8.jpg", quality=96)
-    print("  -> Updated odin-voin-05-v8.jpg")
+    # 1. Authentic flatlay back: odin-voin-back-v3.jpg from original photo 7
+    back_orig = src.crop((700, 0, 1402, 700)).convert("RGB")
+    back_orig.save(DROP / "odin-voin-back-v3.jpg", quality=96, subsampling=0)
+    print("  -> Updated odin-voin-back-v3.jpg with authentic gothic print")
+
+    # 2. Authentic board: odin-v-pole-voin-v3.jpg
+    v3_board = Image.open(DROP / "odin-v-pole-voin-v3.jpg")
+    v3_board.paste(back_orig, (700, 0))
+    cell_3 = src.crop((843, 700, 1128, 1013)).convert("RGB")
+    v3_board.paste(cell_3, (843, 700))
+    v3_board.save(DROP / "odin-v-pole-voin-v3.jpg", quality=96, subsampling=0)
+    print("  -> Updated odin-v-pole-voin-v3.jpg with authentic gothic print")
+
+    # 3. Authentic detail: odin-voin-detail-v3.jpg
+    detail = Image.new("RGB", (1080, 720), (222, 222, 218))
+    detail_cells = [
+        (0, 700, 286, 1013),
+        (286, 700, 558, 1013),
+        (558, 700, 843, 1013),
+        (843, 700, 1128, 1013),
+    ]
+    for index, bounds in enumerate(detail_cells):
+        crop = src.crop(bounds).convert("RGB")
+        fitted = ImageOps.contain(crop, (536, 356), Image.Resampling.LANCZOS)
+        cell = ImageOps.fit(crop, (540, 360), Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(12))
+        cell.paste(fitted, ((540 - fitted.width) // 2, (360 - fitted.height) // 2))
+        detail.paste(cell, ((index % 2) * 540, (index // 2) * 360))
+    detail.save(DROP / "odin-voin-detail-v3.jpg", quality=96, subsampling=0)
+    print("  -> Updated odin-voin-detail-v3.jpg with authentic gothic calligraphy macro")
+
+    # 4. Spin frames: 04, 05, 06 from original video frames (authentic gothic calligraphy)
+    plate = concrete_plate()
+    originals = ROOT / "approval/brand-logo-review-2026-10-25-v2/white-sources"
+    symmetric_outline = [
+        (250, 260), (470, 260), (560, 310), (630, 400),
+        (720, 520), (720, 1150), (0, 1150), (0, 520),
+        (90, 400), (160, 310),
+    ]
+
+    cutout_04 = garment_cutout(originals / "odin-voin-04-original.jpg")
+    frame_04 = composite(plate, cutout_04)
+    frame_04.save(SPIN / "odin-voin-04-v8.jpg", quality=95, subsampling=0, optimize=True)
+
+    cutout_05 = garment_cutout(originals / "odin-voin-05-original.jpg", allowed_polygon=symmetric_outline)
+    frame_05 = composite(
+        plate,
+        cutout_05,
+        width_scale=1.14,
+        garment_height=452,
+        center_x=535,
+    )
+    frame_05.save(SPIN / "odin-voin-05-v8.jpg", quality=95, subsampling=0, optimize=True)
+
+    cutout_06 = garment_cutout(originals / "odin-voin-06-original.jpg")
+    frame_06 = composite(plate, cutout_06)
+    frame_06.save(SPIN / "odin-voin-06-v8.jpg", quality=95, subsampling=0, optimize=True)
+    print("  -> Updated odin-voin spin frames 04, 05, 06 with authentic gothic print")
 
 
 if __name__ == "__main__":
