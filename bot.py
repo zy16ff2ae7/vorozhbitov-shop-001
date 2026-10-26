@@ -7998,9 +7998,9 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                         product for product in catalog.data.get("products", []) if product.get("active", True)
                     ]),
                     "categories": catalog.categories,
-                    "lookbook": catalog.data.get("lookbook", []),
+                    "lookbook": self._stamp_collection(catalog.data.get("lookbook", []), ("image",)),
                     "drop_event": catalog.data.get("drop_event", {}),
-                    "film": catalog.data.get("film", []),
+                    "film": self._stamp_collection(catalog.data.get("film", []), ("image", "video", "poster")),
                     "club": catalog.data.get("club", {}),
                     "community": catalog.data.get("community", []),
                     "media": self._stamp_media(catalog.data.get("media", {})),
@@ -8102,6 +8102,17 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             body = self._stamp_fonts(self._stamp_assets(body))
         self._write(body, content_type, 200, cache, etag)
 
+    def _stamp_collection(self, items: list[dict[str, Any]], keys: tuple[str, ...]) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        for item in items:
+            stamped = dict(item)
+            for k in keys:
+                v = item.get(k)
+                if isinstance(v, str) and v:
+                    stamped[k] = self._stamp_media({"value": v})["value"]
+            result.append(stamped)
+        return result
+
     def _stamp_product_media(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Версионировать товарные media URL, не меняя каталог в памяти.
 
@@ -8112,7 +8123,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         stamped_products: list[dict[str, Any]] = []
         for product in products:
             stamped = dict(product)
-            for key in ("image", "images", "spin", "video"):
+            for key in ("image", "images", "spin", "video", "card_image"):
                 value = product.get(key)
                 if isinstance(value, str):
                     stamped[key] = self._stamp_media({"value": value})["value"]
@@ -8148,7 +8159,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         return stamped
 
     def _stamp_assets(self, body: bytes) -> bytes:
-        """Версионировать клиентский код и CSS вместе с его шрифтами."""
+        """Версионировать клиентский код, CSS и все статические медиа-ассеты в HTML."""
         text = body.decode("utf-8", "replace")
         for name in ("app.js", "checkout.js", "shop-core.js", "viewer3d.js", "telegram-web-app.js", "styles.css"):
             asset = self.static_root / name
@@ -8158,6 +8169,22 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                 continue
             text = text.replace(f'href="{name}"', f'href="{name}?v={version}"')
             text = text.replace(f'src="{name}"', f'src="{name}?v={version}"')
+
+        def _stamp_match(m: re.Match[str]) -> str:
+            attr = m.group(1)
+            quote = m.group(2)
+            rel = m.group(3)
+            close = m.group(4)
+            if "?v=" in rel:
+                return m.group(0)
+            candidate = self.static_root / rel
+            try:
+                version = int(candidate.stat().st_mtime)
+                return f"{attr}={quote}{rel}?v={version}{close}"
+            except OSError:
+                return m.group(0)
+
+        text = re.sub(r"""(src|href|poster)=(["'])(assets/[^"'?]+)(["'])""", _stamp_match, text)
         return text.encode("utf-8")
 
     def _asset_version(self, asset: Path) -> str:
