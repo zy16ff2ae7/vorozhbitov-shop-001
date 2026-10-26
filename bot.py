@@ -8123,8 +8123,6 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                     ]
             stamped_products.append(stamped)
         return stamped_products
-            stamped_products.append(stamped)
-        return stamped_products
 
     def _stamp_media(self, media: dict[str, Any]) -> dict[str, Any]:
         """Добавить ?v=<время правки> к роликам и постерам из блока media.
