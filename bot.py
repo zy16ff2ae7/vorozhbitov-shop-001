@@ -7661,14 +7661,22 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         self._write(body, content_type, 200, cache)
 
     def _stamp_product_videos(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Версионировать MP4 товаров, не меняя остальной каталог в памяти."""
+        """Версионировать MP4 и медиа товаров, не меняя остальной каталог в памяти."""
         stamped_products: list[dict[str, Any]] = []
         for product in products:
-            if not product.get("video"):
-                stamped_products.append(product)
-                continue
             stamped = dict(product)
-            stamped["video"] = self._stamp_media({"value": product["video"]})["value"]
+            if product.get("video"):
+                stamped["video"] = self._stamp_media({"value": product["video"]})["value"]
+            if product.get("image"):
+                stamped["image"] = self._stamp_media({"value": product["image"]})["value"]
+            if product.get("images"):
+                stamped["images"] = [
+                    self._stamp_media({"value": img})["value"] for img in product["images"]
+                ]
+            if product.get("spin"):
+                stamped["spin"] = [
+                    self._stamp_media({"value": s})["value"] for s in product["spin"]
+                ]
             stamped_products.append(stamped)
         return stamped_products
 
