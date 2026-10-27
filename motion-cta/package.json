@@ -1,0 +1,7 @@
+{
+  "name": "vorozhbitov-motion-cta",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {"build:panels": "node src/create-panels.cjs", "build": "npm run build:panels && python3 src/render.py"},
+  "dependencies": {"sharp": "^0.34.0"}
+}
