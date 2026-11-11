@@ -172,14 +172,8 @@ img { display: block; max-width: 100%; }
   animation: ken 18s ease-in-out infinite alternate;
 }
 /* Видео лежит поверх фотографии: пока оно не готово, виден постер. */
-video.welcome-media { z-index: 1; animation: none; opacity: 0; transition: opacity .6s ease; }
+video.welcome-media { z-index: 1; animation: none; opacity: 0; transition: opacity .6s ease; object-fit: cover; object-position: 50% 24%; }
 video.welcome-media.is-playing { opacity: 1; }
-/* Ролик 3:4: на экране уже, чем кадр (телефон вертикально), cover режет
-   титр «ВОРОЖБИТОВ» по бокам до «ОРОЖБИТО». На таких экранах показываем
-   ролик целиком: чёрные поля сверху и снизу сливаются со сплошным фоном заставки. */
-@media (max-aspect-ratio: 3/4) {
-  video.welcome-media { object-fit: contain; }
-}
 .welcome-shade {
   position: absolute; inset: 0;
   background:
@@ -3564,7 +3558,7 @@ img[src*="/product-studio-v1/"] {
 /* Фирменный персонаж помогает в пустых состояниях, не отвлекая от покупки. */
 .cart-empty-mascot { width: 148px; height: 160px; margin: 0 auto 12px; object-fit: cover; object-position: center 35%; -webkit-mask-image: linear-gradient(#000 58%, transparent); mask-image: linear-gradient(#000 58%, transparent); }
 .profile-empty-mascot { display: grid; grid-template-columns: 72px minmax(0,1fr); gap: 14px; align-items: center; padding: 14px; border-left: 2px solid var(--red); background: var(--surface-2); }
-.profile-empty-mascot img { width: 72px; height: 90px; object-fit: cover; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+.profile-empty-mascot img, .profile-empty-mascot video { width: 72px; height: 90px; object-fit: cover; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
 .profile-empty-mascot .profile-empty { margin: 0; }
 
 /* Помощь с посадкой и понятные этапы оформления. */

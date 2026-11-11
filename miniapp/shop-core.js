@@ -69,8 +69,14 @@
     { size: "M", height: [172, 182], weight: [70, 82], width: 60 },
     { size: "L", height: [178, 188], weight: [80, 92], width: 63 },
     { size: "XL", height: [184, 194], weight: [90, 105], width: 66 },
-    { size: "XXL", height: [188, 200], weight: [100, 120], width: 69 }
+    { size: "2XL", height: [188, 200], weight: [100, 120], width: 69 },
+    { size: "3XL", height: [196, 206], weight: [114, 136], width: 72 }
   ];
+
+  function canonicalSize(size) {
+    const up = String(size || "").toUpperCase();
+    return up === "XXL" ? "2XL" : up;
+  }
 
   function rangePenalty(value, range, scale) {
     if (!Number.isFinite(value)) return 0;
@@ -85,8 +91,13 @@
     const height = Number(input && input.height);
     const weight = Number(input && input.weight);
     const fit = String((input && input.fit) || "regular");
-    const sizes = stringList(availableSizes).map(size => size.toUpperCase());
-    const guide = SIZE_GUIDE.filter(row => !sizes.length || sizes.includes(row.size));
+    const rawSizes = stringList(availableSizes);
+    const labelByCanonical = new Map();
+    for (const raw of rawSizes) {
+      const key = canonicalSize(raw);
+      if (!labelByCanonical.has(key)) labelByCanonical.set(key, raw.toUpperCase());
+    }
+    const guide = SIZE_GUIDE.filter(row => !labelByCanonical.size || labelByCanonical.has(row.size));
     if (!guide.length || !Number.isFinite(height) || !Number.isFinite(weight)) return null;
     if (height < 130 || height > 230 || weight < 35 || weight > 220) return null;
     const scored = guide.map(row => ({
@@ -99,9 +110,10 @@
     const chosen = guide[index];
     const rival = scored.find(row => row.size !== scored[0].size);
     const between = Boolean(rival && fit === "regular" && rival.score - scored[0].score < 0.35 && rival.size !== chosen.size);
+    const outLabel = key => labelByCanonical.get(key) || (key === "2XL" ? "XXL" : key);
     return {
-      size: chosen.size,
-      between: between ? rival.size : "",
+      size: outLabel(chosen.size),
+      between: between ? outLabel(rival.size) : "",
       guide: chosen,
       confident: !between && scored[0].score < 1
     };

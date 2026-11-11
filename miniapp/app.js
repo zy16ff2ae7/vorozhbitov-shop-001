@@ -204,9 +204,10 @@
     if (!box) return;
     state.profileOrders = Array.isArray(orders) ? orders : [];
     if (!orders.length) {
+      const mascotVid = `<video src="assets/mascot/steel-glasses-anthracite-20261112a.mp4" poster="assets/mascot/steel-glasses-anthracite-20261112a.jpg" autoplay loop muted playsinline webkit-playsinline preload="metadata" aria-hidden="true"></video>`;
       box.innerHTML = source === "bot"
-        ? `<div class="profile-empty-mascot"><img src="assets/mascot/steel-greeter-poster-v2.jpg" alt="" loading="lazy"><p class="profile-empty">Заказов пока нет. Здесь появятся заказы, зарегистрированные магазином.</p></div>`
-        : `<div class="profile-empty-mascot"><img src="assets/mascot/steel-greeter-poster-v2.jpg" alt="" loading="lazy"><p class="profile-empty">Открой витрину из Telegram: здесь будут реальные заказы, способ оплаты и этапы доставки.</p></div>`;
+        ? `<div class="profile-empty-mascot">${mascotVid}<p class="profile-empty">Заказов пока нет. Здесь появятся заказы, зарегистрированные магазином.</p></div>`
+        : `<div class="profile-empty-mascot">${mascotVid}<p class="profile-empty">Открой витрину из Telegram: здесь будут реальные заказы, способ оплаты и этапы доставки.</p></div>`;
       return;
     }
     box.innerHTML = `<p class="profile-caption">Заказы</p>` + orders.map((row, orderIndex) => {
@@ -582,6 +583,8 @@
   }
 
   function renderProducts() {
+    const buyableTotal = (state.data.products || []).filter(Core.buyable).length;
+    $(".catalog-tools")?.classList.toggle("hidden", buyableTotal <= 4);
     const products = filteredProducts();
     const root = $("#productGrid");
     $("#productCount").textContent = Core.productCount(products.length);
@@ -714,13 +717,11 @@
   function renderBodySizeGuide(product) {
     const rows = bodySizeRows(product);
     const range = values => values.join("–");
-    $("#compareWidth").value = "";
-    $("#compareLength").value = "";
-    $("#compareWaist").value = "";
-    $("#compareHips").value = "";
-    $("#compareSize").disabled = !rows.length;
-    $("#measurementTable").innerHTML = rows.length ? `<div class="measurement-table body-measurements" role="table" aria-label="Таблица параметров тела в сантиметрах"><div class="measurement-head" role="row"><span>РАЗМЕР</span><span>ГРУДЬ</span><span>ТАЛИЯ</span><span>БЁДРА</span><span>РОСТ</span></div>${rows.map(row => `<div role="row"><strong>${escapeHTML(row.size)}</strong><span>${range(row.chest)}</span><span>${range(row.waist)}</span><span>${range(row.hips)}</span><span>${range(row.height)}</span></div>`).join("")}</div><p class="size-guide-note">Все значения — параметры тела в сантиметрах, а не размеры футболки. Сопоставь также талию, бёдра и рост: посадка зависит от комплекции.</p>` : "<p class=\"size-guide-note\">Таблица для этой вещи пока недоступна.</p>";
-    $("#compareResult").textContent = rows.length ? "Укажи обхват груди, чтобы увидеть подходящие строки таблицы." : "Таблица для этой вещи пока недоступна.";
+    const isFitted = product && product.id === "tee-vzglyad";
+    const cutNote = isFitted
+      ? "У модели «ВЗГЛЯД» прилегающий крой: для плотной посадки бери свой размер по таблице, для более свободной — на размер больше."
+      : "Значения в таблице — обхваты тела в сантиметрах (грудь, талия, бёдра, рост). У модели «СИЛА И ЧЕСТЬ» прямой свободный крой.";
+    $("#measurementTable").innerHTML = rows.length ? `<div class="measurement-table body-measurements" role="table" aria-label="Таблица параметров тела в сантиметрах"><div class="measurement-head" role="row"><span>РАЗМЕР</span><span>ГРУДЬ</span><span>ТАЛИЯ</span><span>БЁДРА</span><span>РОСТ</span></div>${rows.map(row => `<div role="row"><strong>${escapeHTML(row.size)}</strong><span>${range(row.chest)}</span><span>${range(row.waist)}</span><span>${range(row.hips)}</span><span>${range(row.height)}</span></div>`).join("")}</div><p class="size-guide-note">${escapeHTML(cutNote)}</p>` : "<p class=\"size-guide-note\">Таблица для этой вещи пока недоступна.</p>";
   }
 
   function renderSheet(product) {
@@ -732,7 +733,10 @@
     $(".sheet-image").classList.toggle("studio-media", product.spin_kind === "visualization");
     $("#view3dHint").textContent = product.spin_kind === "visualization"
       ? "ВИЗУАЛИЗАЦИЯ · ТЯНИ В СТОРОНЫ" : "ТЯНИ В СТОРОНЫ";
-    $("#stagePhoto").textContent = "ОБЗОР";
+    const hasReal3d = ["tee-sila-i-chest", "tee-vzglyad"].includes(product.id);
+    if ($("#stage3d")) $("#stage3d").textContent = hasReal3d ? "3D" : "360°";
+    if ($("#stagePhoto")) $("#stagePhoto").textContent = "ФОТО";
+    if ($("#stageVideo")) $("#stageVideo").textContent = "360° ВИДЕО";
     const preferred = (product.sizes || []).find(size => normalizeBodySize(size) === normalizeBodySize((state.profile.size || "").trim())) || "";
     state.selectedSize = preferred && (product.sizes || []).includes(preferred)
       ? preferred
@@ -772,18 +776,19 @@
     $("#sheetDescription").textContent = product.description;
     $("#careMaterial").textContent = product.material ? `Состав: ${product.material}.` : "Состав материала уточняется.";
     $$(".product-care details").forEach(item => { item.open = false; });
-    $("#sheetFacts").innerHTML = `<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Уточняется")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(product.stock_check_unavailable ? "Наличие уточняется" : (product.stock_label || "В наличии"))}</span></div>`;
+    const fitFact = product.fit ? `<div class="fact-row"><span>Посадка</span><span>${escapeHTML(product.fit)}</span></div>` : "";
+    $("#sheetFacts").innerHTML = `${fitFact}<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Уточняется")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(product.stock_check_unavailable ? "Наличие уточняется" : (product.stock_label || "В наличии"))}</span></div>`;
     $("#preorderNotice").classList.toggle("hidden", !/предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`));
     renderPassport(product);
     $("#sizeList").innerHTML = (product.sizes || []).map(size => `<button class="size-button ${state.selectedSize === size ? "selected" : ""}" data-size="${escapeHTML(size)}" aria-pressed="${state.selectedSize === size}" type="button">${escapeHTML(size)}</button>`).join("");
-    $("#sizeHint").textContent = product.stock_check_unavailable ? "Не удалось проверить наличие размеров. Попробуй позже." : state.selectedSize ? `Размер ${state.selectedSize} выбран.` : (product.sizes || []).length ? "Выбери размер. Открой подсказку и сравни свои параметры с таблицей." : "Наличие размеров пока уточняется.";
+    $("#sizeHint").textContent = product.stock_check_unavailable ? "Не удалось проверить наличие размеров. Попробуй позже." : state.selectedSize ? `Размер ${state.selectedSize} выбран.` : (product.sizes || []).length ? "Выбери размер вручную или нажми подходящий вариант в калькуляторе выше." : "Наличие размеров пока уточняется.";
     $("#sizeHint").classList.remove("error");
-    const hasApparelSizes = (product.sizes || []).some(s => ["S", "M", "L", "XL", "XXL"].includes(String(s).toUpperCase()));
+    const hasApparelSizes = (product.sizes || []).some(s => ["S", "M", "L", "XL", "XXL", "2XL", "3XL"].includes(String(s).toUpperCase()));
     const guideToggle = $("#sizeGuideToggle");
     if (guideToggle) {
       guideToggle.classList.toggle("hidden", !hasApparelSizes);
       guideToggle.setAttribute("aria-expanded", "false");
-      guideToggle.textContent = "ПОМОЩЬ С РАЗМЕРОМ ▾";
+      guideToggle.textContent = "ТАБЛИЦА В СМ ▾";
     }
     const guide = $("#sizeGuide");
     if (guide) guide.classList.add("hidden");
@@ -978,7 +983,7 @@
       return;
     }
     if (!state.cart.length) {
-      content.innerHTML = `<div class="cart-empty cart-empty-brand"><div class="cart-empty-art"><img class="cart-empty-mascot" src="assets/mascot/steel-greeter-poster-v2.jpg" alt="" loading="lazy"><span>СИЛА И ЧЕСТЬ / 001</span></div><div class="cart-empty-copy"><span class="cart-empty-kicker">ПЕРВЫЙ ШАГ</span><h3>ВЫБЕРИ СВОЮ<br>ВЕЩЬ.</h3><p>Корзина пока пуста. Первый дроп уже в витрине.</p><button class="button button-primary" data-cart-shop type="button">ОТКРЫТЬ ВИТРИНУ <span aria-hidden="true">↗</span></button></div></div>`;
+      content.innerHTML = `<div class="cart-empty cart-empty-brand"><div class="cart-empty-art"><video class="cart-empty-mascot" src="assets/mascot/steel-glasses-anthracite-20261112a.mp4" poster="assets/mascot/steel-glasses-anthracite-20261112a.jpg" autoplay loop muted playsinline webkit-playsinline preload="metadata" aria-hidden="true"></video><span>СИЛА И ЧЕСТЬ / 001</span></div><div class="cart-empty-copy"><span class="cart-empty-kicker">ПЕРВЫЙ ШАГ</span><h3>ВЫБЕРИ СВОЮ<br>ВЕЩЬ.</h3><p>Корзина пока пуста. Первый дроп уже в витрине.</p><button class="button button-primary" data-cart-shop type="button">ОТКРЫТЬ ВИТРИНУ <span aria-hidden="true">↗</span></button></div></div>`;
       $("#checkoutForm").classList.add("hidden");
       return;
     }
@@ -1590,11 +1595,15 @@
       };
       state.catalogReady = true;
       const privacy = $("#privacyLink");
+      const privacyBtn = $("#privacyInfoButton");
       if (privacy && state.data.privacy_url) {
         privacy.href = state.data.privacy_url;
         privacy.classList.remove("hidden");
+        privacyBtn?.classList.add("hidden");
+      } else {
+        privacyBtn?.classList.remove("hidden");
       }
-      $("#privacyNotice").classList.toggle("hidden", Boolean(state.data.privacy_url));
+      $("#privacyNotice")?.classList.toggle("hidden", Boolean(state.data.privacy_url));
       $("#sizeFilters").innerHTML = ["all", ...Core.sizesFor(state.data.products)].map(size => `<button class="filter-chip ${size === state.sizeFilter ? "active" : ""}" data-size-filter="${escapeHTML(size)}" type="button" aria-pressed="${size === state.sizeFilter}">${size === "all" ? "Любой" : escapeHTML(size)}</button>`).join("");
       applyMedia();
       renderCategoryChips();
@@ -1622,9 +1631,11 @@
 
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
+    const staleLoop = !media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") || media.welcome_loop.includes("welcome-seal-20261029.mp4");
+    const stalePoster = !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") || media.welcome_poster.includes("welcome-seal-20261029.jpg");
     return {
-      welcomeLoop: media.welcome_motion === false ? "" : (!media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") ? "assets/video/welcome-seal-20261029.mp4" : media.welcome_loop),
-      welcomePoster: !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") ? "assets/video/welcome-seal-20261029.jpg" : media.welcome_poster
+      welcomeLoop: media.welcome_motion === false ? "" : (staleLoop ? "assets/video/welcome-loop-20261112a.mp4" : media.welcome_loop),
+      welcomePoster: stalePoster ? "assets/video/welcome-poster-20261112a.jpg" : media.welcome_poster
     };
   }
 
@@ -1778,6 +1789,7 @@
     video.defaultMuted = true;
     video.playsInline = true;
     video.autoplay = true;
+    video.loop = true;
     // Каталог приходит позже старта и приносит тот же файл с новым ?v-штампом.
     // Уже идущий ролик не трогаем, иначе начало проиграется дважды.
     const playing = video.classList.contains("is-playing") || (!video.paused && video.currentTime > 0);
@@ -2232,6 +2244,9 @@
     const button = $("#dropEventButton");
     root.classList.remove("is-pre", "is-early", "is-live", "is-soldout", "is-ended");
     root.classList.add(`is-${mode.id}`);
+    // В обычном режиме открытой продажи без таймера не дублируем Hero лишней плашкой.
+    const hasCustomLiveNote = Boolean(mode.event && mode.event.note && !String(mode.event.note).includes("берутся из живого каталога"));
+    root.classList.toggle("hidden", mode.id === "live" && !hasCustomLiveNote);
     if ($("#dropEventKicker")) $("#dropEventKicker").textContent = `001 / ${String(mode.event.title || "СОБЫТИЕ").toUpperCase()}`;
     window.clearInterval(state.dropTimer);
     state.dropTimer = null;
@@ -2357,33 +2372,49 @@
   }
 
   function resetFitFinder(product) {
-    const finder = $("#fitFinder");
-    if (!finder) return;
-    finder.classList.add("hidden");
-    finder.closest("details")?.classList.add("hidden");
-    const saved = savedFit();
-    if ($("#fitHeight")) $("#fitHeight").value = saved.height || state.profile.height || "";
-    if ($("#fitWeight")) $("#fitWeight").value = saved.weight || "";
-    setFitChoice(saved.fit || "regular");
     syncCombatSizer(product);
-    const result = $("#fitResult");
-    if (result) {
-      result.classList.remove("error");
-      result.textContent = "Подберём по опубликованной таблице и сразу выберем размер выше.";
-    }
   }
 
   const combatSizer = { height: 182, weight: 86 };
   function syncCombatSizer(product) {
     const root = $("#smartSizer");
-    if (root) root.classList.add("hidden");
+    if (!root) return;
+    const isApparel = Boolean(product && Core.buyable(product) && (product.sizes || []).some(s => ["S", "M", "L", "XL", "XXL", "2XL", "3XL"].includes(String(s).toUpperCase())));
+    root.classList.toggle("hidden", !isApparel);
+    if (!isApparel) return;
+    const saved = savedFit();
+    const h = Number(saved.height || state.profile.height);
+    const w = Number(saved.weight);
+    if (Number.isFinite(h) && h >= 130 && h <= 230) combatSizer.height = Math.round(h);
+    if (Number.isFinite(w) && w >= 35 && w <= 220) combatSizer.weight = Math.round(w);
+    const isFitted = product.id === "tee-vzglyad";
+    if ($("#smartSizerSubtitle")) {
+      $("#smartSizerSubtitle").textContent = isFitted
+        ? "У «ВЗГЛЯДА» прилегающий атлетический крой — сидит плотно по торсу"
+        : "У «СИЛА И ЧЕСТЬ» прямой свободный крой — выбери желаемую посадку";
+    }
+    if ($("#adviceFitType")) $("#adviceFitType").textContent = isFitted ? "Плотно по торсу" : "По фигуре · База";
+    if ($("#adviceFitText")) {
+      $("#adviceFitText").textContent = isFitted
+        ? "Прилегающая посадка по груди и плечам. Подчёркивает форму."
+        : "Классическая прямая посадка по твоим параметрам.";
+    }
+    if ($("#adviceOversizeType")) $("#adviceOversizeType").textContent = isFitted ? "Комфортно · Свободнее" : "Свободно · Оверсайз";
+    if ($("#adviceOversizePill")) $("#adviceOversizePill").textContent = isFitted ? "+1 РАЗМЕР" : "ОВЕРСАЙЗ";
+    if ($("#adviceOversizeText")) {
+      $("#adviceOversizeText").textContent = isFitted
+        ? "На размер больше — если не любишь плотную посадку в обтяжку."
+        : "Больше воздуха в плечах и груди — расслабленный силуэт.";
+    }
+    updateCombatSizer();
   }
   function updateCombatSizer() {
     const root = $("#smartSizer"), product = state.currentProduct; if (!root || !product || root.classList.contains("hidden")) return;
     $("#sizerHeightVal").textContent = String(combatSizer.height); $("#sizerWeightVal").textContent = String(combatSizer.weight);
     [["Fit", "regular"], ["Oversize", "oversize"]].forEach(([id, fit]) => {
-      const card = $("#advice" + id + "Card"); const found = Core.recommendSize({height:combatSizer.height, weight:combatSizer.weight, fit}, product.sizes || []); const size = found?.size || "";
-      card.disabled = !size; card.dataset.smartSize = size; card.classList.toggle("selected", state.selectedSize === size); card.setAttribute("aria-pressed", String(!!size && state.selectedSize === size));
+      const card = $("#advice" + id + "Card"); if (!card) return;
+      const found = Core.recommendSize({height:combatSizer.height, weight:combatSizer.weight, fit}, product.sizes || []); const size = found?.size || "";
+      card.disabled = !size; card.dataset.smartSize = size; card.classList.toggle("selected", Boolean(size && state.selectedSize === size)); card.setAttribute("aria-pressed", String(!!size && state.selectedSize === size));
       $("#advice" + id + "Size").textContent = size || "—"; $("#advice" + id + "Target").textContent = size || "—";
     });
   }
@@ -3110,36 +3141,12 @@
     });
     $("#communityTab").addEventListener("click", () => openModal("communityModal"));
     $("#openCommunityFromHome").addEventListener("click", () => openModal("communityModal"));
-    $("#compareSize").addEventListener("click", () => {
-      const rows = bodySizeRows(state.currentProduct);
-      const chestText = $("#compareWidth").value.trim();
-      const heightText = $("#compareLength").value.trim();
-      const chest = Number(chestText.replace(",", ".")), height = Number(heightText.replace(",", "."));
-      if (!chestText || !Number.isFinite(chest) || chest < 50 || chest > 170) {
-        $("#compareResult").textContent = "Укажи обхват груди от 50 до 170 см."; return;
-      }
-      if (heightText && (!Number.isFinite(height) || height < 120 || height > 230)) {
-        $("#compareResult").textContent = "Проверь рост: укажи от 120 до 230 см или оставь поле пустым."; return;
-      }
-      const measurements = [{key:"chest", value:chest}, ...[["waist", "#compareWaist", "талию"], ["hips", "#compareHips", "бёдра"]].map(([key, selector, label]) => ({key, text:$(selector).value.trim(), value:Number($(selector).value.trim().replace(",", ".")), label}))];
-      const invalid = measurements.find(m => m.text && (!Number.isFinite(m.value) || m.value < 40 || m.value > 200));
-      if (invalid) { $("#compareResult").textContent = `Проверь ${invalid.label}: укажи обхват от 40 до 200 см или оставь поле пустым.`; return; }
-      const entered = measurements.filter(m => m.key === "chest" || m.text);
-      const matches = rows.filter(row => entered.every(m => m.value >= row[m.key][0] && m.value <= row[m.key][1]));
-      if (!matches.length) {
-        $("#compareResult").textContent = "Эти параметры не попадают в одну строку таблицы. Проверь замеры и сравни соседние размеры; точную посадку по этим данным определить нельзя."; return;
-      }
-      const labels = matches.map(row => row.size).join(" или ");
-      const heightNote = heightText && !matches.some(row => height >= row.height[0] && height <= row.height[1])
-        ? " Указанный рост выходит за диапазоны этих строк." : "";
-      $("#compareResult").textContent = `По указанным обхватам подходят размеры: ${labels}.${heightNote} Сверь талию, бёдра и рост в таблице и выбери размер вручную.`;
-    });
     $("#sizeGuideToggle")?.addEventListener("click", () => {
       const guide = $("#sizeGuide");
       if (!guide) return;
       const isHidden = guide.classList.toggle("hidden");
       $("#sizeGuideToggle").setAttribute("aria-expanded", String(!isHidden));
-      $("#sizeGuideToggle").textContent = isHidden ? "ПОМОЩЬ С РАЗМЕРОМ ▾" : "СКРЫТЬ ПОДСКАЗКУ ▴";
+      $("#sizeGuideToggle").textContent = isHidden ? "ТАБЛИЦА В СМ ▾" : "СКРЫТЬ ТАБЛИЦУ ▴";
       if (!isHidden) {
         window.requestAnimationFrame(() => {
           guide.scrollIntoView({ behavior: reducedMotion() ? "instant" : "smooth", block: "nearest" });
@@ -3402,6 +3409,12 @@
     $("#emptyReset").addEventListener("click", () => $("#resetFilters").click());
     $("#submitManagerOrder").addEventListener("click", submitManagerOrder);
     $("#askDelivery").addEventListener("click", askDelivery);
+    $("#privacyInfoButton")?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openModal("privacyModal");
+      haptic("light");
+    });
     ["checkoutName", "checkoutPhone", "checkoutCity", "checkoutConsent"].forEach(id => {
       const field = $("#" + id);
       field.addEventListener(id === "checkoutConsent" ? "change" : "input", () => clearCheckoutFieldError(field));
