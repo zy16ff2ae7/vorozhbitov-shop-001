@@ -10,11 +10,11 @@
   <meta property="og:title" content="СИЛА И ЧЕСТЬ · Выпуск 001 — Никита Ворожбитов">
   <meta property="og:description" content="Две футболки первого дропа (плотный хлопок 240–260 г/м²), 3D и 360°-видео. Первые 100 стальных жетонов — в подарок к заказу.">
   <meta property="og:url" content="https://vorozhbitov.107-173-89-192.nip.io/">
-  <meta property="og:image" content="https://vorozhbitov.107-173-89-192.nip.io/assets/client/og-preview.jpg">
+  <meta property="og:image" content="https://vorozhbitov.107-173-89-192.nip.io/assets/client/og-preview-20261112c.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://vorozhbitov.107-173-89-192.nip.io/assets/client/og-preview.jpg">
+  <meta name="twitter:image" content="https://vorozhbitov.107-173-89-192.nip.io/assets/client/og-preview-20261112c.jpg">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23070708'/%3E%3Cpath d='M32 8 L35 20 L35 44 L40 48 L40 50 L34 50 L34 56 L30 56 L30 50 L24 50 L24 48 L29 44 L29 20 Z' fill='%23e10600'/%3E%3C/svg%3E">
   <title>СИЛА И ЧЕСТЬ</title>
   <link rel="preload" href="fonts/sila-chest-700.woff2?v=1792969380" as="font" type="font/woff2" crossorigin>
@@ -85,7 +85,7 @@
 .product-grid .product-bottom { margin-top:auto; padding-top:14px; border-top:1px solid #34312f; }
 .product-grid .product-price { font-variant-numeric:tabular-nums; }
 @media (max-width: 360px) { .product-grid .product-info { padding:14px; } }
-.sheet-image:has(.sheet-video:not(.hidden)) { background:#0d0d0e; }
+.sheet-image:has(.sheet-video:not(.hidden)) { height:clamp(350px, 55svh, 500px); background:#0d0d0e; }
 .sheet-image > .sheet-video { object-fit:contain; background:transparent; }
 .sheet-image .model3d-frame { position:absolute; inset:0; width:100%; height:100%; border:0; background:#101011; }
 .sheet-image:has(.model3d-frame:not(.hidden)) { height:clamp(350px, 55svh, 500px); }
@@ -123,7 +123,7 @@
 .cart-line-name strong { line-height:1.3; text-wrap:balance; }
 .cart-line .qty-control button { min-width:40px; min-height:40px; }
 button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline-offset:3px; }
-@media(max-width:430px) { .sheet-image:has(.model3d-frame:not(.hidden)) { height:clamp(300px,46svh,410px); } .product-scroll .sheet-image:has(.sheet-photo:not(.hidden)) { height:clamp(300px,46svh,430px); } .purchase-bar { padding-bottom:max(12px,env(safe-area-inset-bottom)); } }
+@media(max-width:430px) { .sheet-image:has(.model3d-frame:not(.hidden)), .sheet-image:has(.sheet-video:not(.hidden)) { height:clamp(320px,48svh,430px); } .product-scroll .sheet-image:has(.sheet-photo:not(.hidden)) { height:clamp(310px,46svh,430px); } .purchase-bar { padding-bottom:max(12px,env(safe-area-inset-bottom)); } }
 @media(prefers-reduced-motion:reduce) { .product-more > summary span { transition:none; } }
 </style><style>
 /* One quiet system for the storefront, community and personal account. */
@@ -434,7 +434,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
 
       <section class="join-banner section-pad" id="channel">
         <div>
-          <span class="section-kicker">05 / КАНАЛ</span>
+          <span class="section-kicker">04 / КАНАЛ</span>
           <h2>КАНАЛ<br><em>БРЕНДА.</em></h2>
           <p>Новости бренда и информация о выпусках — в официальном канале.</p>
         </div>
@@ -446,7 +446,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
       <section class="faq-section section-pad" id="faq">
         <div class="section-heading compact">
           <div>
-            <span class="section-kicker">06 / БЕЗ ЛИШНИХ ВОПРОСОВ</span>
+            <span class="section-kicker">05 / БЕЗ ЛИШНИХ ВОПРОСОВ</span>
             <h2>КАК ЭТО<br><em>РАБОТАЕТ.</em></h2>
           </div>
         </div>
@@ -504,7 +504,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
       <section class="community-section section-pad" id="community" aria-labelledby="communityTitle">
         <div class="section-heading compact">
           <div>
-            <span class="section-kicker">04 / СВОИ</span>
+            <span class="section-kicker">СВОИ / В ДЕЛЕ</span>
             <h2 id="communityTitle">СВОИ<br><em>В ДЕЛЕ.</em></h2>
           </div>
         </div>
@@ -600,6 +600,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
                 <div class="advice-head">
                   <span class="advice-badge">РАЗМЕР <b id="adviceFitSize">L</b></span>
                   <span class="advice-fit-type" id="adviceFitType">По фигуре</span>
+                  <span class="advice-rec-pill hidden" id="adviceFitPill">БАЗА ПО КРОЮ</span>
                 </div>
                 <p class="advice-body" id="adviceFitText">Базовая посадка по твоим параметрам.</p>
                 <div class="advice-footer">

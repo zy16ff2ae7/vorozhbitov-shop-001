@@ -2281,7 +2281,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .club-lifter {
   width: min(100%, 190px); aspect-ratio: 3 / 4; justify-self: end;
   align-self: end; margin: -16px 0 -20px;
-  background-image: url("assets/mascot/steel-lifter-sprite-v1.webp");
+  background-image: url("assets/mascot/steel-lifter-sprite-anthracite-20261112c.webp");
   background-size: 400% 200%; background-position: 0 0; background-repeat: no-repeat;
 }
 .club-lifter-toggle {

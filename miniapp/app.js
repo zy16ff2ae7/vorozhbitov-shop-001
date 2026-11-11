@@ -118,7 +118,7 @@
   }
 
   function imagesFor(product) {
-    const list = Array.isArray(product.images) && product.images.length ? product.images : [product.image || product.image_url || "assets/base-tee.jpg"];
+    const list = Array.isArray(product.images) && product.images.length ? product.images : [product.image || product.image_url || "assets/client/sila-front-studio-20261111c.webp"];
     return list.map(src => String(src));
   }
 
@@ -492,7 +492,8 @@
     if (real3dFrame) {
       real3dFrame.classList.toggle("hidden", !real3d);
       if (real3d) {
-        const targetSrc = `assets/vzglyad-3d/index-20261111b.html?product=${state.currentProduct?.id === "tee-sila-i-chest" ? "sila" : "vzglyad"}`;
+        real3dFrame.title = `Трёхмерный обзор футболки ${state.currentProduct?.name || "СИЛА И ЧЕСТЬ"}`;
+        const targetSrc = `assets/vzglyad-3d/index-20261112c.html?product=${state.currentProduct?.id === "tee-sila-i-chest" ? "sila" : "vzglyad"}`;
         if (real3dFrame.getAttribute("src") !== targetSrc) real3dFrame.src = targetSrc;
       } else {
         real3dFrame.removeAttribute("src");
@@ -683,9 +684,13 @@
   function updatePurchaseSummary() {
     const product = state.currentProduct && productById(state.currentProduct.id);
     const gift = Boolean(product && !Core.buyable(product));
+    const qty = Math.max(1, Number(state.qty) || 1);
+    const priceLabel = product
+      ? (qty > 1 ? `${qty} шт. · ${rubles(priceNumber(product.price) * qty)}` : product.price)
+      : "";
     $("#purchaseSummary").textContent = gift
       ? "Добавим бесплатно к заказу, пока есть тираж."
-      : product ? `${product.price} · ${state.selectedSize ? `размер ${state.selectedSize}` : "Выбери размер"}` : "Выбери размер";
+      : product ? `${priceLabel} · ${state.selectedSize ? `размер ${state.selectedSize}` : "Выбери размер"}` : "Выбери размер";
     const blocked = !state.catalogReady || !product || Boolean(product.stock_check_unavailable) || !Core.available(product) || gift;
     $("#addToCartButton").disabled = blocked;
     $("#addToCartButton").innerHTML = !state.catalogReady ? (state.catalogLoading ? "ПРОВЕРЯЕМ НАЛИЧИЕ" : "ОБНОВИ КАТАЛОГ") : gift ? "ТОЛЬКО В ПОДАРОК" : product?.stock_check_unavailable ? "НАЛИЧИЕ УТОЧНЯЕТСЯ" : blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : state.selectedSize ? 'ДОБАВИТЬ В КОРЗИНУ <span>+</span>' : 'ВЫБРАТЬ РАЗМЕР <span>↑</span>';
@@ -794,7 +799,7 @@
     if (guide) guide.classList.add("hidden");
     resetFitFinder(product);
     $("#sheetDetails").innerHTML = product.media_note
-      ? `<strong>ЧЕСТНО О МЕДИА</strong><p class="media-note">${escapeHTML(product.media_note)}</p>`
+      ? `<p class="media-note">${escapeHTML(product.media_note)}</p>`
       : "";
     renderPersonalization(product);
     sheetProduct = product;
@@ -2395,6 +2400,12 @@
         ? "У «ВЗГЛЯДА» прилегающий атлетический крой — сидит плотно по торсу"
         : "У «СИЛА И ЧЕСТЬ» прямой свободный крой — выбери желаемую посадку";
     }
+    $("#adviceFitCard")?.classList.toggle("is-recommended", !isFitted);
+    $("#adviceOversizeCard")?.classList.toggle("is-recommended", isFitted);
+    if ($("#adviceFitPill")) {
+      $("#adviceFitPill").textContent = "БАЗА ПО КРОЮ";
+      $("#adviceFitPill").classList.toggle("hidden", isFitted);
+    }
     if ($("#adviceFitType")) $("#adviceFitType").textContent = isFitted ? "Плотно по торсу" : "По фигуре · База";
     if ($("#adviceFitText")) {
       $("#adviceFitText").textContent = isFitted
@@ -2744,7 +2755,7 @@
     const entries = (Array.isArray(state.data.community) ? state.data.community : [])
       .filter(item => item && typeof item.image === "string" && item.image);
     if (!entries.length) {
-      for (const [id, image] of [["tee-sila-i-chest", "assets/drop/hero-founder-retouch-v4.webp"], ["tee-vzglyad", "assets/client/vzglyad-nikita-front-20261111.webp"]]) {
+      for (const [id, image] of [["tee-sila-i-chest", "assets/drop/hero-founder-retouch-v4.webp"], ["tee-vzglyad", "assets/client/vzglyad-nikita-front-20261111c.webp"]]) {
         const product = productById(id);
         if (product) entries.push({image, name:"Никита Ворожбитов", caption:product.name, city:"НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ", product_id:id});
       }
@@ -3063,13 +3074,53 @@
       window.addEventListener("pointercancel", event => { if (event.pointerId === pointer) reset(); });
       enterBtn.addEventListener("click", event => { if (event.detail === 0 || !completed) finishEntry(); });
     }
-    $("#smartSizer")?.addEventListener("click", event => {
-      const step = event.target.closest("[data-sizer]");
-      if (step) { const [field, direction] = step.dataset.sizer.split("-"); const delta = direction === "plus" ? 1 : -1; const limits = field === "height" ? [130,230] : [35,220]; combatSizer[field] = Math.max(limits[0], Math.min(limits[1], combatSizer[field] + delta)); updateCombatSizer(); haptic("light"); return; }
-      const card = event.target.closest("[data-smart-size]"); if (!card || card.disabled) return;
-      const size = card.dataset.smartSize; if (!((state.currentProduct?.sizes || []).includes(size))) return;
-      saveJSON("vorozhbitov_fit", { height: String(combatSizer.height), weight: String(combatSizer.weight), fit: card.id === "adviceOversizeCard" ? "oversize" : "regular" }); selectSize(size); haptic("medium"); $("#addToCartButton")?.focus({preventScroll:true});
-    });
+    const sizerRoot = $("#smartSizer");
+    if (sizerRoot) {
+      let sizerHoldDelay = null;
+      let sizerHoldTick = null;
+      let sizerRepeated = false;
+      const stepSizerField = step => {
+        const [field, direction] = step.dataset.sizer.split("-");
+        const delta = direction === "plus" ? 1 : -1;
+        const limits = field === "height" ? [130, 230] : [35, 220];
+        const next = Math.max(limits[0], Math.min(limits[1], combatSizer[field] + delta));
+        if (next === combatSizer[field]) return false;
+        combatSizer[field] = next;
+        updateCombatSizer();
+        return true;
+      };
+      const clearSizerHold = () => {
+        if (sizerHoldDelay) { clearTimeout(sizerHoldDelay); sizerHoldDelay = null; }
+        if (sizerHoldTick) { clearInterval(sizerHoldTick); sizerHoldTick = null; }
+      };
+      sizerRoot.addEventListener("pointerdown", event => {
+        if (event.button !== 0) return;
+        const step = event.target.closest("[data-sizer]");
+        if (!step) return;
+        clearSizerHold();
+        sizerRepeated = false;
+        sizerHoldDelay = setTimeout(() => {
+          sizerRepeated = true;
+          if (stepSizerField(step)) haptic("light");
+          sizerHoldTick = setInterval(() => {
+            if (!stepSizerField(step)) clearSizerHold();
+          }, 65);
+        }, 320);
+      });
+      ["pointerup", "pointercancel", "pointerleave"].forEach(evt => sizerRoot.addEventListener(evt, clearSizerHold));
+      window.addEventListener("blur", clearSizerHold);
+      sizerRoot.addEventListener("click", event => {
+        const step = event.target.closest("[data-sizer]");
+        if (step) {
+          if (sizerRepeated && event.detail !== 0) { sizerRepeated = false; return; }
+          if (stepSizerField(step)) haptic("light");
+          return;
+        }
+        const card = event.target.closest("[data-smart-size]"); if (!card || card.disabled) return;
+        const size = card.dataset.smartSize; if (!((state.currentProduct?.sizes || []).includes(size))) return;
+        saveJSON("vorozhbitov_fit", { height: String(combatSizer.height), weight: String(combatSizer.weight), fit: card.id === "adviceOversizeCard" ? "oversize" : "regular" }); selectSize(size); haptic("medium"); $("#addToCartButton")?.focus({preventScroll:true});
+      });
+    }
     $$("[data-stage]").forEach(button => button.addEventListener("click", () => {
       setStage(button.dataset.stage);
       haptic("light");
@@ -3186,7 +3237,31 @@
       const gate = dropPurchaseGate();
       if (gate) { showToast(gate); return; }
       const lines = pairs.map(({item, product}, index) => `${index + 1}. ${product.name} · размер ${item.size} · ${item.qty} шт. · ${rubles(priceNumber(product.price) * item.qty)}${item.person ? ` · номер: ${String(item.person).slice(0, 32)}` : ""}${/предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`) ? " · предзаказ" : ""}`);
-      const message = ["Здравствуйте! Хочу оформить заказ в «СИЛА И ЧЕСТЬ»:", ...lines, `Итого за вещи: ${rubles(cartTotal())}`, "Прошу подтвердить наличие, подарок, доставку и оплату."].join("\n");
+      const gift = state.data?.gift;
+      const giftLine = gift && gift.available && Number(gift.remaining) > 0
+        ? `• Подарок: ${gift.name || "ЖЕТОН"} · 0 ₽ (первые 100 к дропу 001)`
+        : "";
+      const profile = state.profile || {};
+      const profileLines = [];
+      const contactName = String(profile.name || "").trim();
+      const contactPhone = String(profile.phone || "").trim();
+      const contactCity = String(profile.city || "").trim();
+      const contactAddress = String(profile.address || "").trim();
+      const contactDeliver = String(profile.deliver || "").trim();
+      if (contactName) profileLines.push(`Имя: ${contactName}`);
+      if (contactPhone) profileLines.push(`Телефон: ${contactPhone}`);
+      if (contactCity || contactAddress) {
+        const dest = [contactCity, contactAddress].filter(Boolean).join(", ");
+        profileLines.push(`Доставка: ${contactDeliver || "СДЭК"} · ${dest}`);
+      }
+      const message = [
+        "Здравствуйте! Хочу оформить заказ в «СИЛА И ЧЕСТЬ»:",
+        ...lines,
+        ...(giftLine ? [giftLine] : []),
+        `Итого за вещи: ${rubles(cartTotal())}`,
+        ...profileLines,
+        "Прошу подтвердить наличие, подарок, доставку и оплату."
+      ].join("\n");
       const url = message.length <= 3500 ? checkoutClient.managerUrl(state.data.order_manager_username, message) : "";
       if (!url) { showToast("Не удалось подготовить заказ. Корзина сохранена."); return; }
       if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
@@ -3259,6 +3334,7 @@
       if (event.target.closest("[data-sheet-qty='plus']")) { state.qty = Math.min(20, state.qty + 1); haptic("light"); }
       if (event.target.closest("[data-sheet-qty='minus']")) { state.qty = Math.max(1, state.qty - 1); haptic("light"); }
       $("#qtyValue").textContent = String(state.qty);
+      updatePurchaseSummary();
     });
 
     $("#related").addEventListener("click", event => {
@@ -3271,6 +3347,8 @@
       $("#directOrderButton").addEventListener("click", () => {
         const product = state.currentProduct && productById(state.currentProduct.id);
         if (!product || !Core.buyable(product)) return;
+        const gate = dropPurchaseGate();
+        if (gate) { showToast(gate); return; }
         if (!state.selectedSize) {
           $("#sizeHint").textContent = "Сначала выбери размер.";
           $("#sizeHint").classList.add("error");
@@ -3280,12 +3358,26 @@
           return;
         }
         const verb = /предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`) ? "предзаказ" : "заказ";
-        const phone = (state.profile?.phone || "").trim();
+        const qty = Math.max(1, Number(state.qty) || 1);
+        const lineTotal = qty > 1 ? rubles(priceNumber(product.price) * qty) : product.price;
+        const person = product.personalizable ? ($("#personInput")?.value || "").trim().slice(0, 32) : "";
+        const profile = state.profile || {};
+        const name = String(profile.name || "").trim();
+        const phone = String(profile.phone || "").trim();
+        const city = String(profile.city || "").trim();
+        const address = String(profile.address || "").trim();
+        const deliver = String(profile.deliver || "").trim();
+        const gift = state.data?.gift;
+        const hasGift = !gift || (gift.available && Number(gift.remaining) > 0);
+        const extraLines = [];
+        if (name) extraLines.push(`Имя: ${name}`);
+        extraLines.push(`Телефон: ${phone || "укажу в чате"}`);
+        if (city || address) extraLines.push(`Доставка: ${deliver || "СДЭК"} · ${[city, address].filter(Boolean).join(", ")}`);
         const message = [
           `Здравствуйте! Хочу оформить ${verb}:`,
-          `• ${product.name} · размер ${state.selectedSize} · 1 шт. · ${product.price}`,
-          `• Подарок: ЖЕТОН (первые 100 жетонов к дропу 001, со 2-го дропа в подарок не будет)`,
-          `Телефон: ${phone || "укажу в чате"}`
+          `• ${product.name} · размер ${state.selectedSize} · ${qty} шт. · ${lineTotal}${person ? ` · номер: ${person}` : ""}${product.fit ? ` (${product.fit})` : ""}`,
+          ...(hasGift ? [`• Подарок: ЖЕТОН · 0 ₽ (первые 100 жетонов к дропу 001)`] : []),
+          ...extraLines
         ].join("\n");
         const manager = state.data?.order_manager_username || "intellectual_sabotage";
         const url = checkoutClient.managerUrl(manager, message);

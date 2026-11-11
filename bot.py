@@ -3658,7 +3658,7 @@ class BrandBot:
 
     def send_welcome(self, chat_id: int, caption: str, keyboard: dict[str, Any] | None) -> None:
         """Send flagship Drop 001 campaign key-visual on /start (no gif/animation)."""
-        founder_photo = self.local_asset_path("assets/client/bot-welcome-drop001-20261111.jpg")
+        founder_photo = self.local_asset_path("assets/client/bot-welcome-drop001-20261112c.jpg")
         if founder_photo and founder_photo.is_file():
             try:
                 self._send_welcome_file(chat_id, founder_photo, caption, keyboard)
@@ -3666,7 +3666,7 @@ class BrandBot:
             except Exception:
                 LOG.exception("Flagship welcome photo unavailable; using existing welcome")
 
-        asset = self.catalog.data.get("brand", {}).get("welcome_image") or "assets/welcome.jpg"
+        asset = self.catalog.data.get("brand", {}).get("welcome_image") or "assets/welcome-sword-logo.jpg"
         photo = self.local_asset_path(asset)
         photo_url = self.public_asset_url(asset) if photo or str(asset).startswith("https://") else ""
         try:
@@ -7861,16 +7861,17 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         "default-src 'self'; "
         "script-src 'self' https://telegram.org; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: https://*.telegram.org https://telegram.org; "
+        "img-src 'self' data: blob: https://*.telegram.org https://telegram.org; "
         "media-src 'self'; "
         "font-src 'self'; "
         "connect-src 'self'; "
+        "frame-src 'self'; "
         "base-uri 'none'; "
         "form-action 'none'"
     )
-    # Боевой режим пускает витрину в рамку только Telegram. В предпросмотре без
-    # токена рамку не ограничиваем, иначе локальный iframe покажет пустоту.
-    CSP_FRAME_TELEGRAM = "frame-ancestors https://web.telegram.org https://*.telegram.org"
+    # Боевой режим пускает витрину в рамку Telegram и разрешает витрине ('self')
+    # встраивать собственный 3D-обзор (assets/vzglyad-3d/index-*.html).
+    CSP_FRAME_TELEGRAM = "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
 
     def _csp(self) -> str:
         settings = self.settings
@@ -8492,8 +8493,8 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             cache = "public, max-age=31536000, immutable"
         elif suffix in {".jpg", ".jpeg", ".png", ".webp", ".svg"}:
             cache = "public, max-age=3600"
-        elif suffix in {".woff2", ".woff", ".ttf"}:
-            # Шрифты неизменяемы и весят больше всего — держим их в кеше долго.
+        elif suffix in {".woff2", ".woff", ".ttf", ".glb"} or candidate.name.endswith(".bundle.js"):
+            # Шрифты, 3D-модели и версионированные бандлы держим в кеше долго.
             cache = "public, max-age=31536000, immutable"
         else:
             cache = "no-cache"
@@ -8549,7 +8550,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         stamped_products: list[dict[str, Any]] = []
         for product in products:
             stamped = dict(product)
-            for key in ("image", "images", "spin", "video", "card_image"):
+            for key in ("image", "images", "source_images", "spin", "video", "card_image"):
                 value = product.get(key)
                 if isinstance(value, str):
                     stamped[key] = self._stamp_media({"value": value})["value"]
