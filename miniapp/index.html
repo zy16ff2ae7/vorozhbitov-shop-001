@@ -7,12 +7,150 @@
   <meta name="description" content="СИЛА И ЧЕСТЬ — бренд одежды с характером. Выпуск 001. Основатель: Никита Ворожбитов.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23070708'/%3E%3Cpath d='M32 8 L35 20 L35 44 L40 48 L40 50 L34 50 L34 56 L30 56 L30 50 L24 50 L24 48 L29 44 L29 20 Z' fill='%23e10600'/%3E%3C/svg%3E">
   <title>СИЛА И ЧЕСТЬ</title>
-  <link rel="preload" href="fonts/sila-chest-700.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/sila-chest-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css">
-  <script src="telegram-web-app.js"></script>
+  <link rel="preload" href="fonts/sila-chest-700.woff2?v=1792969380" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/sila-chest-400.woff2?v=1792969380" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css?v=drop1-20261110">
+  <script src="telegram-web-app.js?v=anna-20261111b"></script>
+  <link rel="stylesheet" href="polish.css?v=product-20261030">
+<style>.size-guide-header { display: flex; align-items: center; gap: 12px; }
+.size-guide-header img { width: 56px; height: 64px; object-fit: cover; object-position: top; flex-shrink: 0; }
+.size-guide-header p { margin: 0; line-height: 1.55; font-size: 12px; }
+.compare-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0 8px; }
+.compare-fields label { font-size: 10px; color: #b9b4ae; letter-spacing: .06em; }
+.compare-fields input { width: 100%; min-width: 0; height: 48px; margin-top: 7px; padding: 10px; background: #191919; color: #eee8df; border: 1px solid #45413d; font-size: 16px; letter-spacing: 0; }
+#compareResult { line-height: 1.6; font-size: 12px; }
+.measurement-table { margin: 16px 0 8px; border-top: 1px solid #45413d; font-variant-numeric: tabular-nums; }
+.measurement-table > div { display: grid; grid-template-columns: 44px repeat(4, minmax(0, 1fr)); gap: 3px; align-items: center; padding: 10px 0; border-bottom: 1px solid #34322f; color: #eee8df; font-size: 11px; }
+.measurement-table .measurement-head { color: #aaa59d; font-size: 9px; letter-spacing: .06em; }
+.cart-next > .cart-order-note { margin: 12px 0 16px; color: #b9b4ae; font-size: 12px; line-height: 1.5; }
+.compare-fields:has(#compareLengthLabel.hidden) { grid-template-columns: minmax(0, 1fr); }
+
+.bottom-nav { grid-template-columns: repeat(5,minmax(0,1fr)); }
+.bottom-link small { font-size: 9px; }
+.community-sheet { width: min(100%,560px); }
+.community-sheet .community-section { padding: 22px 20px calc(24px + var(--safe-bottom)); }
+.community-sheet .community-section .section-heading { display: none; }
+.community-sheet .community-lead { color: #b9b4ae; font-size: 13px; line-height: 1.65; }
+.care-list { list-style: none; padding: 0; margin: 0 0 18px; }
+.care-list li { position: relative; padding: 0 0 12px 16px; }
+.care-list li::before { content: '—'; color: #d04439; position: absolute; left: 0; }
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V3 */
+@media (max-width: 600px) {
+  .product-scroll .sheet-image { height: clamp(280px, 38svh, 320px); }
+}
+.sheet-image:has(.sheet-photo[src*="vzglyad-client-"]) { background: #111110; }
+.sheet-image .sheet-photo[src*="vzglyad-client-"] { background: #111110; object-fit: contain; }
+
+/* Product presentation: blackened steel, calm typography, clear purchase hierarchy. */
+:root { --product-studio-bg: #171719 url("assets/product-master/steel-studio.jpg") center / cover no-repeat; }
+@media (max-width: 600px) {
+  .product-grid .product-image { aspect-ratio: 1 / 1; }
+  .product-grid .product-image img[src*="vzglyad-client-"] { object-position: center 35%; }
+}
+.sheet-heading-line { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+.sheet-heading-line h2 { min-width:0; margin:8px 0; line-height:1.08; }
+.sheet-heading-line .sheet-price { margin:0; white-space:nowrap; font-size:clamp(18px, 5vw, 22px); }
+.sheet-content .sign-block { margin:12px 0 20px; padding:11px 14px; background:#181717; border-left:2px solid #b8322a; color:#bcb5ad; font-size:12px; line-height:1.55; }
+.gallery-groups button { min-height:44px; font-size:10px; letter-spacing:.08em; }
+.gallery-thumbnails button, .gallery-thumbnails button.active { flex-basis:52px; width:52px; height:64px; }
+.sheet-facts .fact-row { padding-block:13px; }
+.size-heading { margin-top:20px; }
+.size-guide-toggle { color:#d0c8c0; }
+.size-button { min-height:50px; }
+.purchase-bar { box-shadow:0 -8px 24px #0007; }
+@media (max-width: 360px) { .sheet-heading-line h2 { font-size:25px; } .sheet-heading-line .sheet-price { font-size:18px; } }
+
+/* Uniform product cards: visual proportions, controls and baselines. */
+.product-grid { align-items:stretch; }
+.product-grid .product-card { display:flex; flex-direction:column; min-width:0; border:1px solid #34312f; background:#101011; }
+.product-grid .product-image { flex:none; width:100%; aspect-ratio:1 / 1; border:0; border-bottom:1px solid #34312f; }
+.product-grid .is-branded-spin .product-image { background:var(--product-studio-bg); }
+.product-grid .is-branded-spin .product-image img { object-fit:contain; object-position:center; background:transparent; padding:0; }
+.product-grid .product-card[data-product-id="tee-sila-i-chest"] .product-image img { transform:translateY(-2%) scale(1.22); }
+.product-grid .product-card[data-product-id="tee-sila-i-chest"] .product-image .product-img-back { transform:scale(1.13); }
+.product-grid .product-card[data-product-id="tee-vzglyad"] .product-img-front { object-fit:cover; }
+.product-grid .is-branded-spin .product-hover { display:none; }
+.product-grid .is-branded-spin .badge-side { top:auto; right:12px; bottom:12px; min-height:44px; z-index:4; }
+.product-grid .product-info { flex:1; display:flex; flex-direction:column; padding:16px; }
+.product-grid .product-info h3 { min-height:34px; margin:8px 0; }
+.product-grid .product-open { min-height:34px; line-height:1.18; }
+.product-grid .product-sizes { min-height:18px; }
+.product-grid .product-bottom { margin-top:auto; padding-top:14px; border-top:1px solid #34312f; }
+.product-grid .product-price { font-variant-numeric:tabular-nums; }
+@media (max-width: 360px) { .product-grid .product-info { padding:14px; } }
+.sheet-image:has(.sheet-video:not(.hidden)) { background:#0d0d0e; }
+.sheet-image > .sheet-video { object-fit:contain; background:transparent; }
+.sheet-image .model3d-frame { position:absolute; inset:0; width:100%; height:100%; border:0; background:#101011; }
+.sheet-image:has(.model3d-frame:not(.hidden)) { height:clamp(350px, 55svh, 500px); }
+</style>
+<style>.sheet-image.studio-media:has(.sheet-photo[src*="vzglyad-"]) { background: #101011; } .studio-media .sheet-photo[src*="vzglyad-"] { background: #101011; }</style><style>
+/* One consistent media surface; detailed photographs remain uncropped. */
+.product-scroll .sheet-image:has(.sheet-photo:not(.hidden)) { height:clamp(330px,52svh,560px); background:#101011; }
+.product-scroll .sheet-image .sheet-photo { object-fit:contain; background:#101011; padding:0; }
+.product-scroll .sheet-image:has(.sheet-photo[src*="detail-"]:not(.hidden)) { height:clamp(280px,42svh,460px); }
+.gallery-thumbnails { overflow-x:auto; scrollbar-width:thin; }
+.gallery-thumbnails button { flex-shrink:0; }
+.sheet-content #sheetDescription { line-height:1.65; font-size:13px; }
+#productPassport { margin-top:24px; }
+#productPassport .passport-row { line-height:1.6; }
+</style><style>.compare-fields label { display:flex; flex-direction:column; justify-content:space-between; gap:8px; } .compare-fields input { margin-top:0; } .compare-fields input:focus-visible { outline:1px solid #d24b40; outline-offset:2px; }</style><style>
+/* Product information follows the purchase decision on phone screens. */
+.product-sheet .sheet-content { padding-top:18px; }
+.product-sheet .sheet-heading-line { gap:12px; margin-bottom:18px; }
+.product-sheet .sheet-heading-line h2 { text-wrap:balance; }
+.product-sheet .sheet-facts { margin-bottom:18px; }
+.product-sheet .sheet-facts .fact-row { padding:10px 0; font-size:12px; line-height:1.5; }
+.product-sheet .preorder-notice { padding:12px 14px; margin:0 0 18px; background:#191615; border-left:2px solid #c23b30; }
+.product-sheet .preorder-notice strong { font-size:10px; letter-spacing:.1em; }
+.product-sheet .preorder-notice p { font-size:12px; line-height:1.6; margin:6px 0 0; }
+.product-more { border:0; border-top:1px solid #35322f; margin:0; padding:0; }
+.product-more > summary { min-height:56px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; list-style:none; font-size:11px; font-weight:700; letter-spacing:.08em; }
+.product-more > summary::-webkit-details-marker { display:none; }
+.product-more > summary span { color:#c74438; font-size:18px; font-weight:400; transition:transform .15s; }
+.product-more[open] > summary span { transform:rotate(45deg); }
+.product-more > p, .product-more #passportBody { margin:0; padding:0 0 18px; line-height:1.65; }
+#productPassport { margin:0; }
+.product-sheet .product-care details { margin:0; }
+.product-sheet .sheet-content .sign-block { margin:18px 0; font-size:11px; padding:10px 12px; }
+.cart-preorder-note { padding:12px; border-left:2px solid #bd3d32; background:#1b1716; font-size:12px; line-height:1.6; }
+.cart-line-name strong { line-height:1.3; text-wrap:balance; }
+.cart-line .qty-control button { min-width:40px; min-height:40px; }
+button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline-offset:3px; }
+@media(max-width:430px) { .sheet-image:has(.model3d-frame:not(.hidden)) { height:clamp(300px,46svh,410px); } .product-scroll .sheet-image:has(.sheet-photo:not(.hidden)) { height:clamp(300px,46svh,430px); } .purchase-bar { padding-bottom:max(12px,env(safe-area-inset-bottom)); } }
+@media(prefers-reduced-motion:reduce) { .product-more > summary span { transition:none; } }
+</style><style>
+/* One quiet system for the storefront, community and personal account. */
+.brand-marquee { display:none; }
+.hero-lead, .founder-context, .community-entry p { text-wrap:pretty; }
+.hero-copy .hero-lead { max-width:36em; line-height:1.65; }
+#dropEvent { padding-block:18px; border-bottom:1px solid #34312f; }
+#dropEvent .drop-event-main h2 { font-family:inherit; font-size:14px; line-height:1.4; letter-spacing:.06em; }
+#dropEvent .drop-event-main p { font-size:12px; max-width:34em; }
+#dropEvent .drop-event-main .section-kicker { font-size:9px; }
+#dropEvent .button { min-height:44px; font-size:10px; }
+#catalog { scroll-margin-top:100px; }
+.manifesto { border-top:1px solid #34312f; border-bottom:1px solid #34312f; }
+.founder-name { font-size:14px; letter-spacing:.06em; color:#eee8df; }
+.founder-name span { display:block; margin-top:6px; font-size:11px; color:#aaa59d; letter-spacing:0; }
+.manifesto-body .founder-context { font-size:13px; line-height:1.7; max-width:42em; color:#bdb6ad; }
+.manifesto-lines { border-top:1px solid #34312f; margin-top:24px; }
+.community-entry { display:flex; align-items:center; justify-content:space-between; gap:28px; border-block:1px solid #34312f; background:#111112; }
+.community-entry h2 { margin:16px 0; font-size:clamp(25px,4vw,46px); line-height:1.1; }
+.community-entry p { color:#b8b1a8; max-width:38em; line-height:1.7; font-size:13px; }
+.community-entry .button { flex-shrink:0; }
+.community-card { border:1px solid #34312f; margin:0; background:#101011; overflow:hidden; }
+.community-card img, .community-card video { width:100%; aspect-ratio:3/4; object-fit:cover; object-position:center; display:block; }
+.community-card figcaption { padding:18px; display:flex; flex-direction:column; gap:10px; }
+.community-card figcaption > span { font-size:9px; color:#b8b1a8; letter-spacing:.08em; }
+.community-card figcaption > strong { font-size:16px; }
+.community-card button { min-height:44px; padding:12px 0; border-top:1px solid #34312f; text-align:left; font-size:11px; font-weight:700; }
+.profile-order { border:1px solid #34312f; background:#141414; }
+.profile-order-status { font-variant-numeric:tabular-nums; }
+.catalog-error, .community-empty { padding:24px; border:1px solid #34312f; background:#141414; line-height:1.6; }
+@media(max-width:600px){ .community-entry { display:block; } .community-entry .button { width:100%; margin-top:18px; } #dropEvent { gap:12px; } #dropEvent .drop-event-main p { margin:6px 0 0; } .manifesto { padding-block:32px; } .manifesto-lines > div { padding-block:16px; } .community-grid { grid-template-columns:minmax(0,1fr); gap:20px; } .community-sheet .community-section { padding-inline:16px; } }
+</style><link rel="stylesheet" href="readability-20261108.css">
 </head>
-<body>
+<body class="welcoming">
   <a class="skip-link" href="#catalog">Перейти к вещам</a>
   <div class="noise" aria-hidden="true"></div>
   <div class="scan" aria-hidden="true"></div>
@@ -23,26 +161,39 @@
     <small>СИЛА И ЧЕСТЬ</small>
   </div>
 
-  <section class="welcome hidden" id="welcome" aria-label="Приветствие">
-    <video class="welcome-media" id="welcomeVideo" muted autoplay loop playsinline preload="auto" aria-hidden="true"></video>
-    <img class="welcome-media hidden" id="welcomeFallback" src="assets/product-proof/tee-sila-front-photo-v1.jpg" alt="Реальное фото футболки «СИЛА И ЧЕСТЬ»">
+  <section class="welcome" id="welcome" aria-label="Приветствие">
+    <video class="welcome-media" id="welcomeVideo" muted autoplay playsinline webkit-playsinline preload="auto" aria-hidden="true"></video>
+    <img class="welcome-media hidden" id="welcomeFallback" src="assets/product-studio-v1/sila-000.webp?v=1793032413" alt="Никита Ворожбитов в фирменной футболке">
     <div class="welcome-shade"></div>
-    <button class="welcome-motion hidden" id="welcomeMotion" type="button" aria-label="Остановить видео"><span id="welcomeFrameCount" aria-hidden="true">ФИЛЬМ · 22 СЕК</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
+    <button class="welcome-motion hidden" id="welcomeMotion" type="button" aria-label="Остановить видео"><span id="welcomeFrameCount" aria-hidden="true">ФИЛЬМ · 8 СЕК</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
     <div class="welcome-frame">
       <div class="welcome-kicker"><span class="pulse-dot"></span> ПЕРВЫЙ ДРОП · ДЛЯ СВОИХ</div>
       <p class="welcome-title">СИЛА<br>И ЧЕСТЬ</p>
       <div class="welcome-copy" id="welcomeCopy">
-        <p class="welcome-lede"><span class="welcome-drop">Брат.</span> Ты зашёл на закрытую территорию.</p>
-        <p>Сила и честь — в поступках. И в том, что носишь.</p>
-        <ul class="welcome-facts">
-          <li>Плотная ткань</li>
-          <li>Честная посадка</li>
-          <li>Первый тираж</li>
-        </ul>
-        <p class="welcome-cta">Бери размер, пока он есть.</p>
+        <p class="welcome-lede">НЕ НА СЛОВАХ.</p>
       </div>
       <div class="welcome-actions">
-        <button class="button button-primary punch" id="enterShop" type="button">ВОЙТИ В МАГАЗИН <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button>
+        <div class="seal-ritual" id="sealRitual">
+          <button class="seal-hit" id="enterShop" type="button" aria-label="Войти в магазин" aria-describedby="sealInstructions">
+            <span class="seal-button" aria-hidden="true">
+              <span class="seal-aura"></span>
+              <svg class="seal-progress-svg" viewBox="0 0 128 128">
+                <circle class="seal-track" cx="64" cy="64" r="56"></circle>
+                <circle class="seal-fill" id="sealProgressFill" cx="64" cy="64" r="56"></circle>
+              </svg>
+              <span class="seal-core">
+                <img class="seal-art" src="assets/sila-chest-seal-v3.jpg?v=1793094542" alt="">
+                <span class="seal-flare"></span>
+              </span>
+              <span class="seal-haptic-wave"></span>
+            </span>
+            <span class="seal-details">
+              <strong class="seal-caption">ПРИЛОЖИ ПЕЧАТЬ</strong>
+              <span class="seal-instructions" id="sealInstructions">Нажми или удерживай, чтобы войти.</span>
+              <span class="seal-status" id="sealTimerBadge" role="status" aria-live="polite"></span>
+            </span>
+          </button>
+        </div>
       </div>
       <div class="welcome-meta">
         <b>СИЛА И ЧЕСТЬ</b>
@@ -82,47 +233,33 @@
 
     <main>
       <section class="hero" id="home" aria-labelledby="heroTitle">
-        <div class="hero-media hero-mode-living" id="heroMedia" role="region" aria-label="Галерея дропа 001">
-          <div class="hero-carousel-progress" id="heroCarouselProgress" aria-hidden="true"></div>
-          <div class="hero-living-poster" id="heroLivingPoster">
-            <img class="hero-layer hero-layer-fallback" src="assets/drop/hero-sila-miniapp-v3.jpg" alt="Никита Ворожбитов в футболке «СИЛА И ЧЕСТЬ»" fetchpriority="high" decoding="async" id="heroFallback" width="900" height="978">
-            <img class="hero-layer hero-layer-bg" src="assets/drop/hero-sila-layer-bg-v3.jpg" alt="" aria-hidden="true" decoding="async" id="heroBackground" width="900" height="978">
-            <div class="hero-poster-type" aria-hidden="true"><span>СИЛА</span><span>ЧЕСТЬ</span></div>
-            <img class="hero-layer hero-layer-subject" src="assets/drop/hero-sila-layer-subject-v3.webp" alt="" aria-hidden="true" decoding="async" id="heroSubject" width="900" height="978">
-          </div>
-          <div class="hero-slide-item" data-hero-slide="1" aria-hidden="true">
-            <img src="assets/product-proof/tee-sila-front-photo-v1.jpg" alt="Футболка «СИЛА И ЧЕСТЬ» перед" loading="lazy">
-          </div>
-          <div class="hero-slide-item" data-hero-slide="2" aria-hidden="true">
-            <img src="assets/product-proof/tee-sila-back-photo-v2.jpg" alt="Клинок на спине" loading="lazy">
-          </div>
-          <div class="hero-slide-item" data-hero-slide="3" aria-hidden="true">
-            <img src="assets/product-proof/tee-vzglyad-front-source-v2.jpg" alt="Футболка «ВЗГЛЯД»" loading="lazy">
-          </div>
-          <div class="hero-slide-item" data-hero-slide="4" aria-hidden="true">
-            <video src="assets/video/tee-odin-v-pole-voin-rotation-concrete-v1.mp4" muted loop playsinline preload="metadata" aria-label="360° вращение белой футболки"></video>
+        <div class="hero-media hero-mode-living" id="heroMedia" role="region" aria-label="Основатель бренда Никита Ворожбитов">
+          <div class="hero-living-poster hero-retouched" id="heroLivingPoster">
+            <img class="hero-layer hero-layer-fallback" src="hero-founder-20261107.webp?v=1794071379" alt="Никита Ворожбитов в футболке «СИЛА И ЧЕСТЬ»" fetchpriority="high" decoding="async" id="heroFallback" width="1203" height="1308">
           </div>
           <div class="hero-shade"></div>
-          <button class="hero-carousel-nav hero-carousel-prev" id="heroCarouselPrev" type="button" aria-label="Предыдущий кадр">‹</button>
-          <button class="hero-carousel-nav hero-carousel-next" id="heroCarouselNext" type="button" aria-label="Следующий кадр">›</button>
-          <div class="hero-live" id="heroLiveBadge"><span class="pulse-dot"></span> <span id="heroLiveText">НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ</span></div>
+          <div class="hero-live" id="heroLiveBadge"><span class="pulse-dot"></span> <span id="heroLiveText"><small>ОСНОВАТЕЛЬ</small><strong>НИКИТА ВОРОЖБИТОВ</strong></span></div>
         </div>
         <div class="hero-copy">
-          <div class="eyebrow"><span>ОДЕЖДА С ХАРАКТЕРОМ</span><span>СИЛА И ЧЕСТЬ</span></div>
-          <h1 id="heroTitle">СИЛА<br><em>И ЧЕСТЬ.</em></h1>
-          <p class="hero-lead">001 Первый дроп. Твоя форма на каждый день.</p>
+          <div class="eyebrow"><span>ОДЕЖДА С ХАРАКТЕРОМ</span><span>ДРОП 001</span></div>
+          <h1 id="heroTitle">СИЛА И ЧЕСТЬ<span>.</span></h1>
+          <p class="hero-lead">Две футболки. Два характера. Первый выпуск бренда Никиты Ворожбитова.</p>
           <div class="hero-actions">
             <button class="button button-primary" id="heroProductButton" type="button">СМОТРЕТЬ ВЕЩИ <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button>
-            <button class="hero-film-button" id="dropFilmButton" type="button"><span aria-hidden="true">▶</span> ФИЛЬМ ДРОПА · 6 КАДРОВ</button>
+            <button class="hero-film-button" id="dropFilmButton" type="button"><span aria-hidden="true">▶</span> СМОТРЕТЬ ФИЛЬМ</button>
           </div>
           <div class="brand-principles"><span>СИЛА</span><i aria-hidden="true">/</i><span>ДИСЦИПЛИНА</span><i aria-hidden="true">/</i><span>ЧЕСТЬ</span></div>
         </div>
+      </section>
+      <section class="resume-shopping section-pad hidden" id="resumeShopping" aria-labelledby="resumeShoppingTitle">
+        <div class="resume-shopping-copy"><span class="section-kicker">ПРОДОЛЖИТЬ ВЫБОР</span><h2 id="resumeShoppingTitle"></h2><p id="resumeShoppingText"></p></div>
+        <div class="resume-shopping-actions"><button class="button button-primary" id="resumeShoppingAction" type="button"></button><button class="resume-shopping-dismiss" id="resumeShoppingDismiss" type="button" aria-label="Скрыть предложение">×</button></div>
       </section>
       <section class="drop-event section-pad" id="dropEvent" aria-labelledby="dropEventTitle">
         <div class="drop-event-main">
           <span class="section-kicker" id="dropEventKicker">001 / СОБЫТИЕ</span>
           <h2 id="dropEventTitle">ДРОП ОТКРЫТ</h2>
-          <p id="dropEventText">Статус и размеры берутся из живого каталога — без придуманных остатков.</p>
+          <p id="dropEventText">Первый выпуск «Сила и честь». Выбирай вещь, которая говорит за тебя.</p>
         </div>
         <div class="drop-event-side">
           <div class="drop-event-timer hidden" id="dropEventTimer" role="timer" aria-label="До открытия дропа"></div>
@@ -158,10 +295,11 @@
         <div class="section-heading">
           <div>
             <span class="section-kicker">01 / ПЕРВЫЙ ДРОП</span>
-            <h2>ВЕЩИ<br><em>БРЕНДА.</em></h2>
+            <h2>ПЕРВЫЙ<br><em>ДРОП.</em></h2>
           </div>
           <span class="item-count" id="productCount">— ВЕЩИ</span>
         </div>
+        <p class="catalog-intro">Вещи с характером. Для тех, кто держит слово.</p>
 
         <div class="category-row" id="categoryChips" role="group" aria-label="Категории"></div>
 
@@ -199,6 +337,8 @@
             <button class="filter-chip" data-size-filter="M" type="button">M</button>
             <button class="filter-chip" data-size-filter="L" type="button">L</button>
             <button class="filter-chip" data-size-filter="XL" type="button">XL</button>
+            <button class="filter-chip" data-size-filter="2XL" type="button">2XL</button>
+            <button class="filter-chip" data-size-filter="3XL" type="button">3XL</button>
           </div>
         </div>
 
@@ -208,27 +348,19 @@
         <div class="empty-state hidden" id="emptyState">
           <span class="empty-mark">∅</span>
           <h3>Ничего не нашлось</h3>
-          <p>Такой вещи нет. Другой запрос — или сбрось фильтры и начни с витрины.</p>
+          <p>С такими фильтрами вещей не нашлось. Сбрось их, чтобы увидеть весь первый выпуск.</p>
           <button class="button button-dark" id="emptyReset" type="button">ПОКАЗАТЬ ВСЁ</button>
         </div>
       </section>
 
-      <section class="product-story section-pad" id="details" aria-labelledby="detailTitle">
-        <div class="detail-heading"><span class="section-kicker">ПЕРВЫЙ ВЫПУСК / ПРЕДМЕТНО</span><h2 id="detailTitle">ВЕЩЬ<br>В ДЕТАЛЯХ.</h2></div>
-        <button class="detail-shot" type="button" data-detail-product="tee-sila-i-chest" data-detail-photo="0" aria-label="Футболка «СИЛА И ЧЕСТЬ» спереди">
-          <img src="assets/product-proof/tee-sila-front-photo-v1.jpg" alt="Футболка «СИЛА И ЧЕСТЬ» спереди" loading="lazy" decoding="async" width="720" height="780">
-          <span class="detail-caption"><small>01 / ПЕРЕД</small><strong>СИЛА И ЧЕСТЬ.</strong><span>Предметный вид первого выпуска ↗</span></span>
-        </button>
-      </section>
-
       <section class="manifesto section-pad" id="manifesto">
         <div class="manifesto-label">
-          <span class="section-kicker">02 / КОНЦЕПЦИЯ</span>
+          <span class="section-kicker">02 / ОСНОВАТЕЛЬ И БРЕНД</span>
           <span class="vertical-label">СИЛА И ЧЕСТЬ / 1993</span>
         </div>
         <div class="manifesto-body">
           <h2>СИЛА —<br>В ДЕЛЕ.</h2>
-          <p>Дисциплина начинается с простых вещей. Приходить. Делать. Держать слово.</p>
+          <p class="founder-name">НИКИТА ВОРОЖБИТОВ <span>Основатель «СИЛА И ЧЕСТЬ»</span></p><p>Дисциплина начинается с простых вещей. Приходить. Делать. Держать слово.</p><p class="founder-context">В первом выпуске — «СИЛА И ЧЕСТЬ» с прямым кроем и «ВЗГЛЯД» с более приталенной посадкой. Рассмотри принты, сравни параметры и выбери свою вещь.</p>
           <div class="manifesto-lines">
             <div><span>01</span><strong>ПЛОТНО</strong><small>Ткань, которую чувствуешь</small></div>
             <div><span>02</span><strong>ПРЯМО</strong><small>Без лишнего на вещах</small></div>
@@ -237,6 +369,33 @@
         </div>
       </section>
 
+      <section class="mascot-gift section-pad hidden" id="mascotGift" aria-labelledby="mascotGiftTitle">
+        <div class="mascot-gift-art" id="mascotGiftVisual">
+          <img class="mascot-visual" src="assets/mascot/steel-greeter-poster-v2.jpg?v=1793039915" alt="Стальной персонаж бренда в фирменной футболке" loading="lazy" decoding="async">
+          <span class="mascot-art-caption" aria-hidden="true">СИЛА И ЧЕСТЬ / 001</span>
+          <div class="mascot-gift-intro">
+            <span class="section-kicker">ПЕРВЫЙ ДРОП / ДЛЯ СВОИХ</span>
+            <h2 id="mascotGiftTitle">ЗНАК<br>СВОИХ<span>.</span></h2>
+          </div>
+        </div>
+        <div class="mascot-gift-copy">
+          <p id="mascotGiftDescription">К первому дропу — 100 подарочных жетонов с фирменной гравировкой. Со второго дропа подарочных жетонов не будет.</p>
+          <div class="mascot-real-gift">
+            <img id="mascotGiftImage" alt="Металлический жетон — подарок к заказу" width="72" height="88" loading="lazy" decoding="async">
+            <div><span class="mascot-gift-label" id="mascotGiftLabel">ПОДАРОК К ЗАКАЗУ</span><strong>ФИРМЕННЫЙ ЖЕТОН</strong><span id="mascotGiftStatus" role="status">Проверяем доступность подарка…</span></div>
+          </div>
+          <div class="mascot-gift-actions">
+            <button class="button button-primary" id="mascotGiftShop" type="button">ВЫБРАТЬ ВЕЩЬ <span aria-hidden="true">↗</span></button>
+            <button class="mascot-gift-details" id="mascotGiftDetails" type="button">ПОДРОБНЕЕ О ЖЕТОНЕ <span aria-hidden="true">↗</span></button>
+          </div>
+          <span class="mascot-gift-note" id="mascotGiftNote">Подарок доступен в первом дропе, пока есть жетоны из первой сотни.</span>
+        </div>
+      </section>
+
+
+
+
+      <section class="community-entry section-pad" aria-labelledby="communityEntryTitle"><div><span class="section-kicker">НА СВОИХ / В ЖИЗНИ</span><h2 id="communityEntryTitle">ПОСАДКА<br>В ЖИЗНИ.</h2><p>Фотографии в вещах бренда. Посмотри посадку и открой понравившуюся модель.</p></div><button type="button" class="button button-ghost" id="openCommunityFromHome">СМОТРЕТЬ ОБРАЗЫ ↗</button></section>
       <section class="club-section section-pad" id="club" aria-labelledby="clubTitle">
         <div class="section-heading compact">
           <div>
@@ -253,31 +412,17 @@
           <span id="clubSource">Прогресс на этом устройстве</span>
         </div>
         <div class="club-task" id="clubTask">
-          <small id="clubTaskDay">ДЕНЬ 01</small>
-          <strong id="clubTaskText">Тренировка или 30 минут движения. Без отговорок.</strong>
+          <div class="club-task-copy">
+            <small id="clubTaskDay">ДЕНЬ 01</small>
+            <strong id="clubTaskText">Тренировка или 30 минут движения. Без отговорок.</strong>
+          </div>
+          <div class="club-lifter" id="clubLifter" role="img" aria-label="Стальной персонаж в футболке Сила и честь поднимает и опускает штангу"></div>
+          <button class="club-lifter-toggle" id="clubLifterToggle" type="button" aria-label="Остановить анимацию" aria-pressed="true">Ⅱ</button>
         </div>
         <div class="club-days" id="clubDays" aria-label="Дни челленджа"></div>
         <div class="club-actions">
           <button class="button button-primary" id="clubAction" type="button">ВСТУПИТЬ В КЛУБ</button>
           <p class="club-note" id="clubNote">Из Telegram прогресс сохраняется в боте. В браузере — на этом устройстве.</p>
-        </div>
-      </section>
-
-      <section class="community-section section-pad" id="community" aria-labelledby="communityTitle">
-        <div class="section-heading compact">
-          <div>
-            <span class="section-kicker">04 / СВОИ</span>
-            <h2 id="communityTitle">СВОИ<br><em>В ДЕЛЕ.</em></h2>
-          </div>
-        </div>
-        <p class="community-lead">Фотографии покупателей первого дропа в городской форме «СИЛА И ЧЕСТЬ».</p>
-        <div class="community-grid" id="communityGrid"></div>
-        <div class="community-cta">
-          <div>
-            <strong>Хочешь сюда?</strong>
-            <span>Пришли менеджеру фото в вещи бренда, город и разрешение на публикацию.</span>
-          </div>
-          <button class="button button-ghost" id="communitySubmit" type="button">ПРИСЛАТЬ ФОТО</button>
         </div>
       </section>
 
@@ -302,27 +447,27 @@
         <div class="faq-list">
           <details open>
             <summary><span>01</span> Как заказать?</summary>
-            <p>Выбери вещь и размер, добавь в корзину и нажми «Оформить заказ». Откроется Telegram с готовым текстом для менеджера. Проверь состав и отправь сообщение — только после этого менеджер начнёт подтверждение.</p>
+            <p>Выбери вещь и размер, добавь в корзину и перейди в Telegram. Проверь и отправь готовое сообщение: наличие, доставку и оплату согласуем в чате.</p>
           </details>
           <details>
             <summary><span>02</span> Как платить?</summary>
-            <p>Основной сценарий — через менеджера. Если удобнее оплатить онлайн, выбери отдельную кнопку «Оплатить онлайн»: списание произойдёт только после твоего подтверждения у провайдера. Статус заказа виден в профиле.</p>
+            <p>После отправки заказа в Telegram с тобой согласуют доступные способы оплаты.</p>
           </details>
           <details>
             <summary><span>03</span> Как работает доставка?</summary>
-            <p>Доступны СДЭК и Яндекс. Стоимость и срок зависят от города — менеджер подтвердит их в чате. В заказе видны этапы сборки, передачи в доставку и получения.</p>
+            <p>Отправляем СДЭК и Яндексом. Сборка заказа занимает 1–2 дня; для предзаказа — после готовности вещи. Стоимость и срок доставки согласуем в Telegram.</p>
           </details>
           <details>
             <summary><span>04</span> Что с размером?</summary>
-            <p>Выбери буквенный размер в карточке. Неподтверждённые числовые замеры мы не публикуем; производственную сетку уточнит менеджер. Если нужного размера нет — нажми «Ждать размер».</p>
+            <p>Открой подсказку в карточке и сравни параметры тела с таблицей размеров. Учитывай грудь, талию, бёдра и рост.</p>
           </details>
           <details>
             <summary><span>05</span> Как смотреть вещь с разных сторон?</summary>
-            <p>Открой карточку — вкладка «Обзор». Тяни влево-вправо: вещь поворачивается обычными фото. «Фото» — отдельные кадры, если они есть.</p>
+            <p>Открой карточку и вкладку «360°»: тяни влево-вправо или нажми «Вращать». Во вкладке «Обзор» можно посмотреть перед и спину. Круговой обзор — визуализация по материалам бренда.</p>
           </details>
           <details>
             <summary><span>06</span> Можно вернуть?</summary>
-            <p>Возврат и обмен — по правилам продавца и закону. Если вещь не села или размера не оказалось — пиши менеджеру, разберём. Брак меняем без разговоров.</p>
+            <p>Если размер не подошёл или возник вопрос по качеству, напиши менеджеру — он поможет оформить возврат и сообщит адрес. Подробные условия готовятся к публикации.</p>
           </details>
         </div>
       </section>
@@ -343,22 +488,47 @@
   <nav class="bottom-nav" aria-label="Навигация">
     <button class="bottom-link active" data-scroll="home" type="button"><span class="icon" data-icon="home"></span><small>Главная</small></button>
     <button class="bottom-link" data-scroll="catalog" type="button"><span class="icon" data-icon="grid"></span><small>Первый дроп</small></button>
+    <button class="bottom-link" id="communityTab" type="button"><span class="icon" data-icon="people"></span><small>На своих</small></button>
     <button class="bottom-link bottom-cart" id="bottomCartButton" type="button"><span class="icon" data-icon="bag"></span><small>Корзина</small><b class="nav-badge hidden" id="bottomCartCount">0</b></button>
     <button class="bottom-link" id="bottomProfileButton" type="button"><span class="icon" data-icon="user"></span><small>Профиль</small></button>
   </nav>
 
-  <div class="modal-backdrop hidden" id="productModal" role="dialog" aria-modal="true" aria-label="Карточка товара">
-    <div class="product-sheet">
-      <div class="sheet-handle" aria-hidden="true"></div>
-      <button class="sheet-close" data-close="productModal" type="button" aria-label="Закрыть">×</button>
-      <div class="sheet-image image-frame">
-        <div class="stage-switch" role="tablist" aria-label="Просмотр">
-          <button class="stage-btn active" id="stage3d" data-stage="3d" role="tab" aria-selected="true" aria-controls="view3d" type="button">360°</button>
-          <button class="stage-btn" id="stagePhoto" data-stage="photo" role="tab" aria-selected="false" aria-controls="sheetImage" type="button">ФОТО</button>
-          <button class="stage-btn hidden" id="stageVideo" data-stage="video" role="tab" aria-selected="false" aria-controls="sheetVideo" type="button">ВИДЕО</button>
+  <div class="modal-backdrop hidden" id="communityModal" role="dialog" aria-modal="true" aria-label="На своих">
+    <div class="info-sheet community-sheet"><div class="sheet-handle" aria-hidden="true"></div><div class="sheet-header"><div><span class="section-kicker">СИЛА И ЧЕСТЬ / СООБЩЕСТВО</span><h2>НА СВОИХ.</h2></div><button class="sheet-close" data-close="communityModal" type="button" aria-label="Закрыть">×</button></div>
+      <section class="community-section section-pad" id="community" aria-labelledby="communityTitle">
+        <div class="section-heading compact">
+          <div>
+            <span class="section-kicker">04 / СВОИ</span>
+            <h2 id="communityTitle">СВОИ<br><em>В ДЕЛЕ.</em></h2>
+          </div>
         </div>
+        <p class="community-lead">Посадка в жизни: фотографии людей в вещах бренда. Параметры моделей показываем, когда они известны.</p>
+        <div class="community-grid" id="communityGrid"></div>
+        <div class="community-cta">
+          <div>
+            <strong>Хочешь сюда?</strong>
+            <span>Пришли в чат магазина фото в вещи бренда, город и разрешение на публикацию.</span>
+          </div>
+          <button class="button button-ghost" id="communitySubmit" type="button">ПРИСЛАТЬ ФОТО</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="productModal" role="dialog" aria-modal="true" aria-label="Карточка товара">
+    <div class="product-sheet"><div class="product-controls">        <div class="stage-switch" role="tablist" aria-label="Просмотр">
+          <button class="stage-btn active" id="stage3d" data-stage="3d" role="tab" aria-selected="true" aria-controls="view3d" type="button">360°</button>
+          <button class="stage-btn" id="stagePhoto" data-stage="photo" role="tab" aria-selected="false" aria-controls="sheetImage" type="button">РАКУРСЫ</button>
+          <button class="stage-btn hidden" id="stageVideo" data-stage="video" role="tab" aria-selected="false" aria-controls="sheetVideo" type="button">ВИДЕО</button>
+        </div><button class="sheet-close" data-close="productModal" type="button" aria-label="Закрыть">×</button></div><div class="product-scroll">
+      <div class="sheet-handle" aria-hidden="true"></div>
+
+      <div class="sheet-image image-frame">
+
         <div class="view3d" id="view3d" role="tabpanel" tabindex="0" aria-label="Обзор вещи. Повернуть: стрелки влево и вправо." aria-describedby="view3dHint"></div>
-        <img id="sheetImage" class="sheet-photo hidden" role="tabpanel" alt="">
+        <iframe id="real3dFrame" class="model3d-frame hidden" title="Трёхмерный обзор футболки ВЗГЛЯД" sandbox="allow-scripts allow-same-origin"></iframe>
+        <img id="sheetImage" class="sheet-photo hidden" role="tabpanel" alt=""><div id="mediaError" class="media-error hidden" role="status"><p>Не удалось загрузить кадр</p><button id="retryPhoto" type="button">ПОВТОРИТЬ ↻</button></div>
         <video id="sheetVideo" class="sheet-video hidden" role="tabpanel" muted loop playsinline controls preload="none" aria-label="Видеообзор товара без звука"></video>
         <span class="sheet-badge" id="sheetBadge"></span>
         <p class="view3d-hint" id="view3dHint">ТЯНИ В СТОРОНЫ</p>
@@ -366,53 +536,98 @@
       </div>
       <div class="media-toolbar">
         <button id="mediaPrev" type="button" aria-label="Предыдущий ракурс">←</button>
-        <span id="mediaPosition" aria-live="polite">01 / 08</span>
+        <span class="media-position-group"><span id="mediaPosition" aria-live="polite">01 / 08</span><span id="mediaViewName"></span></span>
         <button id="spinToggle" type="button" aria-pressed="false">Вращать</button>
         <button id="mediaNext" type="button" aria-label="Следующий ракурс">→</button>
       </div>
+      <div id="galleryGroups" class="gallery-groups hidden" aria-label="Тип изображений"><button type="button" data-gallery-group="studio">ОБЗОР ВЕЩИ</button><button type="button" data-gallery-group="source">ФОТО И ДЕТАЛИ</button></div>
       <div class="gallery-dots gallery-thumbnails hidden" id="galleryDots" aria-label="Фотографии вещи"></div>
       <div class="sheet-content">
         <div class="sheet-kicker" id="sheetKicker">БАЗА</div>
-        <h2 id="sheetTitle">—</h2>
-        <blockquote class="sign-block" id="sheetSign">—</blockquote>
-        <div class="sheet-price" id="sheetPrice">—</div>
-        <p class="sheet-description" id="sheetDescription">—</p>
+        <div class="sheet-heading-line"><h2 id="sheetTitle">—</h2><div class="sheet-price" id="sheetPrice">—</div></div>
         <div class="sheet-facts" id="sheetFacts"></div>
-        <section class="passport" id="productPassport" aria-label="Цифровой паспорт вещи">
-          <div class="passport-head"><span>ПАСПОРТ ВЕЩИ</span><span id="passportCode">001</span></div>
-          <div id="passportBody"></div>
-        </section>
+        <div class="preorder-notice hidden" id="preorderNotice"><strong>ЭТО ПРЕДЗАКАЗ</strong><p>Вещь отправят после готовности партии. Дата отправки уточняется; срок доставки считается отдельно.</p></div>
         <div class="size-block">
           <div class="size-heading">
             <strong>РАЗМЕР</strong>
-            <button class="size-guide-toggle" id="sizeGuideToggle" type="button" aria-expanded="false">ТАБЛИЦА РАЗМЕРОВ ▾</button>
+            <button class="size-guide-toggle" id="sizeGuideToggle" type="button" aria-expanded="false">ПОМОЩЬ С РАЗМЕРОМ ▾</button>
           </div>
-          <div class="size-guide hidden" id="sizeGuide">
-            <div class="size-guide-table">
-              <div class="size-guide-row size-guide-header">
-                <span>Размер</span><span>Рост</span><span>Вес</span><span>Ширина</span>
+          <div class="size-guide hidden" id="sizeGuide"><div class="size-guide-header"><img src="assets/mascot/steel-greeter-poster-v2.jpg?v=1793039915" alt="" loading="lazy"><p>Измерь обхват груди, талии и бёдер, затем сравни свои параметры с таблицей.</p></div><div id="measurementTable"></div><div class="compare-fields"><label>ОБХВАТ ГРУДИ, СМ<input id="compareWidth" type="number" inputmode="decimal" min="50" max="170" step="0.1" placeholder="Например, 102"></label><label>ТАЛИЯ, СМ · НЕОБЯЗАТЕЛЬНО<input id="compareWaist" type="number" inputmode="decimal" min="40" max="200" step="0.1" placeholder="Например, 88"></label><label>БЁДРА, СМ · НЕОБЯЗАТЕЛЬНО<input id="compareHips" type="number" inputmode="decimal" min="40" max="200" step="0.1" placeholder="Например, 104"></label><label id="compareLengthLabel">РОСТ, СМ · НЕОБЯЗАТЕЛЬНО<input id="compareLength" type="number" inputmode="decimal" min="120" max="230" step="1" placeholder="Например, 180"></label></div><button class="button button-ghost full-button" id="compareSize" type="button" disabled>СРАВНИТЬ С ТАБЛИЦЕЙ</button><p id="compareResult" class="size-guide-note" role="status">Укажи обхват груди, чтобы увидеть подходящие строки таблицы.</p></div>
+          <!-- Боевой калькулятор размера (Smart Sizing) -->
+          <div class="smart-sizer hidden" id="smartSizer">
+            <div class="smart-sizer-top">
+              <div class="smart-sizer-title">
+                <span class="pulse-dot"></span>
+                <strong>БОЕВОЙ КАЛЬКУЛЯТОР РАЗМЕРА</strong>
               </div>
-              <div class="size-guide-row"><span>S</span><span>165–174 см</span><span>60–72 кг</span><span>57 см</span></div>
-              <div class="size-guide-row"><span>M</span><span>172–182 см</span><span>70–82 кг</span><span>60 см</span></div>
-              <div class="size-guide-row"><span>L</span><span>178–188 см</span><span>80–92 кг</span><span>63 см</span></div>
-              <div class="size-guide-row"><span>XL</span><span>184–194 см</span><span>90–105 кг</span><span>66 см</span></div>
-              <div class="size-guide-row"><span>XXL</span><span>188–200 см</span><span>100–120 кг</span><span>69 см</span></div>
+              <span class="smart-sizer-subtitle">Ориентир по таблице · сверь с вещью, которая тебе подходит</span>
             </div>
-            <p class="size-guide-note">Плотный премиальный оверсайз (240 г/м²). Свободный крой со спущенным плечом.</p>
+
+            <div class="smart-sizer-controls">
+              <div class="smart-param-card">
+                <span class="smart-param-label">РОСТ</span>
+                <div class="smart-stepper">
+                  <button type="button" class="stepper-btn" data-sizer="height-minus" aria-label="Уменьшить рост">−</button>
+                  <div class="stepper-val-wrap">
+                    <span class="stepper-num" id="sizerHeightVal">182</span>
+                    <span class="stepper-unit">см</span>
+                  </div>
+                  <button type="button" class="stepper-btn" data-sizer="height-plus" aria-label="Увеличить рост">+</button>
+                </div>
+              </div>
+
+              <div class="smart-param-card">
+                <span class="smart-param-label">БОЕВОЙ ВЕС</span>
+                <div class="smart-stepper">
+                  <button type="button" class="stepper-btn" data-sizer="weight-minus" aria-label="Уменьшить вес">−</button>
+                  <div class="stepper-val-wrap">
+                    <span class="stepper-num" id="sizerWeightVal">86</span>
+                    <span class="stepper-unit">кг</span>
+                  </div>
+                  <button type="button" class="stepper-btn" data-sizer="weight-plus" aria-label="Увеличить вес">+</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="smart-advice-deck" id="smartAdviceDeck" aria-live="polite">
+              <button type="button" class="advice-card advice-athletic" id="adviceFitCard" data-smart-size="L">
+                <div class="advice-head">
+                  <span class="advice-badge">РАЗМЕР <b id="adviceFitSize">L</b></span>
+                  <span class="advice-fit-type">Ближе к фигуре</span>
+                </div>
+                <p class="advice-body" id="adviceFitText">Ориентир ближе к фигуре. Посадка зависит от комплекции.</p>
+                <div class="advice-footer">
+                  <span class="advice-action-label">Выбрать размер <span class="advice-target-size" id="adviceFitTarget">L</span></span>
+                  <span class="advice-arrow">›</span>
+                </div>
+              </button>
+
+              <button type="button" class="advice-card advice-oversize is-recommended" id="adviceOversizeCard" data-smart-size="XL">
+                <div class="advice-head">
+                  <span class="advice-badge">РАЗМЕР <b id="adviceOversizeSize">XL</b></span>
+                  <span class="advice-fit-type">Свободнее</span>
+                  <span class="advice-rec-pill">ОВЕРСАЙЗ</span>
+                </div>
+                <p class="advice-body" id="adviceOversizeText">Размер свободнее. Сверь параметры тела с таблицей перед заказом.</p>
+                <div class="advice-footer">
+                  <span class="advice-action-label">Выбрать размер <span class="advice-target-size" id="adviceOversizeTarget">XL</span></span>
+                  <span class="advice-arrow">›</span>
+                </div>
+              </button>
+            </div>
           </div>
+
           <div class="size-list" id="sizeList"></div>
           <p class="size-hint" id="sizeHint">Выбери размер.</p>
+
+          <details class="fit-expanded"><summary>РАСШИРЕННЫЙ ПОДБОР</summary>
           <div class="fit-finder" id="fitFinder">
-            <div class="fit-finder-head"><strong>ПОДБОР ПО ТЕБЕ</strong><span>рост · вес · посадка</span></div>
+            <div class="fit-finder-head"><strong>ПОДБОР ПО ТЕБЕ</strong><span>рост · вес</span></div>
             <div class="fit-finder-grid">
               <label>РОСТ, СМ<input id="fitHeight" type="number" min="130" max="230" inputmode="numeric" placeholder="180" autocomplete="off"></label>
               <label>ВЕС, КГ<input id="fitWeight" type="number" min="35" max="220" inputmode="numeric" placeholder="85" autocomplete="off"></label>
             </div>
-            <div class="fit-options" role="group" aria-label="Желаемая посадка">
-              <button type="button" data-fit-choice="close" aria-pressed="false">Плотнее</button>
-              <button type="button" data-fit-choice="regular" class="active" aria-pressed="true">Обычно</button>
-              <button type="button" data-fit-choice="oversize" aria-pressed="false">Оверсайз</button>
-            </div>
+
             <div class="fit-presets" role="group" aria-label="Быстрый выбор по комплекции">
               <button class="fit-preset-btn" type="button" data-fit-preset="175,74"><strong>M</strong> 172–177 см · 70–76 кг</button>
               <button class="fit-preset-btn" type="button" data-fit-preset="182,84"><strong>L</strong> 178–184 см · 80–88 кг</button>
@@ -422,6 +637,7 @@
             <button class="button button-ghost full-button" id="fitRecommend" type="button">ПОДОБРАТЬ РАЗМЕР</button>
             <p class="fit-result" id="fitResult" aria-live="polite">Подберём по опубликованной таблице и сразу выберем размер выше.</p>
           </div>
+          </details>
         </div>
         <div class="person-row hidden" id="personRow">
           <label class="person-label" for="personInput" id="personLabel">НОМЕР ЖЕТОНА</label>
@@ -440,11 +656,35 @@
             <button data-sheet-qty="plus" type="button" aria-label="Больше">+</button>
           </div>
         </div>
-        <div class="purchase-bar"><span id="purchaseSummary">Выбери размер</span><button class="button button-primary full-button" id="addToCartButton" type="button">ДОБАВИТЬ В КОРЗИНУ <span>+</span></button></div>
+
         <button class="button button-ghost full-button" id="waitlistButton" type="button">ЖДАТЬ РАЗМЕР</button>
+        <blockquote class="sign-block" id="sheetSign">—</blockquote>
+        <details class="product-more"><summary>О ВЕЩИ <span aria-hidden="true">+</span></summary><p class="sheet-description" id="sheetDescription">—</p></details>
+        <section class="product-care" aria-label="Размер, уход и возврат">
+          <details><summary>КАК ВЫБРАТЬ РАЗМЕР <span>+</span></summary>
+            <p>Используй сантиметровую ленту. Измеряй тело без натяжения ленты поверх тонкой одежды.</p>
+            <ol class="measure-list"><li><strong>Грудь</strong><span>Измерь обхват по самой широкой части груди, держа ленту параллельно полу.</span></li><li><strong>Талия</strong><span>Измерь по естественной линии талии, не затягивая ленту.</span></li><li><strong>Бёдра и рост</strong><span>Измерь обхват по самой широкой части бёдер и рост без обуви.</span></li></ol>
+            <p class="care-note">Открой подсказку у выбора размера и сравни параметры тела с таблицей.</p>
+            </details>
+          <details><summary>МАТЕРИАЛ И УХОД <span>+</span></summary>
+            <p id="careMaterial" class="care-material"></p><p>Бережный уход за футболкой с принтом:</p><ul class="care-list"><li>Стирай вывернутой наизнанку в холодной воде, до 30 °C, на деликатном режиме с вещами похожих цветов.</li><li>Используй мягкое средство без отбеливателя; не три и не выкручивай принт.</li><li>Суши естественным образом, вдали от батареи и прямого солнца. Машинную сушку лучше не использовать.</li><li>Если нужна глажка, гладь с изнанки при низкой температуре, не касаясь принта и аппликации.</li></ul><p class="care-note">Это общие рекомендации. Если на ярлыке вещи указаны другие условия, следуй ярлыку.</p></details>
+          <details><summary>ОБМЕН И ВОЗВРАТ <span>+</span></summary>
+            <p>Если размер не подошёл или есть вопрос по качеству, напиши магазину: укажи номер заказа и опиши ситуацию. При вопросе по качеству приложи фотографии.</p><p class="care-note">Условия и адрес возврата ещё согласовываются с продавцом.</p>
+            <button type="button" class="fit-help-link" id="returnHelp">ЗАДАТЬ ВОПРОС О ЗАКАЗЕ ↗</button></details>
+        </section>
+        <details class="passport product-more" id="productPassport"><summary>ДЕТАЛИ ВЫПУСКА <span aria-hidden="true">+</span></summary>
+          <span id="passportCode" class="hidden">001</span>
+          <div id="passportBody"></div>
+        </details>
         <div class="sheet-details" id="sheetDetails"></div>
         <div class="related" id="related"></div>
       </div>
+      </div>
+        <div class="purchase-bar">
+          <span id="purchaseSummary">Выбери размер</span>
+          <button class="button button-primary full-button" id="directOrderButton" type="button" style="margin-bottom:8px;">ОФОРМИТЬ ЗАКАЗ В TELEGRAM ↗</button>
+          <button class="button button-outline full-button" id="addToCartButton" type="button">ДОБАВИТЬ В КОРЗИНУ <span>+</span></button>
+        </div>
     </div>
   </div>
 
@@ -452,7 +692,7 @@
     <div class="profile-sheet">
       <div class="sheet-handle" aria-hidden="true"></div>
       <div class="sheet-header">
-        <div><span class="section-kicker">ПРОФИЛЬ</span><h2>ТЫ.</h2></div>
+        <div><span class="section-kicker">ПРОФИЛЬ</span><h2>ТВОЙ ПРОФИЛЬ.</h2></div>
         <button class="sheet-close" data-close="profileModal" type="button" aria-label="Закрыть">×</button>
       </div>
       <div class="profile-body">
@@ -465,25 +705,28 @@
           <span class="profile-fill" id="profileFill">0 / 5</span>
         </div>
 
-        <p class="profile-caption">Контакт</p>
+        <div class="profile-orders" id="profileOrders"></div>
+        <details class="profile-data"><summary>УХОД ЗА ВЕЩЬЮ <span>Открыть +</span></summary><p>Общие рекомендации для футболки с принтом: стирка с изнанки до 30 °C, мягкое средство без отбеливателя, естественная сушка. Не гладь принт и аппликацию. Указания на ярлыке имеют приоритет.</p></details>
+
+        <details class="profile-data"><summary>ДАННЫЕ ДЛЯ ЗАКАЗА <span>Изменить +</span></summary><p class="profile-caption">Контакт</p>
         <label class="field-label">ИМЯ<input id="profileName" type="text" placeholder="Как к тебе обращаться?" autocomplete="name"></label>
         <label class="field-label">ТЕЛЕФОН<input id="profilePhone" type="tel" placeholder="+7 900 000-00-00" inputmode="tel" autocomplete="tel"></label>
 
         <p class="profile-caption">Куда везти</p>
-        <label class="field-label">ГОРОД<input id="profileCity" type="text" placeholder="Могилёв, СПб, Москва…" autocomplete="address-level2"></label>
+        <label class="field-label">ГОРОД<input id="profileCity" type="text" placeholder="Например, Москва" autocomplete="address-level2"></label>
         <label class="field-label">АДРЕС<input id="profileAddress" type="text" placeholder="Улица, дом, квартира" autocomplete="street-address"></label>
         <label class="field-label">ПОДЪЕЗД / ДОМОФОН<input id="profileEntrance" type="text" placeholder="Подъезд 3, домофон 12"></label>
-        <div class="deliver-row" id="profileDeliver">
+        <p class="delivery-preference-label">Желаемый способ доставки · доступность уточняется</p><div class="deliver-row" id="profileDeliver">
           <button class="filter-chip active" data-profile-deliver="СДЭК" type="button">СДЭК</button>
           <button class="filter-chip" data-profile-deliver="Яндекс" type="button">Яндекс</button>
         </div>
 
-        <label class="field-label">КОММЕНТАРИЙ<input id="profileNote" type="text" placeholder="Время, нюанс по размеру"></label>
+        <label class="field-label">КОММЕНТАРИЙ · НЕОБЯЗАТЕЛЬНО<input id="profileNote" type="text" placeholder="Время, нюанс по размеру"></label>
 
         <button class="button button-primary full-button punch" id="saveProfile" type="button">СОХРАНИТЬ <span>✓</span></button>
         <p class="form-note">Сохраняется на этом устройстве и подставляется в заказ: имя, телефон, город, адрес.</p>
 
-        <div class="profile-stats profile-stats-single">
+        </details><div class="profile-stats profile-stats-single">
           <button type="button" id="profileCartBtn"><strong id="profileCartN">0</strong><span>в корзине</span></button>
         </div>
         <div class="profile-club" id="profileClub">
@@ -494,7 +737,6 @@
           </div>
           <button class="button button-ghost" id="profileClubButton" type="button">В КЛУБ</button>
         </div>
-        <div class="profile-orders" id="profileOrders"></div>
       </div>
     </div>
   </div>
@@ -507,23 +749,42 @@
         <button class="sheet-close" data-close="cartModal" type="button" aria-label="Закрыть">×</button>
       </div>
       <div class="cart-content" id="cartContent"></div>
-      <div class="cart-checkout hidden" id="checkoutForm">
+      <div class="cart-next hidden" id="cartNext">
         <div class="checkout-gift hidden" id="checkoutGift"></div>
-        <div class="form-rule"></div>
-        <div class="checkout-total"><span>ИТОГО</span><strong id="cartTotal">0 ₽</strong></div>
-        <label class="field-label">ИМЯ<input id="checkoutName" type="text" placeholder="Как к тебе обращаться?" autocomplete="name"></label>
-        <label class="field-label">ТЕЛЕФОН<input id="checkoutPhone" type="tel" placeholder="+7 900 000-00-00" inputmode="tel" autocomplete="tel"></label>
-        <label class="field-label">ГОРОД<input id="checkoutCity" type="text" placeholder="Могилёв, СПб, Москва…" autocomplete="address-level2"></label>
+        <div class="cart-next-total"><span>Итого за вещи</span><strong id="cartPreviewTotal"></strong></div>
+        <p>Доставка рассчитывается отдельно. Её стоимость подтверждается до оплаты.</p>
+        <p id="cartPreorderNote" class="cart-preorder-note hidden" role="status">В корзине есть предзаказ. Дату готовности и отправки нужно подтвердить до оплаты.</p>
+        <p id="orderUnavailable" class="cart-warning hidden" role="status">Оформление заказа временно недоступно: подключаем чат магазина. Вещи сохранятся в корзине.</p>
+        <button class="button button-primary full-button" id="beginCheckout" type="button">ПРОДОЛЖИТЬ В TELEGRAM <span aria-hidden="true">↗</span></button>
+        <p class="cart-order-note">Откроется чат с готовым заказом. Проверь текст и отправь сообщение — после этого магазин сможет его обработать.</p>
+        <button class="button button-ghost full-button" data-close="cartModal" type="button">ПРОДОЛЖИТЬ ВЫБОР</button>
+      </div>
+      <div class="cart-checkout hidden" id="checkoutForm">
+        <button class="checkout-back" type="button" id="backToCart">← К ВЕЩАМ В КОРЗИНЕ</button>
+        <h3 class="checkout-heading">КУДА ОТПРАВИТЬ?</h3>
+        <p class="checkout-intro">Заполни данные. На следующем шаге проверим заказ.</p>
+        <div class="checkout-steps" aria-label="Этапы оформления"><span class="active">01 · ДАННЫЕ</span><span>02 · ПРОВЕРКА</span><span>03 · ЧАТ</span></div>
+        
+        <label class="field-label">ИМЯ<input id="checkoutName" type="text" placeholder="Как к тебе обращаться?" autocomplete="name" aria-describedby="checkoutNameError"><span class="field-error hidden" id="checkoutNameError" role="alert"></span></label>
+        <label class="field-label">ТЕЛЕФОН<input id="checkoutPhone" type="tel" placeholder="+7 900 000-00-00" inputmode="tel" autocomplete="tel" aria-describedby="checkoutPhoneError"><span class="field-error hidden" id="checkoutPhoneError" role="alert"></span></label>
+        <label class="field-label">ГОРОД<input id="checkoutCity" type="text" placeholder="Например, Москва" autocomplete="address-level2" aria-describedby="checkoutCityError"><span class="field-error hidden" id="checkoutCityError" role="alert"></span></label>
         <label class="field-label">АДРЕС<input id="checkoutAddress" type="text" placeholder="Улица, дом, квартира" autocomplete="street-address"></label>
-        <div class="deliver-row" id="deliverRow">
-          <button class="filter-chip active" data-deliver="СДЭК" type="button">СДЭК</button>
-          <button class="filter-chip" data-deliver="Яндекс" type="button">Яндекс</button>
+        <p class="delivery-preference-label">Желаемый способ доставки · доступность уточняется</p><div class="deliver-row" id="deliverRow">
+          <button class="filter-chip active" data-deliver="СДЭК" type="button" aria-pressed="true">СДЭК</button>
+          <button class="filter-chip" data-deliver="Яндекс" type="button" aria-pressed="false">Яндекс</button>
         </div>
-        <label class="field-label">КОММЕНТАРИЙ<input id="checkoutNote" type="text" placeholder="Подъезд, время, нюанс по размеру"></label>
-        <label class="consent-check"><input id="checkoutConsent" type="checkbox"><span>Соглашаюсь на обработку данных для связи по заказу. <a id="privacyLink" class="privacy-link hidden" href="#" target="_blank" rel="noopener noreferrer">Политика</a></span></label>
-        <button class="button button-primary full-button punch" id="submitManagerOrder" type="button">ОФОРМИТЬ ЗАКАЗ <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button>
-        <button class="button button-ghost full-button" id="submitOrder" type="button">ОПЛАТИТЬ ОНЛАЙН</button>
-        <p class="form-note">«Оформить заказ» откроет Telegram с готовым текстом для менеджера — проверь и отправь его в чате. Счёт при этом не создаётся. Онлайн-оплата — отдельный необязательный сценарий.</p>
+        <div class="checkout-delivery" id="checkoutDelivery" aria-live="polite"></div>
+        <label class="field-label">КОММЕНТАРИЙ · НЕОБЯЗАТЕЛЬНО<input id="checkoutNote" type="text" placeholder="Подъезд, время, нюанс по размеру"></label>
+        <div class="form-rule"></div>
+        <div class="checkout-total"><span>ТОВАРЫ</span><strong id="cartTotal">0 ₽</strong></div>
+        <p class="checkout-total-note">Стоимость, сроки и условия доставки уточняются до оплаты.</p>
+        <button class="delivery-help" id="askDelivery" type="button">УЗНАТЬ СТОИМОСТЬ ДОСТАВКИ <span aria-hidden="true">↗</span></button>
+        <label class="consent-check"><input id="checkoutConsent" type="checkbox" aria-describedby="checkoutConsentError"><span>Соглашаюсь на обработку данных для связи по заказу. <a id="privacyLink" class="privacy-link hidden" href="#" target="_blank" rel="noopener noreferrer">Политика</a></span></label>
+        <span class="field-error hidden" id="checkoutConsentError" role="alert"></span>
+        <p class="privacy-notice" id="privacyNotice">Ссылка на политику обработки данных пока не указана. Если есть вопросы, открой чат магазина.</p>
+        <button class="button button-primary full-button punch" id="submitOrder" type="button">ПРОВЕРИТЬ ЗАКАЗ <span class="arrow-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="M4 12 12 4M5 4h7v7"/></svg></span></button>
+        <button class="button button-ghost full-button hidden" id="submitManagerOrder" type="button">ОФОРМИТЬ ЧЕРЕЗ ЧАТ</button>
+        <p class="form-note">После проверки откроется Telegram с готовым сообщением. Отправь его, чтобы согласовать наличие, доставку и оплату.</p>
       </div>
     </div>
   </div>
@@ -532,7 +793,8 @@
     <div class="lightbox-sheet">
       <button class="sheet-close" data-close="lightbox" type="button" aria-label="Закрыть">×</button>
       <button class="lightbox-zoom" id="lightboxZoom" type="button" aria-pressed="false">Увеличить +</button>
-      <div class="lightbox-viewport" id="lightboxViewport" tabindex="0" role="region" aria-label="Фотография. После увеличения перемещайся стрелками."><img id="lightboxImage" alt=""></div>
+      <div class="lightbox-viewport" id="lightboxViewport" tabindex="0" role="region" aria-label="Фотография товара. Нажми «Увеличить», чтобы рассмотреть детали."><img id="lightboxImage" alt="" draggable="false"></div>
+      <p class="lightbox-hint hidden" id="lightboxHint">Проведи по фото, чтобы рассмотреть детали</p>
       <p id="lightboxCaption"></p>
     </div>
   </div>
@@ -582,23 +844,50 @@
     </div>
   </div>
 
+  <div class="modal-backdrop hidden" id="reviewModal" role="dialog" aria-modal="true" aria-labelledby="reviewTitle">
+    <div class="pay-sheet">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-header"><div><span class="section-kicker">02 / ПРОВЕРКА ЗАКАЗА</span><h2 id="reviewTitle">ВСЁ ВЕРНО?</h2></div><button class="sheet-close" data-close="reviewModal" type="button" aria-label="Вернуться к корзине">×</button></div>
+      <div class="pay-body review-body">
+        <p class="review-intro">Проверь вещи и данные. Следующий шаг — сообщение в Telegram.</p>
+        <div id="reviewLines" class="review-lines"></div>
+        <div id="reviewGift" class="review-gift hidden"></div>
+        <div class="review-details"><span>ПОЛУЧАТЕЛЬ</span><p id="reviewCustomer"></p><span>ДОСТАВКА</span><p id="reviewDelivery"></p></div>
+        <div class="review-total"><span>ИТОГО ЗА ВЕЩИ</span><strong id="reviewTotal"></strong></div>
+        <p class="review-delivery-note">Стоимость и срок доставки уточняются при оформлении.</p>
+        <p id="reviewError" class="review-error hidden" role="alert"></p>
+        <button class="button button-primary full-button" id="confirmOrder" type="button">ОТКРЫТЬ TELEGRAM ↗</button>
+        <button class="button button-ghost full-button" data-close="reviewModal" type="button">ИЗМЕНИТЬ ЗАКАЗ</button>
+        <p class="form-note">Заказ будет передан после отправки сообщения. Корзина сохранится на этом устройстве.</p>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop hidden" id="payModal" role="dialog" aria-modal="true" aria-label="Оплата">
     <div class="pay-sheet">
       <div class="sheet-handle" aria-hidden="true"></div>
       <div class="sheet-header">
-        <div><span class="section-kicker">ОПЛАТА</span><h2>СЧЁТ.</h2></div>
+        <div><span class="section-kicker">03 / ОПЛАТА</span><h2 id="payTitle">ВЫБЕРИ СПОСОБ.</h2></div>
         <button class="sheet-close" data-close="payModal" type="button" aria-label="Закрыть">×</button>
       </div>
-      <div class="pay-body">
+      <div class="pay-body" id="payPendingView">
+        <p class="pay-status" id="payStatus" role="status" aria-live="polite">Счёт создан · ожидает оплаты</p>
         <div class="pay-hero">
           <span class="pay-stamp">1993</span>
-          <p class="pay-kicker">К оплате</p>
+          <p class="pay-kicker">К оплате за вещи · доставка отдельно</p>
           <p class="pay-amount" id="payAmount">—</p>
         </div>
         <ul class="pay-lines" id="payLines"></ul>
-        <p class="pay-lead">Выбери способ. Оплата — после подтверждения выбранным способом. Состав и сумма заказа указаны выше.</p>
+        <p class="pay-lead">Выбери доступный способ. Оплата произойдёт только после подтверждения.</p>
         <div class="pay-methods" id="payMethods"></div>
-        <p class="form-note" id="payNote">Статус обновится сам. Можно закрыть и доплатить из профиля.</p>
+        <p class="form-note" id="payNote">Статус обновится сам. Если закроешь окно, вернись к оплате в профиле, в разделе заказов.</p>
+      </div>
+      <div class="pay-body payment-success hidden" id="paySuccessView" role="status" aria-live="polite">
+        <div class="success-masthead"><span>СИЛА И ЧЕСТЬ <i aria-hidden="true">/</i> 1993</span><span class="success-seal" aria-hidden="true"><span class="brand-mark"></span><span class="success-seal-check">✓</span></span></div>
+        <div class="success-heading"><span class="success-overline">СПАСИБО ЗА ДОВЕРИЕ</span><h3>ОПЛАТА<br>ПРОШЛА<span>.</span></h3><p class="success-order-number hidden" id="paySuccessOrder"></p></div>
+        <div class="success-next"><div class="success-guide"><img src="assets/mascot/steel-greeter-poster-v2.jpg?v=1793039915" alt="" loading="lazy"><span>ТВОЙ ЗАКАЗ СОХРАНЁН</span></div><span>ЧТО ДАЛЬШЕ</span><p id="paySuccessDetail">Оплата подтверждена. Статус заказа доступен в профиле; информация о доставке появится после её подтверждения.</p></div>
+        <div class="success-actions"><button class="button button-primary full-button" id="successOrders" type="button">МОИ ЗАКАЗЫ <span aria-hidden="true">↗</span></button>
+        <button class="button button-ghost full-button" id="successSupport" type="button">ОТКРЫТЬ ЧАТ МАГАЗИНА</button></div>
       </div>
     </div>
   </div>
@@ -610,9 +899,9 @@
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="shop-core.js"></script>
-  <script src="viewer3d.js"></script>
-  <script src="checkout.js"></script>
-  <script src="app.js"></script>
+  <script src="shop-core.js?v=1793384381"></script>
+  <script src="viewer3d.js?v=studio-20261026-1"></script>
+  <script src="checkout.js?v=client-20261105a"></script>
+  <script src="app.js?v=anna-20261111b"></script>
 </body>
 </html>

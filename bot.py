@@ -54,6 +54,12 @@ from payments import (
 BASE_DIR = Path(__file__).resolve().parent
 LOG = logging.getLogger("brand_bot")
 STOP_EVENT = threading.Event()
+ONLINE_PAYMENTS_ENABLED = False  # Временно: оформление через чат магазина.
+
+def order_manager_username() -> str:
+    username = os.getenv("ORDER_MANAGER_USERNAME", "").strip().lstrip("@")
+    return username if re.fullmatch(r"[A-Za-z0-9_]{5,32}", username) else ""
+
 
 
 class RateLimiter:
@@ -106,8 +112,8 @@ REF_RE = re.compile(r"^ref(\d{3,15})$")
 TEASER_UPLOAD_LIMIT = 50 * 1024 * 1024
 BOT_SHORT_DESCRIPTION = "Сила и честь. Одежда. Закрытый выпуск."
 BOT_DESCRIPTION = (
-    "Закрытая витрина «СИЛА И ЧЕСТЬ». Малые тиражи, честный крой. "
-    "Смотри выпуск, бери размер, оплачивай сразу: карта, крипта или звёзды."
+    "Фирменная одежда «СИЛА И ЧЕСТЬ». Первый дроп: выбирай вещь и размер, "
+    "собирай заказ в витрине. Наличие, доставку и оплату подтвердим в чате."
 )
 
 # Attention markers used across the funnel. Kept in one place so the tone stays
@@ -298,6 +304,7 @@ class Settings:
     gift_product_id: str = "tag-sila-i-chest"
     custom_emoji_pack: str = "sila_chest_merch"
     custom_emoji_ids: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_CUSTOM_EMOJI_IDS))
+    inline_emoji_enabled: bool = False
 
     def public_origin(self) -> str:
         parsed = urllib.parse.urlparse(self.webapp_url)
@@ -352,6 +359,7 @@ class Settings:
             gift_product_id=os.getenv("GIFT_PRODUCT_ID", "tag-sila-i-chest").strip(),
             custom_emoji_pack=os.getenv("CUSTOM_EMOJI_PACK", "sila_chest_merch").strip(),
             custom_emoji_ids=json.loads(os.getenv("CUSTOM_EMOJI_IDS", "{}")) if os.getenv("CUSTOM_EMOJI_IDS", "").strip().startswith("{") else dict(DEFAULT_CUSTOM_EMOJI_IDS),
+            inline_emoji_enabled=os.getenv("INLINE_CUSTOM_EMOJI_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"},
         )
 
 
@@ -2477,8 +2485,70 @@ class TelegramAPI:
             headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=60) as response:
-            result = json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Telegram HTTP {exc.code}: {details}") from exc
+        if not result.get("ok"):
+            raise RuntimeError(f"Telegram API error: {result}")
+        return result.get("result")
+
+    def send_animation_file(
+        self,
+        chat_id: int,
+        path: Path,
+        caption: str = "",
+        reply_markup: dict[str, Any] | None = None,
+    ) -> Any:
+        """Upload a local GIF/MP4 as sendAnimation."""
+        caption = fit_html_text(caption, CAPTION_LIMIT - 24)
+        content = path.read_bytes()
+        filename = path.name or "animation.mp4"
+        mime = mimetypes.guess_type(filename)[0] or "video/mp4"
+        boundary = "----VorozhbitovAnim7MA4YWxk"
+        fields: dict[str, str] = {
+            "chat_id": str(chat_id),
+            "caption": caption,
+            "parse_mode": "HTML",
+        }
+        if reply_markup:
+            fields["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False, separators=(",", ":"))
+        crlf = b"\r\n"
+        b_boundary = boundary.encode("ascii")
+        chunks: list[bytes] = []
+        for name, value in fields.items():
+            chunks.extend(
+                [
+                    b"--" + b_boundary + crlf,
+                    f'Content-Disposition: form-data; name="{name}"'.encode("utf-8") + crlf + crlf,
+                    value.encode("utf-8"),
+                    crlf,
+                ]
+            )
+        chunks.extend(
+            [
+                b"--" + b_boundary + crlf,
+                f'Content-Disposition: form-data; name="animation"; filename="{filename}"'.encode("utf-8") + crlf,
+                f"Content-Type: {mime}".encode("utf-8") + crlf + crlf,
+                content,
+                crlf,
+                b"--" + b_boundary + b"--" + crlf,
+            ]
+        )
+        request = urllib.request.Request(
+            self.base_url + "sendAnimation",
+            data=b"".join(chunks),
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Telegram HTTP {exc.code}: {details}") from exc
         if not result.get("ok"):
             raise RuntimeError(f"Telegram API error: {result}")
         return result.get("result")
@@ -2774,6 +2844,8 @@ ICON = {
     "lookbook": "🗡️",  # 10_lookbook.png — Лукбук / спина с клинком
     "channel": "📢",   # 11_channel.png — Тактический сигнал канала
     "back": "⬅️",      # 12_back.png — Уставной шеврон возврата
+    "gift": "🎁",
+    "search": "🔎",
     "film": "🎬",
     "wait": "⏳",
     "fabric": "🧵",
@@ -2944,27 +3016,12 @@ def audience_label(segment: str, categories: Iterable[dict[str, str]]) -> str:
 
 
 SUPPORT_FAQ_DEFAULT: list[dict[str, str]] = [
-    {
-        "key": "where",
-        "label": "Где моя покупка",
-        "answer": "Открой «Мои покупки» в главном меню: у каждой покупки статус — "
-                  "ждёт оплаты, подтверждена, завершена. Как только вещь собрана, "
-                  "статус обновляется здесь же.",
-    },
-    {
-        "key": "pay",
-        "label": "Как оплатить",
-        "answer": "В корзине выбери способ оплаты и нажми «Оплатить» — Telegram "
-                  "покажет платёжную форму. После оплаты покупка появится в "
-                  "«Моих покупках» со статусом «ждёт подтверждения».",
-    },
-    {
-        "key": "refund",
-        "label": "Возврат",
-        "answer": "Открой покупку и нажми «Отменить покупку» до отправки: оплата "
-                  "вернётся тем же способом, срок зависит от банка. Если вещь уже "
-                  "отправлена — напиши менеджеру кнопкой «Написать менеджеру».",
-    },
+    {"key": "where", "label": "Где моя покупка",
+     "answer": "Заказы сейчас оформляются в чате магазина. Чтобы узнать статус, напиши менеджеру и укажи детали своего заказа."},
+    {"key": "pay", "label": "Как оплатить",
+     "answer": "Выбери вещь, отправь подготовленный заказ в чат и согласуй доступный способ оплаты с менеджером."},
+    {"key": "refund", "label": "Возврат",
+     "answer": "Для оформления возврата напиши менеджеру, укажи детали заказа и причину. Адрес и дальнейшие действия согласуем в чате."},
 ]
 
 REFUND_REASON_LABELS = {
@@ -2998,12 +3055,12 @@ PUBLIC_ORDER_STATUS_LABELS = {
 }
 
 ORDER_STATUS_MESSAGES = {
-    "paid": "Оплата прошла. Менеджер подтвердит наличие и доставку.",
-    "confirmed": "Наличие подтверждено. Собираем к отправке.",
-    "shipped": "Заказ собран и передан в доставку. Если выбран СДЭК и доступен трек-номер, менеджер отправит его отдельно.",
-    "received": "Заказ отмечен полученным. Спасибо, что выбрал этот выпуск.",
-    "completed": "Покупка закрыта. Спасибо, что выбрал этот выпуск.",
-    "cancelled": "Покупка отменена. Если это ошибка — собери новую из карточки вещи.",
+    "paid": "Оплата прошла. Дальше менеджер проверит наличие и согласует доставку.",
+    "confirmed": "Наличие подтверждено. Собираем твою вещь к отправке.",
+    "shipped": "Заказ передан в доставку. Если выбран СДЭК и доступен трек-номер, менеджер отправит его отдельно.",
+    "received": "Заказ отмечен полученным. Спасибо, что выбрал «Силу и честь».",
+    "completed": "Покупка завершена. Спасибо, что выбрал этот выпуск.",
+    "cancelled": "Покупка отменена. Если остались вопросы — напиши менеджеру.",
 }
 
 PAYMENT_METHOD_LABELS = {
@@ -3279,6 +3336,113 @@ def add_step_text(position: int, question: str, hint: str = "") -> str:
     return f"{text}\n\n{hint}" if hint else text
 
 
+PRODUCT_EMOJI_KINDS = {
+    "tee-sila-i-chest": "product_sila",
+    "tee-vzglyad": "product_vzglyad",
+    "tag-sila-i-chest": "product_tag",
+}
+PRODUCT_EMOJI_FALLBACK = {"product_sila": "👕", "product_vzglyad": "👁", "product_tag": "🏷"}
+
+
+def inline_emoji_kind(button: dict[str, Any]) -> str:
+    """Choose a brand icon for every button without changing its action."""
+    if button.get("web_app"):
+        return "cart"
+    action = str(button.get("callback_data") or "").lower()
+    label = str(button.get("text") or "").lower()
+    if action.startswith("product:"):
+        product_kind = PRODUCT_EMOJI_KINDS.get(action.split(":", 1)[1])
+        if product_kind:
+            return product_kind
+    for prefixes, kind in (
+        (("search", "find"), "search"),
+        (("gift", "present"), "gift"),
+        (("wsize", "msize", "wait", "size", "fit", "guide"), "size"),
+        (("pay", "payment", "refund"), "pay"),
+        (("cart", "basket", "checkout"), "cart"),
+        (("delivery", "shipping", "track"), "delivery"),
+        (("order", "my_orders"), "orders"),
+        (("support", "help"), "support"),
+        (("account", "profile"), "account"),
+        (("size", "fit", "guide"), "size"),
+        (("product", "catalog", "cat:", "drop"), "drop"),
+        (("channel",), "channel"),
+        (("back", "menu", "home"), "back"),
+    ):
+        if action.startswith(prefixes):
+            return kind
+    for words, kind in (
+        (("поиск", "найти", "искать"), "search"),
+        (("подарок", "подарки", "жетон"), "gift"),
+        (("оплат", "платеж", "платёж", "возврат средств"), "pay"),
+        (("корзин", "оформить", "магазин"), "cart"),
+        (("достав", "отправ", "трек"), "delivery"),
+        (("заказ", "покупк"), "orders"),
+        (("поддерж", "менеджер", "помощ"), "support"),
+        (("профил", "кабинет"), "account"),
+        (("размер", "замер"), "size"),
+        (("каталог", "витрин", "вещ", "товар"), "drop"),
+        (("канал",), "channel"),
+        (("назад", "главное меню"), "back"),
+    ):
+        if any(word in label for word in words):
+            return kind
+    symbol_kinds = [(ICON[key], kind) for key, kind in (
+        ("drop", "drop"), ("orders", "orders"), ("account", "account"),
+        ("support", "support"), ("cart", "cart"), ("pay", "pay"),
+        ("back", "back"), ("delivery", "delivery"), ("channel", "channel"),
+        ("ruler", "tag"), ("catalog", "sword"))]
+    return next((kind for symbol, kind in symbol_kinds if label.startswith(symbol.lower())), "sword")
+
+
+def add_inline_emoji(markup: dict[str, Any] | None, ids: dict[str, str]) -> dict[str, Any] | None:
+    """Add configured icons while preserving actions and the caller's markup."""
+    if not isinstance(markup, dict) or not isinstance(markup.get("inline_keyboard"), list):
+        return markup
+    result = dict(markup)
+    rows = []
+    for row in markup["inline_keyboard"]:
+        buttons = []
+        for original in row:
+            button = dict(original)
+            if not button.get("icon_custom_emoji_id"):
+                kind = inline_emoji_kind(button)
+                value = str(ids.get(kind) or ids.get("sword") or "")
+                if value.isdigit():
+                    button["icon_custom_emoji_id"] = value
+                    label = str(button.get("text") or "")
+                    for symbol in sorted(set(ICON.values()), key=len, reverse=True):
+                        if label.startswith(symbol + " "):
+                            button["text"] = label[len(symbol):].strip()
+                            break
+            buttons.append(button)
+        rows.append(buttons)
+    result["inline_keyboard"] = rows
+    return result
+
+
+def without_button_icons(markup: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(markup, dict):
+        return markup
+    result = dict(markup)
+    for key in ("inline_keyboard", "keyboard"):
+        if isinstance(markup.get(key), list):
+            result[key] = []
+            for row in markup[key]:
+                cleaned = []
+                for button in row:
+                    if not isinstance(button, dict):
+                        cleaned.append(button)
+                        continue
+                    plain = {k: v for k, v in button.items() if k != "icon_custom_emoji_id"}
+                    if button.get("icon_custom_emoji_id") and button.get("web_app") and plain.get("text") == "ОТКРЫТЬ МАГАЗИН":
+                        plain["text"] = "ОТКРЫТЬ МАГАЗИН ↗"
+                    cleaned.append(plain)
+                result[key].append(cleaned)
+    return result
+
+
+
 class ScreenSender:
     """Прокси к API: первый экран после нажатия правит то сообщение, чью кнопку нажали.
 
@@ -3288,18 +3452,59 @@ class ScreenSender:
     счета, подтверждения покупки), отправляется как раньше.
     """
 
-    def __init__(self, api: Any, take_edit_target: Callable[[int], int | None]):
+    def __init__(self, api: Any, take_edit_target: Callable[[int], int | None], inline_ids: dict[str, str] | None = None):
         self._api = api
         self._take_edit_target = take_edit_target
+        self._inline_ids = inline_ids
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._api, name)
 
+    def _send_photo_with_icon_fallback(self, method: str, chat_id: int, photo: Any,
+                                       caption: str, reply_markup: dict[str, Any] | None) -> Any:
+        send = getattr(self._api, method)
+        original_markup = reply_markup
+        if self._inline_ids is not None:
+            reply_markup = add_inline_emoji(reply_markup, self._inline_ids)
+        try:
+            return send(chat_id, photo, caption, reply_markup)
+        except RuntimeError as exc:
+            error = str(exc).lower()
+            if self._inline_ids is None or not any(key in error for key in ("custom emoji", "custom_emoji", "button_icon")):
+                raise
+            fallback = without_button_icons(reply_markup)
+            if fallback == reply_markup:
+                raise
+            LOG.warning("Telegram rejected custom button icons on welcome photo; retrying without icons")
+            return send(chat_id, photo, caption, without_button_icons(original_markup))
+
+    def send_photo(self, chat_id: int, photo: str, caption: str, reply_markup: dict[str, Any] | None = None) -> Any:
+        return self._send_photo_with_icon_fallback("send_photo", chat_id, photo, caption, reply_markup)
+
+    def send_photo_file(self, chat_id: int, photo: Path, caption: str = "", reply_markup: dict[str, Any] | None = None) -> Any:
+        return self._send_photo_with_icon_fallback("send_photo_file", chat_id, photo, caption, reply_markup)
+
+    def send_animation_file(self, chat_id: int, animation: Path, caption: str = "", reply_markup: dict[str, Any] | None = None) -> Any:
+        return self._send_photo_with_icon_fallback("send_animation_file", chat_id, animation, caption, reply_markup)
+
     def send_message(self, chat_id: int, text: str, reply_markup: dict[str, Any] | None = None) -> Any:
+        original_markup = reply_markup
+        if self._inline_ids is not None:
+            reply_markup = add_inline_emoji(reply_markup, self._inline_ids)
         message_id = self._take_edit_target(chat_id)
         if message_id and self._api.edit_message(chat_id, message_id, text, reply_markup):
             return {"message_id": message_id, "chat": {"id": chat_id}, "edited": True}
-        return self._api.send_message(chat_id, text, reply_markup)
+        try:
+            return self._api.send_message(chat_id, text, reply_markup)
+        except RuntimeError as exc:
+            error = str(exc).lower()
+            if self._inline_ids is None or not any(key in error for key in ("custom emoji", "custom_emoji", "button_icon")):
+                raise
+            fallback = without_button_icons(reply_markup)
+            if fallback == reply_markup:
+                raise
+            LOG.warning("Telegram rejected custom button icons; retrying with plain button labels")
+            return self._api.send_message(chat_id, text, without_button_icons(original_markup))
 
 
 class BrandBot:
@@ -3311,7 +3516,7 @@ class BrandBot:
         # Экран, открытый нажатием, меняется на месте: прокси перехватывает
         # первое сообщение экрана и правит то сообщение, чью кнопку нажали.
         self._screen_edit: tuple[int, int] | None = None
-        self.api = ScreenSender(api, self.take_screen_edit)
+        self.api = ScreenSender(api, self.take_screen_edit, settings.custom_emoji_ids if settings.inline_emoji_enabled else None)
 
     def emoji(self, kind: str, fallback: str = "") -> str:
         """Возвращает кастомный эмодзи Telegram (<tg-emoji>) или стандартный символ."""
@@ -3331,36 +3536,18 @@ class BrandBot:
         return fb
 
     def show_emoji_pack(self, chat_id: int) -> None:
-        """Инструкция и ссылка на фирменный тактический эмодзи-пак бренда."""
+        """Показать актуальный набор анимированных значков и ссылку на него."""
         pack_link = f"https://t.me/addemoji/{self.settings.custom_emoji_pack}"
         text = (
-            f"<b>{self.emoji('sword', '⚔️')} ЭМОДЗИ-ПАК «{esc(self.settings.brand_name)}»</b>\n\n"
-            "Фирменный пак из 12 аутентичных иконок 100×100 PNG по дизайну вещей и ассетов марки:\n\n"
-            f"{self.emoji('sword', '⚔️')} <b>Клинок</b> · главный логотип бренда\n"
-            f"{self.emoji('seal', '🛡️')} <b>Печать</b> · нагрудный герб\n"
-            f"{self.emoji('drop', '👕')} <b>Дроп 001</b> · оверсайз футболка\n"
-            f"{self.emoji('orders', '📦')} <b>Бокс дропа</b> · снабжение и доставка\n"
-            f"{self.emoji('account', '🪪')} <b>Стальной жетон</b> · жетон на цепочке с гербом\n"
-            f"{self.emoji('support', '💬')} <b>Штаб-связь</b> · связь с менеджером\n"
-            f"{self.emoji('cart', '🛒')} <b>Кофр заказа</b> · тактический баул заказа\n"
-            f"{self.emoji('ruler', '🏷️')} <b>Патч подола</b> · тканый жаккардовый шеврон\n"
-            f"{self.emoji('pay', '💳')} <b>Титан-карта</b> · оплата дропа\n"
-            f"{self.emoji('looks', '🗡️')} <b>Спина с клинком</b> · лукбук первого дропа\n"
-            f"{self.emoji('channel', '📢')} <b>Сигнал канала</b> · новости и анонсы\n"
-            f"{self.emoji('back', '⬅️')} <b>Шеврон отхода</b> · возврат в меню\n\n"
-            f"Добавить в Telegram в один клик:\n👉 <a href=\"{pack_link}\">{pack_link}</a>"
+            f"<b>ЭМОДЗИ-ПАК «{esc(self.settings.brand_name)}»</b>\n\n"
+            "11 анимированных значков для магазина: вещи, заказы, персонаж, "
+            "поддержка, оплата, доставка, жетон, канал и фирменный знак.\n\n"
+            "Добавь набор в Telegram по кнопке ниже."
         )
         markup = inline_keyboard([
             [(f"Установить эмодзи-пак {ICON['outside']}", pack_link)],
             [(f"{ICON['back']} Главное меню", "menu")]
         ])
-        preview_path = BASE_DIR / "custom_emoji_pack" / "preview_grid.png"
-        if preview_path.is_file():
-            try:
-                self.api.send_photo_file(chat_id, preview_path, caption=text, reply_markup=markup)
-                return
-            except Exception:
-                LOG.warning("Could not send emoji pack preview image")
         self.api.send_message(chat_id, text, markup)
 
     # ------------------------------------------------------------------ utils
@@ -3470,12 +3657,15 @@ class BrandBot:
         return ""
 
     def send_welcome(self, chat_id: int, caption: str, keyboard: dict[str, Any] | None) -> None:
-        """Send the catalog's current greeting image, with a text fallback.
+        """Send static founder photo on /start per customer request (no gif/animation)."""
+        founder_photo = self.local_asset_path("assets/client/bot-founder-20261107.jpg")
+        if founder_photo and founder_photo.is_file():
+            try:
+                self._send_welcome_file(chat_id, founder_photo, caption, keyboard)
+                return
+            except Exception:
+                LOG.exception("Founder welcome photo unavailable; using existing welcome")
 
-        Обложка уходит на каждый /start, поэтому после первой загрузки
-        переиспользуем file_id Telegram: повтор стоит один лёгкий запрос,
-        а не мегабайты аплоада.
-        """
         asset = self.catalog.data.get("brand", {}).get("welcome_image") or "assets/welcome.jpg"
         photo = self.local_asset_path(asset)
         photo_url = self.public_asset_url(asset) if photo or str(asset).startswith("https://") else ""
@@ -3495,6 +3685,35 @@ class BrandBot:
                 except Exception:
                     LOG.exception("Welcome photo URL fallback failed")
         self.api.send_message(chat_id, caption, keyboard)
+
+    def _send_welcome_animation(self, chat_id: int, anim_path: Path, caption: str, keyboard: dict[str, Any] | None) -> None:
+        stat = anim_path.stat()
+        cache_key = "welcome_anim_file_id:" + hashlib.sha256(
+            compact_json([str(anim_path), str(stat.st_mtime_ns), str(stat.st_size)]).encode()
+        ).hexdigest()
+        cached = self.db.kv_get(cache_key)
+        if cached:
+            try:
+                payload = {
+                    "chat_id": chat_id,
+                    "animation": cached,
+                    "caption": fit_html_text(caption, CAPTION_LIMIT - 24),
+                    "parse_mode": "HTML",
+                }
+                if keyboard:
+                    ids = getattr(self.api, "_inline_ids", None)
+                    payload["reply_markup"] = add_inline_emoji(keyboard, ids) if ids else keyboard
+                self.api.call("sendAnimation", payload)
+                return
+            except Exception:
+                LOG.info("Cached welcome anim file_id rejected, re-uploading")
+                self.db.kv_delete(cache_key)
+
+        result = self.api.send_animation_file(chat_id, anim_path, caption, keyboard)
+        if isinstance(result, dict):
+            anim = result.get("animation")
+            if isinstance(anim, dict) and anim.get("file_id"):
+                self.db.kv_set(cache_key, anim["file_id"])
 
     def _send_welcome_file(self, chat_id: int, photo: Path, caption: str, keyboard: dict[str, Any] | None) -> None:
         stat = photo.stat()
@@ -3603,48 +3822,64 @@ class BrandBot:
         return buyer_reply_keyboard(
             self.settings.webapp_url,
             is_admin=is_adm,
-            custom_emoji_ids=self.settings.custom_emoji_ids,
+            custom_emoji_ids=self.settings.custom_emoji_ids if self.settings.inline_emoji_enabled else {},
         )
 
     def main_menu(self, chat_id: int | None = None) -> dict[str, Any]:
-        """Главное меню: дроп, канал, бренд, кабинет и поддержка.
+        """Главное меню: магазин, дроп, покупки, кабинет и контакты.
 
         ``chat_id`` в личке совпадает с ``user_id``, поэтому по нему же
         поднимаем незавершённую оплату — отдельный параметр не нужен.
         Незакрытый счёт — единственная причина показать кнопку вне сетки:
         главное действие всегда широкое и всегда сверху.
         """
-        rows: list[list[tuple[str, str]]] = []
-        draft = self.db.pending_payment(chat_id) if chat_id else None
+        rows: list[list[Any]] = []
+        if self.settings.webapp_url.startswith("https://"):
+            shop_button: dict[str, Any] = {"text": "ОТКРЫТЬ МАГАЗИН ↗", "web_app": {"url": self.settings.webapp_url}, "style": "primary"}
+            cart_emoji = str(self.settings.custom_emoji_ids.get("cart") or "")
+            if self.settings.inline_emoji_enabled and cart_emoji.isdigit():
+                shop_button["text"] = "ОТКРЫТЬ МАГАЗИН"
+                shop_button["icon_custom_emoji_id"] = cart_emoji
+            rows.append([shop_button])
+        draft = self.db.pending_payment(chat_id) if chat_id and ONLINE_PAYMENTS_ENABLED else None
         if draft:
             payment_id, amount = draft
             label = f"Продолжить оплату · {format_rub(amount)}" if amount else "Продолжить оплату"
             rows.append([(f"{ICON['pay']} {label} →", f"draft:{payment_id}")])
-        ce = self.settings.custom_emoji_ids
+        ce = self.settings.custom_emoji_ids if self.settings.inline_emoji_enabled else {}
         rows.extend(
             [
-                [(icon("catalog", "Первый дроп"), "cat:drop", ce.get("catalog") or ce.get("sword", ""))],
-                [(icon("account", "Кабинет"), "account", ce.get("account", "")),
-                 (icon("support", "Поддержка"), "support", ce.get("support", ""))],
+                [(icon("catalog", "Первый дроп"), "cat:drop", ce.get("catalog") or ce.get("sword", "")),
+                 (icon("orders", "Мои покупки"), "my_orders", ce.get("orders", ""))],
+                [(icon("size", "Размеры"), "size_guide", ce.get("size", "")),
+                 (icon("account", "Кабинет"), "account", ce.get("account", ""))],
+                [(icon("seal", "О бренде"), "about", ce.get("seal", ""))],
             ]
         )
         channel_link = self.channel_link()
+        contacts = [(icon("support", "Поддержка"), "support", ce.get("support", ""))]
         if channel_link:
-            rows.insert(1, [(icon("channel", "Канал"), channel_link, ce.get("channel", ""))])
-        rows.insert(2 if channel_link else 1, [(icon("seal", "О бренде"), "about", ce.get("seal", ""))])
+            contacts.insert(0, (icon("channel", "Канал ↗"), channel_link, ce.get("channel", "")))
+        rows.append(contacts)
         if chat_id and self.is_admin(int(chat_id)):
             # Владелец и админы видят вход в пульт прямо из /start:
             # управление магазином — такое же главное окно, как каталог.
             rows.append([(icon("tools", "Управление магазином"), "adm:panel")])
-        if self.settings.webapp_url.startswith("https://"):
-            rows.append([(f"Открыть витрину {ICON['outside']}", f"webapp:{self.settings.webapp_url}")])
-        return inline_keyboard(rows)
+        markup = inline_keyboard(rows)
+        for row in markup["inline_keyboard"]:
+            for button in row:
+                if button.get("icon_custom_emoji_id") and not button.get("web_app"):
+                    # Telegram draws the brand icon; avoid a second emoji in its label.
+                    button["text"] = button["text"].partition(" ")[2]
+        return markup
 
     def menu_text(self, hint: str = "") -> str:
         """Заголовок главного меню: один на весь экран, без повторов бренда."""
         text = (
             f"<b>{esc(self.settings.brand_name)}</b>\n"
-            "Выбери вещь или открой свою покупку."
+            "Первый выпуск · одежда с характером.\n\n"
+            "Магазин — вещи и размеры. Кабинет — твои покупки.\n"
+            "Нужен ориентир? Открой размеры или помощь."
         )
         return f"{text}\n\n{hint}" if hint else text
 
@@ -3671,7 +3906,7 @@ class BrandBot:
         а собеседник получает выход, а не тишину до следующего /start.
         """
         try:
-            self.send_menu(chat_id, f"{reason}\nПопробуй ещё раз или напиши менеджеру.")
+            self.send_menu(chat_id, f"{reason}\nПопробуй ещё раз или открой помощь.")
         except Exception as exc:
             LOG.error("Recovery screen failed for chat %s: %s", chat_id, exc)
 
@@ -3687,8 +3922,10 @@ class BrandBot:
             chat_id,
             f"<b>О БРЕНДЕ</b>\n\n"
             f"{esc(self.settings.brand_name)}\n"
-            "Сила и честь. Одежда для своих: плотная, честная, без лишнего шума. "
-            "Малые тиражи, городская форма, выпуски без повторов."
+            "Бренд Никиты Ворожбитова.\n\n"
+            "Первый выпуск: «СИЛА И ЧЕСТЬ» — прямой крой; «ВЗГЛЯД» — более приталенная посадка.\n\n"
+            "Сила. Дисциплина. Честь.\n"
+            "Рассмотри вещи на витрине, сравни параметры с таблицей и выбери свой размер."
             + (f"\n\n{ICON['support']} Вопросы: @{esc(self.settings.support_username)}" if self.settings.support_username else "")
             + self.cta("channel"),
             inline_keyboard(self.channel_rows() + nav_rows(("Главное меню", "menu"))),
@@ -3751,7 +3988,9 @@ class BrandBot:
 
     def support_menu(self) -> dict[str, Any]:
         rows: list[list[tuple[str, str]]] = [
-            [(icon("question", str(item.get("label"))[:24]), f"faq:{item.get('key')}")
+            [(icon("question", str(item.get("label"))[:24]),
+              self.payment_question_url() if item.get("key") == "pay" and self.payment_question_url()
+              else f"faq:{item.get('key')}")
              for item in self.faq_items()[:4]],
         ]
         if self.settings.manager_chat_id or self.settings.support_username:
@@ -3761,6 +4000,14 @@ class BrandBot:
             rows.append([(f"Написать менеджеру {ICON['outside']}", f"https://t.me/{self.settings.support_username}")])
         rows.extend(nav_rows(("Главное меню", "menu")))
         return inline_keyboard(rows)
+
+    def payment_question_url(self) -> str:
+        """Open a draft question; the customer decides whether to send it."""
+        account = order_manager_username()
+        if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", account):
+            return ""
+        question = urllib.parse.quote("Здравствуйте! Подскажите, пожалуйста, как я могу оплатить заказ.", safe="")
+        return f"https://t.me/{account}?text={question}"
 
     def support_text(self) -> str:
         lines = ["<b>ПОДДЕРЖКА</b>", ""]
@@ -3804,25 +4051,19 @@ class BrandBot:
             except Exception as exc:
                 LOG.debug("Could not set staff commands for %s on start: %s", chat_id, exc)
 
-        reply_kb = self.buyer_reply_keyboard(chat_id)
+        # Reply and inline keyboards require separate Telegram messages.
+        # Set the persistent navigation first, then show the welcome card.
+        if chat_id == user_id:
+            self.api.send_message(chat_id, "Меню магазина всегда под рукой.", self.buyer_reply_keyboard(chat_id))
+        menu = self.main_menu(chat_id)
         brand = esc(self.settings.brand_name)
-        if is_new:
-            text = (
-                f"<b>{brand}</b>\n\n"
-                f"{name}, добро пожаловать на закрытую территорию бренда одежды <b>«СИЛА И ЧЕСТЬ»</b>.\n\n"
-                "Первый дроп 001 — для своих.\n"
-                "Тираж строго ограничен, вещи разбирают быстро. "
-                "Выбирай размер на витрине или оформляй заказ напрямую."
-            )
-            self.send_welcome(chat_id, text, reply_kb)
-        else:
-            text = (
-                f"<b>{brand}</b>\n\n"
-                f"{name}, ты на закрытой территории бренда одежды <b>«СИЛА И ЧЕСТЬ»</b>.\n\n"
-                "Первый дроп 001 открыт."
-                + self.cta("drop")
-            )
-            self.send_welcome(chat_id, text, reply_kb)
+        text = (
+            f"<b>{brand}</b>\n\n"
+            f"{name}, ты на закрытой территории бренда одежды <b>«СИЛА И ЧЕСТЬ»</b>.\n\n"
+            "Первый дроп 001 открыт.\n\n"
+            "Смотри выпуск — тираж маленький, потом не будет."
+        )
+        self.send_welcome(chat_id, text, menu)
 
     def save_interest(self, chat_id: int, user_id: int, interest: str) -> None:
         if interest != "skip":
@@ -3907,7 +4148,7 @@ class BrandBot:
         if product.get("gift"):
             gift = self.db.gift_status(product)
             if gift:
-                lines.append(f"Автоматически добавим к заказу · осталось {gift['remaining']} из {gift['stock']}.")
+                lines.append("Подарок из первой сотни к первому дропу · наличие уточняется.")
         elif not self.price_is_payable(product):
             # Цену в каталоге записали диапазоном или припиской: счёт по ней не
             # выставить. Говорим сразу, а не после согласия и номера телефона.
@@ -3938,6 +4179,34 @@ class BrandBot:
         if signature:
             lines.extend(["", esc(signature)])
         return "\n".join(lines)
+
+    def product_card_compact(self, product: dict[str, Any]) -> str:
+        """Short product caption, with the details in the storefront."""
+        title = esc(str(product.get("name") or "ВЕЩЬ").upper())
+        kind = PRODUCT_EMOJI_KINDS.get(str(product.get("id") or ""))
+        if kind:
+            fallback = PRODUCT_EMOJI_FALLBACK[kind]
+            mark = self.emoji(kind, fallback) if self.settings.inline_emoji_enabled else fallback
+            title = f"{mark} {title}"
+        price = "В ПОДАРОК" if product.get("gift") else esc(str(product.get("price") or "Цена уточняется"))
+        badge = str(product.get("badge") or "").strip()
+        lines = [f"<b>{title}</b>", f"<b>{price}</b>" + (f"  ·  {esc(badge)}" if badge else "")]
+        description = " ".join(str(product.get("description") or "").split())
+        if description:
+            if len(description) > 260:
+                description = description[:257].rsplit(" ", 1)[0].rstrip(" ,.;:") + "…"
+            lines.extend(["", esc(description)])
+        material = " ".join(str(product.get("material") or "").split())
+        fit = " ".join(str(product.get("fit") or "").split())
+        sizes = " · ".join(str(size) for size in product.get("sizes") or [])
+        if material or fit:
+            lines.extend(["", esc("  ·  ".join(x for x in (material, fit) if x))])
+        if sizes:
+            lines.append(f"Размеры: {esc(sizes)}")
+        signature = " ".join(str(product.get("signature") or "").split())
+        if signature:
+            lines.extend(["", esc(signature[:140])])
+        return fit_html_text("\n".join(lines), 950)
 
     def product_missing(self, chat_id: int, reason: str) -> None:
         """Старая кнопка на снятую вещь: объясняем и ведём в живую витрину."""
@@ -3976,16 +4245,15 @@ class BrandBot:
             (str(item["name"]) for item in self.catalog.categories if item["id"] == product["category"]),
             "Каталог",
         )
-        text = self.product_card_text(product)
+        text = self.product_card_compact(product)
         verb = "предзаказ" if product.get("badge") == "ПРЕДЗАКАЗ" or "предзаказ" in str(product.get("stock_label", "")).lower() else "заказ"
-        order_label = "🛍 ОФОРМИТЬ ПРЕДЗАКАЗ" if verb == "предзаказ" else "🛍 ОФОРМИТЬ ЗАКАЗ"
+        order_label = "ОФОРМИТЬ ПРЕДЗАКАЗ" if verb == "предзаказ" else "ОФОРМИТЬ ЗАКАЗ"
 
         if product.get("gift"):
             rows = [[(icon("catalog", "Выбрать вещь из выпуска"), "cat:drop")]]
         elif self.price_is_payable(product):
             rows = [
                 [(order_label, f"order_direct:{product_id}")],
-                [("Оплатить онлайн →", f"want:{product_id}")],
                 [(icon("wait", "Ждать размер"), f"wait:{product_id}")],
             ]
         else:
@@ -4001,10 +4269,31 @@ class BrandBot:
         # В чат отправляем одно главное фото, как просила заказчица. Полная
         # предметная галерея, 360° и видео остаются внутри Mini App.
         shots = self.product_shots(product)
-        photo = shots[0][0] if shots else self.public_asset_url(product.get("photo_url") or product.get("image"))
+        photo = self.public_asset_url(product.get("bot_image")) or (shots[0][0] if shots else self.public_asset_url(product.get("photo_url") or product.get("image")))
+        plain_text = re.sub(r'</?tg-emoji(?:\s+emoji-id="[0-9]+")?>', '', text)
         if photo:
-            self.api.send_photo(chat_id, photo, "")
-        self.api.send_message(chat_id, text, keyboard)
+            sent = False
+            for caption in dict.fromkeys((text, plain_text)):
+                try:
+                    self.api.send_photo(chat_id, photo, caption, keyboard)
+                    sent = True
+                    break
+                except Exception:
+                    LOG.warning("Product photo could not be sent; retrying without custom emoji", exc_info=True)
+            if sent:
+                # A previous text menu cannot be edited into a photo. Retire
+                # only its inline controls after the new card is delivered.
+                target = self.take_screen_edit(chat_id)
+                if target:
+                    try:
+                        self.api.call("editMessageReplyMarkup", {
+                            "chat_id": chat_id, "message_id": target,
+                            "reply_markup": {"inline_keyboard": []},
+                        })
+                    except Exception:
+                        LOG.info("Could not remove old product navigation", exc_info=True)
+                return
+        self.api.send_message(chat_id, plain_text, keyboard)
 
     def choose_size(self, chat_id: int, user_id: int, product_id: str) -> None:
         product = self.catalog.get(product_id)
@@ -4030,17 +4319,13 @@ class BrandBot:
         if not product or product.get("gift"):
             self.product_missing(chat_id, "Эту вещь нельзя оформить отдельно.")
             return
-        if not self.settings.support_username:
+        if not order_manager_username():
             # Do not silently turn a manager CTA into a payment flow.
             self.api.send_message(
                 chat_id,
                 "<b>МЕНЕДЖЕР ПОКА НЕ ПОДКЛЮЧЁН</b>\n\n"
-                "Заказ через чат не создан. Можно отдельно продолжить онлайн-оплату — "
-                "это другой сценарий, согласие и счёт появятся только после твоих действий.",
-                inline_keyboard(
-                    [[("Оплатить онлайн →", f"want:{product_id}")]]
-                    + nav_rows((str(product["name"]), f"product:{product_id}"))
-                ),
+                "Заказ пока не создан. Контакт магазина скоро появится здесь.",
+                inline_keyboard(nav_rows((str(product["name"]), f"product:{product_id}"))),
             )
             return
         sizes = [str(size) for size in product["sizes"]]
@@ -4061,23 +4346,22 @@ class BrandBot:
         if not product or product.get("gift") or size not in {str(item) for item in product.get("sizes", [])}:
             self.product_missing(chat_id, "Размер или вещь уже недоступны.")
             return
-        if not self.settings.support_username:
+        if not order_manager_username():
             self.choose_manager_size(chat_id, user_id, product_id)
             return
         user = self.db.get_user(user_id)
         phone = str(user["phone"] or "") if user else ""
         verb = "предзаказ" if product.get("badge") == "ПРЕДЗАКАЗ" or "предзаказ" in str(product.get("stock_label", "")).lower() else "заказ"
         gift = self.gift_for_checkout()
-        gift_line = f"• Подарок: {gift['name']} (бесплатно к первому дропу)\n" if gift else ""
+        gift_line = "• Подарок: ЖЕТОН (первые 100 жетонов к дропу 001, со 2-го дропа в подарок не будет)\n" if gift else ""
         message = (
             f"Здравствуйте! Хочу оформить {verb}:\n"
             f"• {product['name']} · размер {size} · 1 шт. · {product['price']}\n"
             f"{gift_line}"
-            f"Телефон: {phone or 'укажу в чате'}\n"
-            "Доставку и наличие прошу подтвердить в ответ."
+            f"Телефон: {phone or 'укажу в чате'}"
         )
         order_url = (
-            f"https://t.me/{self.settings.support_username}?text="
+            f"https://t.me/{order_manager_username()}?text="
             f"{urllib.parse.quote(message, safe='')}"
         )
         self.api.send_message(
@@ -4411,6 +4695,7 @@ class BrandBot:
         if orders and payment["status"] == "paid":
             keyboard = inline_keyboard(
                 [[(f"{ICON['orders']} Открыть покупку №{int(orders[0]['id'])} →", f"ord:{int(orders[0]['id'])}")]]
+                + [[(icon("support", "Написать менеджеру"), "support")]]
                 + nav_rows()
             )
         else:
@@ -4453,6 +4738,11 @@ class BrandBot:
             self.flush_notifications()
 
     def handle_pre_checkout(self, query: dict[str, Any]) -> None:
+        if not ONLINE_PAYMENTS_ENABLED:
+            query_id = str(query.get("id", ""))
+            if query_id:
+                self.api.answer_pre_checkout(query_id, False, "Онлайн-оплата временно недоступна. Свяжись с магазином.")
+            return
         self.db.expire_payments()
         query_id = str(query.get("id", ""))
         payload = str(query.get("invoice_payload", ""))
@@ -4586,7 +4876,7 @@ class BrandBot:
         except PriceError:
             self.api.send_message(chat_id, "Цена вещи недоступна. Напиши менеджеру.", self.main_menu(chat_id))
             return
-        self.api.send_message(chat_id, "Покупка собрана. Осталось оплатить.", remove_keyboard())
+        self.api.send_message(chat_id, "Покупка собрана. Осталось оплатить.", self.buyer_reply_keyboard(chat_id))
         fingerprint = hashlib.sha256(compact_json([product["id"], size, phone]).encode()).hexdigest()
         try:
             receipt, created = self.db.create_checkout(
@@ -4943,7 +5233,7 @@ class BrandBot:
         order_id = int(row["id"])
         payment_id = str(row["payment_id"] or "")
         rows: list[list[tuple[str, str]]] = []
-        if payable and payment_id:
+        if ONLINE_PAYMENTS_ENABLED and payable and payment_id:
             amount = int(row["amount_rub"] or 0)
             label = f"Оплатить {format_rub(amount)}" if amount else "Оплатить"
             rows.append([(f"{ICON['pay']} {label} →", f"draft:{payment_id}")])
@@ -5096,31 +5386,29 @@ class BrandBot:
                 LOG.warning("Could not notify manager about cancel %s: %s", order_id, exc)
 
     def help_text(self) -> str:
-        brand = esc(self.settings.brand_name)
-        extra = ""
-        if self.settings.support_username:
-            extra = f"\n\nВопросы: @{esc(self.settings.support_username)}"
-        return (
-            f"<b>КАК ЭТО РАБОТАЕТ</b>\n\n"
-            f"{brand}\n"
-            "1. Выбираешь вещь и размер в каталоге.\n"
-            "2. Нажимаешь «Оформить заказ» — откроется чат с менеджером и готовый текст.\n"
-            "3. Отправляешь текст менеджеру; он подтверждает наличие и доставку.\n"
-            "Онлайн-оплата — отдельный необязательный сценарий.\n\n"
-            f"{ICON['wait']} Нет размера — «Ждать размер»: напишем, когда вернётся.\n"
-            f"{ICON['orders']} Статус покупки — в «Мои покупки»: оплата, сборка, доставка.\n"
-            f"{ICON['pay']} При онлайн-оплате деньги списываются только после твоего подтверждения у провайдера."
-            f"{extra}"
-        )
+        if order_manager_username():
+            ordering = "Выбери вещь и размер, открой чат и отправь подготовленный заказ."
+        else:
+            ordering = "Оформление временно недоступно: подключаем чат для заказов. Корзина в миниаппе сохраняется."
+        return ("<b>КАК ЭТО РАБОТАЕТ</b>\n\n" + ordering
+                + "\n\nВ карточке вещи есть размеры и сведения о материале. "
+                  "Онлайн-оплата сейчас недоступна. Сроки и стоимость доставки уточняются.")
 
     def show_size_guide(self, chat_id: int, user_id: int, origin: str = "") -> None:
         """Сетка размеров. «Назад» ведёт туда, откуда экран открыли."""
         self.db.event(user_id, "size_guide_open", {"origin": origin[:40]})
         text = (
-            "<b>РАЗМЕР В КАРТОЧКЕ ВЕЩИ</b>\n\n"
-            "Выбери буквенный размер в карточке. Подтверждённой производственной сетки "
-            "сейчас нет, поэтому мы не публикуем выдуманные замеры.\n"
-            "Если нужен другой размер — нажми «Ждать размер». Для вопроса о посадке напиши менеджеру."
+            "<b>ТАБЛИЦА РАЗМЕРОВ</b>\n\n"
+            "Параметры тела в сантиметрах: грудь / талия / бёдра / рост.\n\n"
+            "<b>S</b> · 88–96 / 76–84 / 92–100 / 170–176\n"
+            "<b>M</b> · 96–104 / 84–92 / 100–108 / 176–182\n"
+            "<b>L</b> · 104–112 / 92–100 / 108–116 / 182–188\n"
+            "<b>XL</b> · 112–120 / 100–108 / 116–124 / 188–194\n"
+            "<b>2XL / XXL</b> · 120–128 / 108–116 / 124–132 / 194–200\n"
+            "<b>3XL</b> · 128–136 / 116–124 / 132–140 / 200–206\n\n"
+            "Измерь грудь и бёдра по самой широкой части, талию — без натяжения. "
+            "Сверь все параметры: посадка зависит от комплекции. "
+            "Доступные размеры указаны в карточке каждой вещи."
         )
         back: tuple[str, str] | None = None
         if origin.startswith("product:"):
@@ -5149,6 +5437,12 @@ class BrandBot:
         self.api.send_message(chat_id, self.support_text(), self.support_menu())
 
     def show_faq(self, chat_id: int, key: str, user_id: int | None = None) -> None:
+        if key == "pay":
+            rows = []
+            if self.payment_question_url():
+                rows.append([(icon("support", "Узнать об оплате ↗"), self.payment_question_url())])
+            self.api.send_message(chat_id, "<b>КАК ОПЛАТИТЬ</b>\n\nУсловия оплаты согласуем в Telegram. Открой чат, проверь готовый вопрос и отправь его.", inline_keyboard(rows + nav_rows(("Поддержка", "support"))))
+            return
         item = next((i for i in self.faq_items() if str(i.get("key")) == key), None)
         if not item:
             self.show_support(chat_id, user_id or chat_id)
@@ -5287,7 +5581,8 @@ class BrandBot:
                 f"{esc(order['product_name'])} · размер {esc(order['size'])} · {int(order['quantity'] or 1)} шт.\n"
                 f"{esc(ORDER_STATUS_MESSAGES.get(status, 'Статус покупки обновлён.'))}",
                 inline_keyboard(
-                    [[(f"{ICON['orders']} Открыть покупку №{order_id} →", f"ord:{order_id}")]] + nav_rows()
+                    [[(f"{ICON['orders']} Открыть покупку №{order_id} →", f"ord:{order_id}")],
+                     [(icon("support", "Написать менеджеру"), "support")]] + nav_rows()
                 ),
             )
         except Exception as exc:
@@ -6598,6 +6893,8 @@ class BrandBot:
         payload: dict[str, Any],
         notify_user: int | None = None,
     ) -> dict[str, Any]:
+        if not ONLINE_PAYMENTS_ENABLED:
+            return {"ok": False, "error": "Онлайн-оплата временно недоступна. Оформи заказ через чат магазина."}
         user_id = int(user["id"])
         self.db.set_phone(user_id, phone)
         self.db.set_consent(user_id)
@@ -6823,6 +7120,12 @@ class BrandBot:
 
     def route_callback(self, callback_id: str, chat_id: int, user_id: int, data: str) -> bool:
         """Разбор нажатия. Возвращает False, если кнопка боту неизвестна."""
+        if not ONLINE_PAYMENTS_ENABLED and data.startswith(("pay:", "want:", "size:", "draft:")):
+            if data.startswith("want:"):
+                self.choose_manager_size(chat_id, user_id, data.split(":", 1)[1])
+            else:
+                self.show_faq(chat_id, "pay", user_id)
+            return True
         if data.startswith("pay:"):
             parts = data.split(":")
             if len(parts) == 3:
@@ -7128,41 +7431,17 @@ class BrandBot:
         # 2.4 Размеры и сетка
         if clean in {"размеры", "размер", "таблица размеров", "замеры", "сетка"}:
             self.db.clear_state(user_id)
-            self.api.send_message(
-                chat_id,
-                "<b>ТАБЛИЦА РАЗМЕРОВ</b> · СИЛА И ЧЕСТЬ\n\n"
-                "Футболки имеют честную плотную посадку оверсайз (хлопок 240 г/м²):\n\n"
-                "• <b>S</b> — рост 165–174 см / вес 60–72 кг\n"
-                "• <b>M</b> — рост 172–182 см / вес 70–82 кг\n"
-                "• <b>L</b> — рост 178–188 см / вес 80–92 кг\n"
-                "• <b>XL</b> — рост 184–194 см / вес 90–105 кг\n"
-                "• <b>XXL</b> — рост 188–200 см / вес 100–120 кг\n\n"
-                "Если сомневаешься между двумя размерами — напиши менеджеру, поможем подобрать.",
-                inline_keyboard([
-                    [(icon("catalog", "Выбрать вещь в витрине"), "cat:drop")],
-                    [(icon("support", "Спросить менеджера"), "support")],
-                    nav_rows(("Главное меню", "menu"))[0]
-                ])
-            )
+            self.show_size_guide(chat_id, user_id)
             return True
 
         # 2.5 Доставка и сроки
         if clean in {"доставка", "сроки", "сроки доставки", "как доставляете", "сдэк", "яндекс", "куда доставка"}:
             self.db.clear_state(user_id)
-            self.api.send_message(
-                chat_id,
-                "<b>ДОСТАВКА И СРОКИ</b> · СИЛА И ЧЕСТЬ\n\n"
-                "• Отправляем заказы по всей России через <b>СДЭК</b> и <b>Яндекс Доставку</b> (до ПВЗ или курьером до двери).\n"
-                "• Сборка и отправка: 1–2 рабочих дня с момента подтверждения оплаты.\n"
-                "• Сроки в пути: обычно 2–5 дней в зависимости от города.\n"
-                "• После отправки трек-номер для отслеживания посылки появится в твоих покупках и придёт в этот чат.\n\n"
-                "Самовывоза и офлайн-точек нет — только проверенная курьерская доставка.",
-                inline_keyboard([
-                    [(icon("orders", "Мои покупки и трек"), "orders")],
-                    [(icon("catalog", "Выбрать вещь в витрине"), "cat:drop")],
-                    nav_rows(("Главное меню", "menu"))[0]
-                ])
-            )
+            self.api.send_message(chat_id,
+                "<b>ДОСТАВКА</b>\n\n"
+                "Отправляем СДЭК и Яндексом. Сборка заказа — 1–2 дня; "
+                "для предзаказа — после готовности вещи. Стоимость и срок доставки согласуем при заказе.",
+                inline_keyboard([[(icon("catalog", "К вещам"), "cat:drop")]] + nav_rows(("Главная", "menu"))))
             return True
 
         # 2.6 Отзывы и образы
@@ -7184,17 +7463,13 @@ class BrandBot:
         # 2.7 Материалы и качество
         if clean in {"качество", "материал", "материалы", "состав", "хлопок", "ткань", "стирка", "как стирать"}:
             self.db.clear_state(user_id)
-            self.api.send_message(
-                chat_id,
-                "<b>МАТЕРИАЛЫ И КАЧЕСТВО</b> · СИЛА И ЧЕСТЬ\n\n"
-                "• <b>Ткань</b>: 100% премиальный плотный хлопок (240–260 г/м² для футболок, 400 г/м² для худи). Держит правильную форму, не просвечивает и дышит.\n"
-                "• <b>Принт</b>: многослойная износостойкая шелкография. Не трескается и не выстирывается.\n"
-                "• <b>Уход</b>: бережная стирка при 30°C вывернутым наизнанку, отжим до 800 об/мин. Не гладить напрямую по принту.",
-                inline_keyboard([
-                    [(icon("catalog", "Выбрать вещь в витрине"), "cat:drop")],
-                    nav_rows(("Главное меню", "menu"))[0]
-                ])
-            )
+            self.api.send_message(chat_id,
+                "<b>МАТЕРИАЛ И УХОД</b>\n\n"
+                "Футболка «СИЛА И ЧЕСТЬ»: 95% хлопок, 5% лайкра; плотность 240 г/м². "
+                "Состав других вещей смотри в их карточках.\n\n"
+                "Стирай вещь вывернутой наизнанку на деликатном режиме до 30 °C. "
+                "Суши естественным способом и не гладь по принту. Если ярлык содержит другие указания, следуй ему.",
+                inline_keyboard([[(icon("catalog", "К вещам"), "cat:drop")]] + nav_rows(("Главная", "menu"))))
             return True
 
         # 3. Мои покупки
@@ -7978,6 +8253,20 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                     {"key": "back", "file": "12_back.png", "emoji": "⬅️", "label": "Шеврон назад"}
                 ]
             }
+            if self.settings and self.settings.inline_emoji_enabled:
+                payload["icons"] = [
+                    {"key": "catalog", "file": "01-catalog.webm", "emoji": "👕", "label": "Первый дроп"},
+                    {"key": "orders", "file": "02-orders.webm", "emoji": "📦", "label": "Мои покупки"},
+                    {"key": "account", "file": "03-account.webm", "emoji": "🤖", "label": "Кабинет"},
+                    {"key": "support", "file": "04-support.webm", "emoji": "💬", "label": "Поддержка"},
+                    {"key": "pay", "file": "05-pay.webm", "emoji": "💳", "label": "Оплата"},
+                    {"key": "back", "file": "06-back.webm", "emoji": "⬅️", "label": "Назад"},
+                    {"key": "cart", "file": "07-cart.webm", "emoji": "🛍️", "label": "Магазин"},
+                    {"key": "delivery", "file": "08-delivery.webm", "emoji": "🚚", "label": "Доставка"},
+                    {"key": "tag", "file": "09-gift.webm", "emoji": "🏷️", "label": "Жетон"},
+                    {"key": "sword", "file": "10-brand.webm", "emoji": "⚔️", "label": "О бренде"},
+                    {"key": "channel", "file": "11-channel.webm", "emoji": "📣", "label": "Канал"},
+                ]
             self._write(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
         if path == "/api/catalog":
@@ -7994,6 +8283,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                     "channel_url": settings.channel_url if settings else "",
                     "privacy_url": settings.privacy_url if settings else "",
                     "support_username": settings.support_username if settings else "",
+                    "order_manager_username": order_manager_username(),
                     "products": self._stamp_product_media([
                         product for product in catalog.data.get("products", []) if product.get("active", True)
                     ]),
@@ -8020,18 +8310,24 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                     snapshot = self.db.size_stock_snapshot(payload["products"])
                 except Exception:
                     LOG.warning("size_stock snapshot failed", exc_info=True)
-                    snapshot = {}
-                if snapshot:
-                    for item in payload["products"]:
-                        totals = item.get("stock_by_size")
-                        if not isinstance(totals, dict):
-                            continue
-                        remaining = {
-                            str(size): snapshot.get((str(item.get("id")), str(size)), 0)
-                            for size in totals
-                        }
-                        item["stock_by_size"] = remaining
-                        item["sizes"] = [size for size in item.get("sizes", []) if remaining.get(str(size), 1) > 0]
+                    snapshot = None
+                for item in payload["products"]:
+                    totals = item.get("stock_by_size")
+                    if not isinstance(totals, dict):
+                        continue
+                    if snapshot is None:
+                        # Unknown stock is not the original catalog stock and must
+                        # never be advertised as currently available.
+                        item["sizes"] = []
+                        item.pop("stock_by_size", None)
+                        item["stock_check_unavailable"] = True
+                        continue
+                    remaining = {
+                        str(size): snapshot.get((str(item.get("id")), str(size)), 0)
+                        for size in totals
+                    }
+                    item["stock_by_size"] = remaining
+                    item["sizes"] = [size for size in item.get("sizes", []) if remaining.get(str(size), 1) > 0]
             self._write(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
 
@@ -8161,7 +8457,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
     def _stamp_assets(self, body: bytes) -> bytes:
         """Версионировать клиентский код, CSS и все статические медиа-ассеты в HTML."""
         text = body.decode("utf-8", "replace")
-        for name in ("app.js", "checkout.js", "shop-core.js", "viewer3d.js", "telegram-web-app.js", "styles.css"):
+        for name in ("app.js", "checkout.js", "shop-core.js", "viewer3d.js", "telegram-web-app.js", "styles.css", "hero-founder-20261107.webp", "hero-founder.webp"):
             asset = self.static_root / name
             try:
                 version = self._asset_version(asset)
@@ -8184,7 +8480,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             except OSError:
                 return m.group(0)
 
-        text = re.sub(r"""(src|href|poster)=(["'])(assets/[^"'?]+)(["'])""", _stamp_match, text)
+        text = re.sub(r"""(src|href|poster)=(["'])(assets/[^"'?]+|hero-founder[^"'?]*)(["'])""", _stamp_match, text)
         return text.encode("utf-8")
 
     def _asset_version(self, asset: Path) -> str:
@@ -8308,6 +8604,9 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if path == "/api/club":
             self._club_post()
             return
+        if path in {"/api/checkout", "/api/pay"} and not ONLINE_PAYMENTS_ENABLED:
+            self._json({"ok": False, "error": "Онлайн-оплата временно недоступна. Оформи заказ через чат магазина."}, 409)
+            return
         if path == "/api/checkout":
             self._checkout()
             return
@@ -8359,7 +8658,8 @@ def start_health_server(
         (StorefrontHandler,),
         {"catalog": catalog, "settings": settings, "db": db, "api": api},
     )
-    server = ThreadingHTTPServer(("0.0.0.0", port), handler)
+    host = os.getenv("HOST", os.getenv("BIND_HOST", "127.0.0.1")).strip() or "127.0.0.1"
+    server = ThreadingHTTPServer((host, port), handler)
     threading.Thread(target=server.serve_forever, name="storefront-server", daemon=True).start()
     return server
 

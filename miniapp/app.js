@@ -4,9 +4,9 @@
   const Core = window.ShopCore;
   const FALLBACK_CATALOG = {
     brand: { name: "СИЛА И ЧЕСТЬ", descriptor: "Сила и честь", drop: "ВЫПУСК 001" },
-    channel_url: "https://t.me/+XufFz8GGR0o3Njky",
+    channel_url: "https://t.me/nokayt_popmma",
     privacy_url: "",
-    media: { welcome_motion: false },
+    media: { welcome_motion: true },
     drop_event: {}, film: [], club: {}, community: [],
     categories: [], products: []
   };
@@ -19,6 +19,7 @@
     home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10.8 9-7.3 9 7.3V21H3V10.8Z"/><path d="M9 21v-6h6v6"/></svg>',
     grid: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>',
     pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11.2A7 7 0 0 0 5 9.8C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.8" r="2.2"/></svg>',
+    people: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20c1-3.5 3-5 6-5s5 1.5 6 5M16 5a3 3 0 0 1 0 6M17 15c2 0 3.5 1.5 4 4"/></svg>',
     user: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.2-3.8 3.8-5.6 7-5.6s5.8 1.8 7 5.6"/></svg>'
   };
 
@@ -41,6 +42,8 @@
     selectedSize: null,
     qty: 1,
     galleryIndex: 0,
+    galleryGroup: "studio",
+    cartStep: "items",
     deliver: "СДЭК",
     toastTimer: null,
     modalStack: [],
@@ -57,9 +60,25 @@
     dropTimer: null
   };
 
+  // The catalogue now spells this existing size 2XL. Preserve saved carts.
+  let migratedSize = false;
+  state.cart = state.cart.map(item => {
+    if (item.id !== "tee-sila-i-chest" || item.size !== "XXL") return item;
+    migratedSize = true;
+    return { ...item, size: "2XL", key: `tee-sila-i-chest::2XL${item.person ? `::${item.person}` : ""}` };
+  });
+  if (migratedSize) {
+    state.cart = Core.cleanCart(state.cart);
+    saveJSON("vorozhbitov_cart", state.cart);
+  }
+
+  // Snapshot the previous visit before this session changes the cart or history.
+  const returnVisit = { cart: state.cart.length > 0, viewed: [...state.viewed], paymentId: "", dismissed: false, generation: 0 };
+
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
   const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  let syncClubLifterMotion = () => {};
 
   function loadJSON(key, fallback) {
     try {
@@ -79,16 +98,6 @@
     read: key => loadJSON(key, null),
     write: saveJSON
   });
-
-  const SIZE_ADVICE = {
-    "S": "рост 165–174 см · вес 60–72 кг",
-    "M": "рост 172–182 см · вес 70–82 кг",
-    "L": "рост 178–188 см · вес 80–92 кг",
-    "XL": "рост 184–194 см · вес 90–105 кг",
-    "XXL": "рост 188–200 см · вес 100–120 кг",
-    "ONE SIZE": "единый универсальный размер",
-    "ОДИН": "единый универсальный размер"
-  };
 
   function escapeHTML(value) {
     return String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -110,11 +119,11 @@
 
   function imagesFor(product) {
     const list = Array.isArray(product.images) && product.images.length ? product.images : [product.image || product.image_url || "assets/base-tee.jpg"];
-    return list.map(String);
+    return list.map(src => String(src).includes("assets/client/vzglyad-card-approved.png") ? "assets/client/vzglyad-cover-20261108.webp" : String(src));
   }
 
   function imageFor(product) {
-    return product.card_image || imagesFor(product)[0];
+    return product.id === "tee-vzglyad" ? "assets/client/vzglyad-cover-20261108.webp" : product.card_image || imagesFor(product)[0];
   }
 
   function backImageFor(product) {
@@ -196,8 +205,8 @@
     state.profileOrders = Array.isArray(orders) ? orders : [];
     if (!orders.length) {
       box.innerHTML = source === "bot"
-        ? `<p class="profile-empty">Заказов пока нет. Здесь появятся заказы, зарегистрированные магазином.</p>`
-        : `<p class="profile-empty">Открой витрину из Telegram: здесь будут реальные заказы, способ оплаты и этапы доставки.</p>`;
+        ? `<div class="profile-empty-mascot"><img src="assets/mascot/steel-greeter-poster-v2.jpg" alt="" loading="lazy"><p class="profile-empty">Заказов пока нет. Здесь появятся заказы, зарегистрированные магазином.</p></div>`
+        : `<div class="profile-empty-mascot"><img src="assets/mascot/steel-greeter-poster-v2.jpg" alt="" loading="lazy"><p class="profile-empty">Открой витрину из Telegram: здесь будут реальные заказы, способ оплаты и этапы доставки.</p></div>`;
       return;
     }
     box.innerHTML = `<p class="profile-caption">Заказы</p>` + orders.map((row, orderIndex) => {
@@ -205,9 +214,7 @@
       const when = formatOrderWhen(row.created_at || row.at);
       const size = row.size ? ` · размер ${row.size}` : "";
       const qty = Number(row.quantity || 1);
-      const pay = row.can_pay && row.payment_id
-        ? `<button type="button" class="profile-order-pay" data-pay-id="${escapeHTML(row.payment_id)}">Оплатить онлайн</button>`
-        : "";
+      const pay = "";
       const cancel = row.can_cancel
         ? `<button type="button" class="profile-order-cancel" data-cancel-order="${Number(row.id)}">Отменить заказ</button>`
         : "";
@@ -215,6 +222,7 @@
       const address = [row.city, row.address, row.entrance].map(value => String(value || "").trim()).filter(Boolean).join(" · ");
       const giftSerial = row.gift && row.gift.serial_label ? ` · №${row.gift.serial_label}` : "";
       return `<article class="profile-order" data-status="${escapeHTML(status)}">
+        ${["new", "awaiting_payment", "paid", "confirmed", "shipped", "received", "completed"].includes(status) ? `<div class="order-progress" aria-label="Этап заказа"><span class="${["paid", "confirmed", "shipped", "received", "completed"].includes(status) ? "is-done" : "is-current"}">01 · ОПЛАТА</span><span class="${["confirmed", "shipped", "received", "completed"].includes(status) ? "is-done" : status === "paid" ? "is-current" : ""}">02 · СБОРКА</span><span class="${["shipped", "received", "completed"].includes(status) ? "is-current" : ""}">03 · ДОСТАВКА</span></div>` : ""}
         <div class="profile-order-main">
           <strong>${escapeHTML(row.product_name || "Вещь")}${escapeHTML(size)} · ${qty} шт.</strong>
           <small>${escapeHTML(when)}${row.amount_label ? ` · Сумма: ${escapeHTML(row.amount_label)}` : ""}</small>
@@ -252,7 +260,7 @@
       if (!response.ok) throw new Error(payload.error || "orders unavailable");
       renderProfileOrders(Array.isArray(payload.orders) ? payload.orders : [], "bot");
     } catch (_) {
-      box.innerHTML = `<p class="profile-empty">Не удалось загрузить заказы. Закрой профиль и попробуй ещё раз; локальную историю мы не выдаём за покупки.</p>`;
+      box.innerHTML = `<div class="profile-empty"><p>Не удалось загрузить заказы. Проверь соединение и повтори.</p><button type="button" class="button button-ghost" data-retry-orders>ПОВТОРИТЬ ЗАГРУЗКУ</button></div>`;
     }
   }
 
@@ -298,7 +306,7 @@
     }
     if (profile.deliver) {
       state.deliver = profile.deliver;
-      $$("#deliverRow .filter-chip").forEach(node => node.classList.toggle("active", node.dataset.deliver === profile.deliver));
+      $$("#deliverRow .filter-chip").forEach(node => { const active = node.dataset.deliver === profile.deliver; node.classList.toggle("active", active); node.setAttribute("aria-pressed", String(active)); });
     }
   }
 
@@ -369,6 +377,7 @@
     if (top !== "productModal" || state.stage !== "3d" || document.hidden) stop3D();
     else if (state.viewer) state.viewer.start();
     syncWelcomeVideo();
+    syncClubLifterMotion();
   }
 
   function focusableElements(modal) {
@@ -402,6 +411,8 @@
     if (id === "productModal") {
       stop3D();
       pauseProductVideo();
+      const frame = $("#real3dFrame");
+      if (frame) frame.removeAttribute("src");
     }
     if (id === "payModal") stopPayPoll();
     if (id === "filmModal") stopFilm();
@@ -458,24 +469,39 @@
   function setStage(mode, silent) {
     if (mode === "video" && (!state.currentProduct || !state.currentProduct.video)) mode = "photo";
     if (mode === "3d" && (!state.currentProduct || !Array.isArray(state.currentProduct.spin) || state.currentProduct.spin.length < 2)) mode = "photo";
+    const previousMode = state.stage;
     state.stage = mode;
+    const galleryMode = mode === "photo";
+    if (!galleryMode) $("#mediaError").classList.add("hidden");
     const canvas = $("#view3d");
+    const real3d = mode === "3d" && state.currentProduct?.id === "tee-vzglyad";
+    const real3dFrame = $("#real3dFrame");
     const photo = $("#sheetImage");
+    const fit = $("#sheetFit");
     const video = $("#sheetVideo");
     const hint = $("#view3dHint");
     const dots = $("#galleryDots");
-    if (mode !== "3d") stop3D();
+    if (mode !== "3d" || real3d) stop3D();
     if (mode !== "video") pauseProductVideo();
     if ($("#stage3d")) $("#stage3d").classList.toggle("active", mode === "3d");
     if ($("#stagePhoto")) $("#stagePhoto").classList.toggle("active", mode === "photo");
+    if ($("#stageFit")) $("#stageFit").classList.toggle("active", mode === "fit");
     if ($("#stageVideo")) $("#stageVideo").classList.toggle("active", mode === "video");
-    if (canvas) canvas.classList.toggle("hidden", mode !== "3d");
-    if (photo) photo.classList.toggle("hidden", mode !== "photo");
+    if (canvas) canvas.classList.toggle("hidden", mode !== "3d" || real3d);
+    if (real3dFrame) {
+      real3dFrame.classList.toggle("hidden", !real3d);
+      if (real3d && !real3dFrame.getAttribute("src")) real3dFrame.src = "assets/vzglyad-3d/index-20261107f.html";
+      if (!real3d) real3dFrame.removeAttribute("src");
+    }
+    if (photo) photo.classList.toggle("hidden", !galleryMode);
+    if (fit) fit.classList.toggle("hidden", mode !== "fit");
     if (video) video.classList.toggle("hidden", mode !== "video");
-    if (hint) hint.classList.toggle("hidden", mode !== "3d");
-    if (dots) dots.classList.toggle("hidden", mode !== "photo");
-    $("#zoomProduct").classList.toggle("hidden", mode === "video");
-    $(".media-toolbar").classList.toggle("hidden", mode === "video");
+    if (hint) hint.classList.toggle("hidden", mode !== "3d" || real3d);
+    if (dots) dots.classList.toggle("hidden", !galleryMode);
+    $("#galleryGroups").classList.toggle("hidden", !galleryMode || !state.currentProduct?.source_images?.length);
+    if (galleryMode && previousMode !== mode && state.currentProduct) renderGallery(state.currentProduct);
+    $("#zoomProduct").classList.toggle("hidden", mode === "video" || mode === "fit" || real3d);
+    $(".media-toolbar").classList.toggle("hidden", mode === "video" || mode === "fit" || real3d);
     $("#spinToggle").classList.toggle("hidden", mode !== "3d");
     $$("[data-stage]").forEach(button => {
       const active = button.dataset.stage === mode;
@@ -484,7 +510,7 @@
     });
     updateMediaPosition();
     if (silent) return;
-    if (mode === "3d" && state.currentProduct) start3D(state.currentProduct);
+    if (mode === "3d" && state.currentProduct && !real3d) start3D(state.currentProduct);
     else if (mode === "video") playProductVideo();
   }
 
@@ -501,6 +527,8 @@
   function renderCategoryChips() {
     const root = $("#categoryChips");
     const visible = state.data.categories.filter(category => state.data.products.some(product => Core.buyable(product) && product.category === category.id));
+    root.classList.toggle("hidden", visible.length <= 1);
+    if (visible.length <= 1) state.category = "all";
     const all = [{ id: "all", name: "Все вещи" }, ...visible];
     root.innerHTML = all.map(category => `<button class="category-chip ${state.category === category.id ? "active" : ""}" data-category="${escapeHTML(category.id)}" type="button" aria-pressed="${state.category === category.id}">${escapeHTML(category.name)}</button>`).join("");
   }
@@ -523,30 +551,28 @@
   }
 
   function renderProductCard(product, index) {
-    const backImg = backImageFor(product);
-    const isLtd = product.stock_status === "limited" || (product.badge && product.badge.includes("ЛИМИТ"));
-    const scarcityPercent = product.stock_status === "sold_out" ? 100 : (isLtd ? 84 : 68);
-    const scarcityText = product.stock_status === "sold_out" ? "Тираж закрыт" : `Бронь тиража · ${scarcityPercent}%`;
-
-    return `<article class="product-card" data-product-id="${escapeHTML(product.id)}" style="--i:${index}">
+    const spin = Array.isArray(product.spin) ? product.spin : [];
+    const modelCard = product.id === "tee-vzglyad";
+    const brandedSpin = modelCard || (product.id === "tee-sila-i-chest" && product.spin_kind === "visualization" && spin.length >= 8);
+    const spinLabels = Array.isArray(product.spin_labels) ? product.spin_labels : [];
+    const backIndex = spinLabels.findIndex(label => /180°|сзади\s*[·—-]?\s*180/i.test(String(label)));
+    const frontImg = modelCard ? "assets/client/vzglyad-cover-20261108.webp" : brandedSpin ? spin[0] : imageFor(product);
+    const backImg = modelCard ? "assets/client/vzglyad-back-studio-20261107.jpg" : brandedSpin ? spin[backIndex >= 0 && backIndex < spin.length ? backIndex : Math.floor(spin.length / 2)] : backImageFor(product);
+    return `<article class="product-card ${brandedSpin ? 'is-branded-spin' : ''}" data-product-id="${escapeHTML(product.id)}" style="--i:${index}">
       <div class="product-image ${backImg ? 'has-back' : ''}">
-        <img class="product-img-front ${backImg ? 'has-back-pair' : ''}" src="${escapeHTML(imageFor(product))}" alt="${escapeHTML(product.name)}" ${index === 0 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>
+        <img class="product-img-front ${backImg ? 'has-back-pair' : ''}" src="${escapeHTML(frontImg)}" alt="${escapeHTML(product.name)}" ${index === 0 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>
         ${backImg ? `<img class="product-img-back" src="${escapeHTML(backImg)}" alt="${escapeHTML(product.name)} (вид со спины)" loading="lazy">` : ''}
         <span class="product-badge">${escapeHTML(product.badge || "БАЗА")}</span>
         ${backImg ? `<button type="button" class="badge-side" aria-label="Показать вид со спины" data-action="flip">СПИНА ↺</button>` : ''}
         ${backImg ? `<div class="card-dots" aria-hidden="true"><span class="card-dot active"></span><span class="card-dot"></span></div>` : ''}
-        ${Array.isArray(product.spin) && product.spin.length > 1 ? '<span class="badge-3d">ВРАЩЕНИЕ 360°</span>' : `<span class="badge-3d">${imagesFor(product).length} ФОТО</span>`}
+        ${Array.isArray(product.spin) && product.spin.length > 1 ? `<span class="badge-3d">${product.spin_kind === "visualization" ? "360°" : "ВРАЩЕНИЕ 360°"}</span>` : `<span class="badge-3d">${imagesFor(product).length} ФОТО</span>`}
         <span class="product-hover">ОТКРЫТЬ КАРТОЧКУ <b>↗</b></span>
       </div>
       <div class="product-info">
         <div class="product-topline"><span>${escapeHTML(categoryName(product.category))}</span><span class="product-stock">${escapeHTML(product.stock_label || "В наличии")}</span></div>
-        <div class="product-scarcity" aria-hidden="true">
-          <div class="scarcity-bar"><div class="scarcity-fill" style="width: ${scarcityPercent}%"></div></div>
-          <span class="scarcity-label">${scarcityText}</span>
-        </div>
         <h3><button type="button" class="product-open" aria-label="Открыть ${escapeHTML(product.name)}">${escapeHTML(product.name)}</button></h3>
         <div class="product-sizes">${(product.sizes || []).map(escapeHTML).join(" · ") || "Ждём пополнение"}</div>
-        <div class="product-bottom"><strong class="product-price">${escapeHTML(product.price)}</strong><span class="product-fit">${escapeHTML(product.fit || "Свободный крой")}</span></div>
+        <div class="product-bottom"><strong class="product-price">${escapeHTML(product.price)}</strong><span class="product-card-link" aria-hidden="true">О ВЕЩИ ↗</span></div>
       </div>
     </article>`;
   }
@@ -562,21 +588,39 @@
   }
 
   function galleryLabel(product, index) {
-    return (product.image_labels || [])[index] || `Фото ${index + 1}`;
+    return state.galleryGroup === "source"
+      ? (product.source_labels || [])[index] || `Исходный кадр ${index + 1}`
+      : (product.image_labels || [])[index] || `Ракурс ${index + 1}`;
+  }
+
+  function galleryImages(product) {
+    return state.galleryGroup === "source" && product.source_images?.length
+      ? product.source_images : imagesFor(product);
   }
 
   function updateMediaPosition() {
     const viewer = state.viewer;
     if (state.stage === "video") {
       $("#mediaPosition").textContent = "ВИДЕО";
+      $("#mediaViewName").textContent = "";
       $("#mediaPrev").disabled = true;
       $("#mediaNext").disabled = true;
       $("#spinToggle").disabled = true;
       return;
     }
-    const count = state.stage === "3d" && viewer ? viewer.frames.length : imagesFor(state.currentProduct || {}).length;
+    const count = state.stage === "3d" && viewer ? viewer.frames.length : galleryImages(state.currentProduct || {}).length;
     const index = state.stage === "3d" && viewer ? viewer.frameIndex() : state.galleryIndex;
     $("#mediaPosition").textContent = `${String(index + 1).padStart(2, "0")} / ${String(count).padStart(2, "0")}`;
+    const product = state.currentProduct || {};
+    $("#mediaViewName").textContent = state.stage === "3d"
+      ? (product.spin_labels || [])[index] || "Обзор вещи"
+      : galleryLabel(product, index);
+    const sourceActive = state.stage === "photo" && state.galleryGroup === "source";
+    $$("[data-gallery-group]").forEach(button => {
+      const active = button.dataset.galleryGroup === (sourceActive ? "source" : "studio");
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
     $("#mediaPrev").disabled = count < 2;
     $("#mediaNext").disabled = count < 2;
     $("#spinToggle").disabled = count < 2;
@@ -586,17 +630,20 @@
   }
 
   function renderGallery(product) {
-    const images = imagesFor(product);
+    const images = galleryImages(product);
     state.galleryIndex = 0;
+    $("#mediaError").classList.add("hidden");
+    $(".sheet-image").classList.toggle("source-media", state.galleryGroup === "source");
     $("#sheetImage").src = images[0];
     $("#sheetImage").alt = `${product.name} — ${galleryLabel(product, 0)}`;
-    $("#galleryDots").innerHTML = images.map((src, index) => `<button type="button" data-gallery="${index}" class="${index === 0 ? "active" : ""}" aria-pressed="${index === 0}" aria-label="${escapeHTML(galleryLabel(product, index))}"><img src="${escapeHTML(src)}" alt="" loading="lazy" decoding="async"></button>`).join("");
+    $("#galleryDots").innerHTML = images.map((src, index) => `<button type="button" data-gallery="${index}" class="${index === 0 ? "active" : ""}" aria-pressed="${index === 0}" aria-label="${escapeHTML(galleryLabel(product, index))}"><span aria-hidden="true">${String(index + 1).padStart(2, "0")}</span><img src="${escapeHTML(src)}" alt="" decoding="async"></button>`).join("");
   }
 
   function setGallery(index) {
     const product = state.currentProduct;
     if (!product) return;
-    const images = imagesFor(product);
+    const images = galleryImages(product);
+    $("#mediaError").classList.add("hidden");
     state.galleryIndex = (index + images.length) % images.length;
     const sheetImg = $("#sheetImage");
     if (sheetImg) {
@@ -622,24 +669,67 @@
   function zoomProduct() {
     const product = state.currentProduct;
     if (!product || state.stage === "video") return;
-    const src = state.stage === "3d" && state.viewer ? state.viewer.currentSource() : imagesFor(product)[state.galleryIndex];
-    openLightbox(src, `${product.name} · ${state.stage === "photo" ? galleryLabel(product, state.galleryIndex) : "Обзор 360°"}`);
+    const src = state.stage === "3d" && state.viewer ? state.viewer.currentSource() : galleryImages(product)[state.galleryIndex];
+    openLightbox(src, `${product.name} · ${state.stage === "3d" ? "Обзор 360° · визуализация" : galleryLabel(product, state.galleryIndex)}`);
   }
 
   function updatePurchaseSummary() {
-    const product = state.currentProduct;
+    const product = state.currentProduct && productById(state.currentProduct.id);
     const gift = Boolean(product && !Core.buyable(product));
     $("#purchaseSummary").textContent = gift
       ? "Добавим бесплатно к заказу, пока есть тираж."
       : product ? `${product.price} · ${state.selectedSize ? `размер ${state.selectedSize}` : "Выбери размер"}` : "Выбери размер";
-    const blocked = !product || !Core.available(product) || gift;
+    const blocked = !state.catalogReady || !product || Boolean(product.stock_check_unavailable) || !Core.available(product) || gift;
     $("#addToCartButton").disabled = blocked;
-    $("#addToCartButton").innerHTML = gift ? "ТОЛЬКО В ПОДАРОК" : blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : state.selectedSize ? 'ДОБАВИТЬ В КОРЗИНУ <span>+</span>' : 'ВЫБРАТЬ РАЗМЕР <span>↑</span>';
+    $("#addToCartButton").innerHTML = !state.catalogReady ? (state.catalogLoading ? "ПРОВЕРЯЕМ НАЛИЧИЕ" : "ОБНОВИ КАТАЛОГ") : gift ? "ТОЛЬКО В ПОДАРОК" : product?.stock_check_unavailable ? "НАЛИЧИЕ УТОЧНЯЕТСЯ" : blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : state.selectedSize ? 'ДОБАВИТЬ В КОРЗИНУ <span>+</span>' : 'ВЫБРАТЬ РАЗМЕР <span>↑</span>';
+    const directBtn = $("#directOrderButton");
+    if (directBtn) {
+      directBtn.disabled = blocked;
+      const isPreorder = /предзаказ/i.test(`${product?.badge || ""} ${product?.stock_label || ""}`);
+      directBtn.innerHTML = gift ? "ТОЛЬКО В ПОДАРОК" : blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : isPreorder ? "ОФОРМИТЬ ПРЕДЗАКАЗ В TELEGRAM ↗" : "ОФОРМИТЬ ЗАКАЗ В TELEGRAM ↗";
+    }
+  }
+
+  // The brand's chart describes body measurements, not garment dimensions.
+  const BODY_SIZE_CHART = [
+    {size:"S", chest:[88,96], waist:[76,84], hips:[92,100], height:[170,176]},
+    {size:"M", chest:[96,104], waist:[84,92], hips:[100,108], height:[176,182]},
+    {size:"L", chest:[104,112], waist:[92,100], hips:[108,116], height:[182,188]},
+    {size:"XL", chest:[112,120], waist:[100,108], hips:[116,124], height:[188,194]},
+    {size:"2XL", chest:[120,128], waist:[108,116], hips:[124,132], height:[194,200]},
+    {size:"3XL", chest:[128,136], waist:[116,124], hips:[132,140], height:[200,206]}
+  ];
+  const normalizeBodySize = size => String(size).toUpperCase() === "XXL" ? "2XL" : String(size).toUpperCase();
+  function bodySizeRows(product) {
+    if (!product || !["tee-sila-i-chest", "tee-vzglyad"].includes(product.id)) return [];
+    return (product.sizes || []).map(size => {
+      const row = BODY_SIZE_CHART.find(item => item.size === normalizeBodySize(size));
+      return row ? { ...row, size: String(size) } : null;
+    }).filter(Boolean);
+  }
+  function renderBodySizeGuide(product) {
+    const rows = bodySizeRows(product);
+    const range = values => values.join("–");
+    $("#compareWidth").value = "";
+    $("#compareLength").value = "";
+    $("#compareWaist").value = "";
+    $("#compareHips").value = "";
+    $("#compareSize").disabled = !rows.length;
+    $("#measurementTable").innerHTML = rows.length ? `<div class="measurement-table body-measurements" role="table" aria-label="Таблица параметров тела в сантиметрах"><div class="measurement-head" role="row"><span>РАЗМЕР</span><span>ГРУДЬ</span><span>ТАЛИЯ</span><span>БЁДРА</span><span>РОСТ</span></div>${rows.map(row => `<div role="row"><strong>${escapeHTML(row.size)}</strong><span>${range(row.chest)}</span><span>${range(row.waist)}</span><span>${range(row.hips)}</span><span>${range(row.height)}</span></div>`).join("")}</div><p class="size-guide-note">Все значения — параметры тела в сантиметрах, а не размеры футболки. Сопоставь также талию, бёдра и рост: посадка зависит от комплекции.</p>` : "<p class=\"size-guide-note\">Таблица для этой вещи пока недоступна.</p>";
+    $("#compareResult").textContent = rows.length ? "Укажи обхват груди, чтобы увидеть подходящие строки таблицы." : "Таблица для этой вещи пока недоступна.";
   }
 
   function renderSheet(product) {
     state.currentProduct = product;
-    const preferred = (state.profile.size || "").trim();
+    state.galleryGroup = "studio";
+    state.stage = "photo";
+    renderBodySizeGuide(product);
+    $$(".product-more").forEach(detail => { detail.open = false; });
+    $(".sheet-image").classList.toggle("studio-media", product.spin_kind === "visualization");
+    $("#view3dHint").textContent = product.spin_kind === "visualization"
+      ? "ВИЗУАЛИЗАЦИЯ · ТЯНИ В СТОРОНЫ" : "ТЯНИ В СТОРОНЫ";
+    $("#stagePhoto").textContent = "ОБЗОР";
+    const preferred = (product.sizes || []).find(size => normalizeBodySize(size) === normalizeBodySize((state.profile.size || "").trim())) || "";
     state.selectedSize = preferred && (product.sizes || []).includes(preferred)
       ? preferred
       : ((product.sizes || []).length === 1 ? product.sizes[0] : null);
@@ -656,14 +746,14 @@
     if (product.video) {
       if (productVideo.getAttribute("src") !== product.video) productVideo.src = product.video;
       productVideo.poster = product.card_image || product.image || "";
-      productVideo.setAttribute("aria-label", sourceTurnVideo ? `${product.name} — исходное видео модели от переда к спине, без звука` : `${product.name} — видеообзор исходных видов без звука`);
+      productVideo.setAttribute("aria-label", sourceTurnVideo ? `${product.name} — исходное видео модели от переда к спине, без звука` : `${product.name} — видеообзор без звука`);
     } else {
       productVideo.removeAttribute("src");
       productVideo.removeAttribute("poster");
       productVideo.load();
     }
     $("#sheetBadge").textContent = product.badge || "БАЗА";
-    $("#sheetKicker").textContent = `${categoryName(product.category).toUpperCase()} / ${product.fit || "БАЗА"}`;
+    $("#sheetKicker").textContent = `${categoryName(product.category).toUpperCase()} / ДРОП 001`;
     $("#sheetTitle").textContent = product.name;
     const sign = $("#sheetSign");
     if (sign) {
@@ -673,20 +763,23 @@
     $("#sheetPrice").textContent = gift ? "Бесплатно · в подарок" : product.price;
     $(".size-block").classList.toggle("hidden", gift);
     $(".qty-row").classList.toggle("hidden", gift);
-    $("#waitlistButton").classList.toggle("hidden", gift);
+    // Каталог пока не сообщает, какие отдельные размеры закончились.
+    $("#waitlistButton").classList.add("hidden");
     $("#sheetDescription").textContent = product.description;
-    $("#sheetFacts").innerHTML = `<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Плотный хлопок")}</span></div><div class="fact-row"><span>Посадка</span><span>${escapeHTML(product.fit || "Свободная")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(product.stock_label || "В наличии")}</span></div>`;
+    $("#careMaterial").textContent = product.material ? `Состав: ${product.material}.` : "Состав материала уточняется.";
+    $$(".product-care details").forEach(item => { item.open = false; });
+    $("#sheetFacts").innerHTML = `<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Уточняется")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(product.stock_check_unavailable ? "Наличие уточняется" : (product.stock_label || "В наличии"))}</span></div>`;
+    $("#preorderNotice").classList.toggle("hidden", !/предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`));
     renderPassport(product);
     $("#sizeList").innerHTML = (product.sizes || []).map(size => `<button class="size-button ${state.selectedSize === size ? "selected" : ""}" data-size="${escapeHTML(size)}" aria-pressed="${state.selectedSize === size}" type="button">${escapeHTML(size)}</button>`).join("");
-    const initialAdvice = state.selectedSize ? SIZE_ADVICE[state.selectedSize.toUpperCase()] : null;
-    $("#sizeHint").textContent = state.selectedSize ? (initialAdvice ? `Размер ${state.selectedSize}: ${initialAdvice}.` : `Размер ${state.selectedSize} выбран.`) : "Выбери размер.";
+    $("#sizeHint").textContent = product.stock_check_unavailable ? "Не удалось проверить наличие размеров. Попробуй позже." : state.selectedSize ? `Размер ${state.selectedSize} выбран.` : (product.sizes || []).length ? "Выбери размер. Открой подсказку и сравни свои параметры с таблицей." : "Наличие размеров пока уточняется.";
     $("#sizeHint").classList.remove("error");
     const hasApparelSizes = (product.sizes || []).some(s => ["S", "M", "L", "XL", "XXL"].includes(String(s).toUpperCase()));
     const guideToggle = $("#sizeGuideToggle");
     if (guideToggle) {
       guideToggle.classList.toggle("hidden", !hasApparelSizes);
       guideToggle.setAttribute("aria-expanded", "false");
-      guideToggle.textContent = "ТАБЛИЦА РАЗМЕРОВ ▾";
+      guideToggle.textContent = "ПОМОЩЬ С РАЗМЕРОМ ▾";
     }
     const guide = $("#sizeGuide");
     if (guide) guide.classList.add("hidden");
@@ -701,7 +794,7 @@
     const related = others.filter(item => item.category === product.category).slice(0, 2);
     if (!related.length) related.push(...others.slice(0, 2));
     $("#related").innerHTML = related.length
-      ? `<h4>С ЭТИМ БЕРУТ</h4>${related.map(item => `<button type="button" class="related-card" data-related="${escapeHTML(item.id)}"><img src="${escapeHTML(imageFor(item))}" alt="${escapeHTML(item.name)}"><span>${escapeHTML(item.name)}</span></button>`).join("")}`
+      ? `<h4>ЕЩЁ В ДРОПЕ</h4>${related.map(item => `<button type="button" class="related-card" data-related="${escapeHTML(item.id)}"><img src="${escapeHTML(imageFor(item))}" alt="${escapeHTML(item.name)}"><span>${escapeHTML(item.name)}</span></button>`).join("")}`
       : "";
     iconize($("#productModal"));
     updatePurchaseSummary();
@@ -718,7 +811,7 @@
     rememberViewed(id);
     renderSheet(product);
     openModal("productModal");
-    $(".product-sheet").scrollTop = 0;
+    $(".product-scroll").scrollTop = 0;
     if (Number.isInteger(photoIndex)) {
       setStage("photo");
       setGallery(photoIndex);
@@ -770,9 +863,11 @@
 
   function addToCart() {
     if (state.checkoutPending) return showToast("Подожди подтверждения заказа. Корзина сохранена.");
-    const product = state.currentProduct;
-    if (!product) return;
-    if (!Core.buyable(product)) return showToast("Жетон не продаётся отдельно — добавим его к заказу бесплатно.");
+    if (!state.catalogReady) return showToast("Обнови каталог, чтобы проверить цену и наличие. Корзина сохранена.");
+    const product = state.currentProduct && productById(state.currentProduct.id);
+    if (!product) return showToast("Вещь больше недоступна. Обнови каталог.");
+    if (product.stock_check_unavailable) return showToast("Наличие уточняется. Обнови каталог перед добавлением.");
+    if (!Core.buyable(product)) return showToast("Жетон не продаётся отдельно: подарок доступен в первом дропе, пока есть жетоны из первой сотни.");
     const dropGate = dropPurchaseGate();
     if (dropGate) { showToast(dropGate); haptic("error"); return; }
     if (!state.selectedSize) {
@@ -783,6 +878,7 @@
       haptic("error");
       return;
     }
+    if (!Core.available(product) || !product.sizes.includes(state.selectedSize)) return showToast("Этот размер больше недоступен. Выбери другой размер.");
     const person = personValue(product);
     if (person === false) return;
     // Разные номера жетона — разные строки заказа, поэтому номер входит в ключ.
@@ -851,43 +947,79 @@
     const available = Boolean(gift.available && Number(gift.remaining) > 0);
     box.classList.remove("hidden");
     box.classList.toggle("is-sold-out", !available);
-    box.innerHTML = `${gift.image ? `<img src="${escapeHTML(gift.image)}" alt="">` : ""}<div><span class="section-kicker">ПОДАРОК К ЗАКАЗУ</span><strong>${escapeHTML(gift.name || "Жетон")}</strong><small>${available ? `Добавим бесплатно · осталось ${Number(gift.remaining)} из ${Number(gift.stock)}` : "Первая сотня подарков уже разобрана"}</small></div><b>${available ? "0 ₽" : "—"}</b>`;
+    box.innerHTML = `${gift.image ? `<img src="${escapeHTML(gift.image)}" alt="">` : ""}<div><span class="section-kicker">ПОДАРОК К ЗАКАЗУ</span><strong>${escapeHTML(gift.name || "Жетон")}</strong><small>${available ? "Подарок из первой сотни · наличие уточняется" : "Наличие подарка уточняется"}</small></div><b>${available ? "0 ₽" : "—"}</b>`;
+  }
+
+  function renderDeliverySummary() {
+    const box = $("#checkoutDelivery");
+    if (!box) return;
+    const city = $("#checkoutCity").value.trim();
+    const preorder = state.cart.map(item => productById(item.id)).filter(product => product
+      && /предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`));
+    const names = [...new Set(preorder.map(product => product.name))];
+    box.innerHTML = `<strong>ПРЕДПОЧТЕНИЕ ПО ДОСТАВКЕ</strong>
+      <dl><div><dt>${escapeHTML(state.deliver)}${city ? ` · ${escapeHTML(city)}` : ""}</dt><dd>Доступность, стоимость и срок ещё не подтверждены.</dd></div>
+      <div><dt>Отправка</dt><dd>${names.length ? "После готовности предзаказа. Дата отправки уточняется." : "Дата передачи перевозчику уточняется."}</dd></div></dl>
+      ${names.length ? `<p class="checkout-preorder">Предзаказ: ${escapeHTML(names.join(", "))}. К сроку в пути добавляется ожидание готовности партии.</p>` : ""}
+      <small>Стоимость и условия доставки уточняются до оплаты.</small>`;
   }
 
   function renderCart() {
     const content = $("#cartContent");
+    $("#cartNext").classList.add("hidden");
+    content.classList.remove("hidden");
     if (!state.catalogReady) {
-      content.innerHTML = `<div class="cart-empty"><h3>Сверяем корзину с каталогом.</h3><p>Сохранённые вещи на месте. Загрузим цены и размеры перед оформлением.</p><button class="button button-outline" data-cart-retry type="button">ПОВТОРИТЬ ЗАГРУЗКУ</button></div>`;
+      content.innerHTML = `<div class="cart-empty"><h3>${state.catalogLoading ? "Проверяем цены и размеры." : "Не удалось проверить каталог."}</h3><p>Сохранённые вещи на месте. Для оформления нужно подтвердить актуальные цены и наличие.</p><button class="button button-outline" data-cart-retry type="button" ${state.catalogLoading ? "disabled" : ""}>${state.catalogLoading ? "ПРОВЕРЯЕМ КАТАЛОГ…" : "ПОВТОРИТЬ ЗАГРУЗКУ"}</button></div>`;
       $("#checkoutForm").classList.add("hidden");
       return;
     }
     if (!state.cart.length) {
-      content.innerHTML = `<div class="cart-empty"><span class="empty-mark">∅</span><h3>Корзина пока пустая.</h3><p>Тихо. Даже ткань не шуршит. Загляни в витрину — выпуск короткий.</p><button class="button button-outline" data-cart-shop type="button">К ВИТРИНЕ</button></div>`;
+      content.innerHTML = `<div class="cart-empty cart-empty-brand"><div class="cart-empty-art"><img class="cart-empty-mascot" src="assets/mascot/steel-greeter-poster-v2.jpg" alt="" loading="lazy"><span>СИЛА И ЧЕСТЬ / 001</span></div><div class="cart-empty-copy"><span class="cart-empty-kicker">ПЕРВЫЙ ШАГ</span><h3>ВЫБЕРИ СВОЮ<br>ВЕЩЬ.</h3><p>Корзина пока пуста. Первый дроп уже в витрине.</p><button class="button button-primary" data-cart-shop type="button">ОТКРЫТЬ ВИТРИНУ <span aria-hidden="true">↗</span></button></div></div>`;
       $("#checkoutForm").classList.add("hidden");
       return;
     }
     let unavailable = false;
+    let stockUnknown = false;
     content.innerHTML = state.cart.map(item => {
       const product = productById(item.id);
-      const ready = product && Core.available(product) && product.sizes.includes(item.size);
+      const unknown = Boolean(product?.stock_check_unavailable);
+      if (unknown) stockUnknown = true;
+      const ready = product && !unknown && Core.available(product) && product.sizes.includes(item.size);
       if (!ready) unavailable = true;
       const image = product ? `<img class="cart-line-image" src="${escapeHTML(imageFor(product))}" alt="">` : '<span class="cart-line-image unavailable-mark" aria-hidden="true">—</span>';
-      return `<div class="cart-line ${ready ? "" : "is-unavailable"}" data-cart-key="${escapeHTML(item.key)}">${image}<div class="cart-line-name"><strong>${escapeHTML(product ? product.name : "Вещь недоступна")}</strong><small>Размер: ${escapeHTML(item.size)}${item.person ? ` · Номер: ${escapeHTML(item.person)}` : ""}</small>${ready ? `<div class="qty-control"><button data-qty="minus" type="button" aria-label="Уменьшить">−</button><span>${item.qty}</span><button data-qty="plus" type="button" aria-label="Увеличить" ${item.qty >= Core.MAX_QUANTITY ? "disabled" : ""}>+</button></div>` : '<small class="unavailable-note">Удали эту позицию или выбери доступный размер.</small>'}</div><div class="cart-line-end"><strong>${ready ? rubles(priceNumber(product.price) * item.qty) : "Недоступно"}</strong><button class="remove-line" data-remove-key="${escapeHTML(item.key)}" type="button">УДАЛИТЬ</button></div></div>`;
+      return `<div class="cart-line ${ready ? "" : "is-unavailable"}" data-cart-key="${escapeHTML(item.key)}">${image}<div class="cart-line-name"><strong>${escapeHTML(product ? product.name : "Вещь недоступна")}</strong><small>Размер: ${escapeHTML(item.size)}${item.person ? ` · Номер: ${escapeHTML(item.person)}` : ""}</small>${ready ? `<div class="qty-control"><button data-qty="minus" type="button" aria-label="Уменьшить">−</button><span>${item.qty}</span><button data-qty="plus" type="button" aria-label="Увеличить" ${item.qty >= Core.MAX_QUANTITY ? "disabled" : ""}>+</button></div>` : unknown ? '<small class="unavailable-note">Не удалось проверить наличие. Попробуй обновить каталог.</small>' : '<small class="unavailable-note">Удали эту позицию или выбери доступный размер.</small>'}</div><div class="cart-line-end"><strong>${ready ? rubles(priceNumber(product.price) * item.qty) : unknown ? "Наличие уточняется" : "Недоступно"}</strong><button class="remove-line" data-remove-key="${escapeHTML(item.key)}" type="button">УДАЛИТЬ</button></div></div>`;
     }).join("");
-    if (unavailable) content.insertAdjacentHTML("beforeend", '<p class="cart-warning" role="status">Состав изменился. Удали недоступные позиции, чтобы продолжить.</p>');
+    if (unavailable) {
+      state.cartStep = "items";
+      content.insertAdjacentHTML("beforeend", stockUnknown
+        ? '<p class="cart-warning" role="status">Не удалось проверить наличие. Корзина сохранена; обнови каталог и попробуй снова.</p><button class="button button-outline" data-cart-retry type="button">ОБНОВИТЬ КАТАЛОГ</button>'
+        : '<p class="cart-warning" role="status">Состав изменился. Удали недоступные позиции, чтобы продолжить.</p>');
+    }
     $("#cartTotal").textContent = rubles(cartTotal());
     $("#submitOrder").disabled = unavailable || state.checkoutPending;
     $("#submitManagerOrder").disabled = unavailable || state.checkoutPending;
     $$("#cartContent button, #checkoutForm input, #checkoutForm .filter-chip").forEach(node => { node.disabled = state.checkoutPending; });
     $$("#cartContent [data-qty=plus]").forEach(node => { const item = state.cart.find(row => row.key === node.closest("[data-cart-key]").dataset.cartKey); node.disabled = state.checkoutPending || item.qty >= Core.MAX_QUANTITY; });
-    $("#checkoutForm").classList.remove("hidden");
+    const editing = state.cartStep === "details";
+    $("#checkoutForm").classList.toggle("hidden", !editing);
+    $("#cartNext").classList.toggle("hidden", editing);
+    content.classList.toggle("hidden", editing);
+    $("#cartPreviewTotal").textContent = rubles(cartTotal());
+    const orderContactReady = /^[A-Za-z0-9_]{5,32}$/.test(String(state.data.order_manager_username || "").replace(/^@/, ""));
+    $("#orderUnavailable").classList.toggle("hidden", orderContactReady);
+    $("#beginCheckout").disabled = unavailable || state.checkoutPending || !orderContactReady;
+    const preorderItems = state.cart.map(item => productById(item.id)).filter(product => product && /предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`));
+    $("#cartPreorderNote").classList.toggle("hidden", !preorderItems.length);
     renderCheckoutGift();
+    renderDeliverySummary();
   }
 
   function openCart() {
+    state.cartStep = "items";
     applyProfileToCheckout();
     renderCart();
     openModal("cartModal");
+    $(".cart-sheet").scrollTop = 0;
   }
 
   function updateCartItem(key, delta) {
@@ -954,21 +1086,28 @@
 
   let payPollTimer = null;
   let payWatchId = "";
+  let payPollGeneration = 0;
 
   function stopPayPoll() {
+    payPollGeneration += 1;
     if (payPollTimer) {
       clearInterval(payPollTimer);
       payPollTimer = null;
     }
   }
 
-  function markPaidUi() {
+  function markPaidUi(orders) {
     stopPayPoll();
     haptic("success");
-    closeModal("payModal");
-    const toast = $("#successToast");
-    if (toast) toast.classList.remove("hidden");
-    showToast("Оплата прошла.");
+    $("#payPendingView").classList.add("hidden");
+    $("#paySuccessView").classList.remove("hidden");
+    $("#payModal .pay-sheet").classList.add("is-paid");
+    $("#payTitle").textContent = "ГОТОВО.";
+    const orderIds = [...new Set((orders || []).map(row => row.id).filter(Boolean))];
+    const orderLabel = $("#paySuccessOrder");
+    orderLabel.textContent = orderIds.length ? `ЗАКАЗ ${orderIds.map(id => `№ ${id}`).join(", ")}` : "";
+    orderLabel.classList.toggle("hidden", !orderIds.length);
+    $("#paySuccessDetail").textContent = "Оплата подтверждена. Статус заказа доступен в профиле; информация о доставке появится после её подтверждения.";
     loadProfileOrders();
   }
 
@@ -978,22 +1117,39 @@
     const initData = tg && tg.initData;
     if (!payWatchId || !initData) return;
     let attempts = 0;
-    payPollTimer = setInterval(async () => {
+    let checking = false;
+    const generation = payPollGeneration;
+    const check = async () => {
       // Do not burn battery/traffic while hidden, and stop after ~10 minutes:
       // the invoice stays payable from «Мои покупки».
-      if (document.hidden) return;
+      if (document.hidden || checking || generation !== payPollGeneration) return;
       attempts += 1;
-      if (attempts > 150) { stopPayPoll(); return; }
+      if (attempts > 150) { stopPayPoll(); $("#payStatus").textContent = "Проверка приостановлена · статус доступен в профиле"; return; }
+      checking = true;
       try {
         const response = await fetch("/api/my-orders", {
           headers: { Accept: "application/json", "X-Telegram-Init-Data": initData }
         });
         if (!response.ok) return;
         const payload = await response.json();
-        const paid = (payload.orders || []).some(row => row.payment_id === payWatchId && row.payment_status === "paid");
-        if (paid) markPaidUi();
+        if (generation !== payPollGeneration) return;
+        const orders = (payload.orders || []).filter(row => row.payment_id === payWatchId);
+        if (orders.some(row => row.payment_status === "paid")) markPaidUi(orders);
+        else if (orders.some(row => row.payment_status === "refund_required")) {
+          stopPayPoll();
+          $("#payStatus").textContent = "Требуется возврат · открой чат магазина";
+          $("#payMethods").classList.add("hidden");
+          $("#payNote").textContent = "Проверь заказ в профиле и открой чат магазина для решения вопроса.";
+        } else if (orders.some(row => ["cancelled", "expired", "refunded"].includes(row.payment_status))) {
+          stopPayPoll();
+          $("#payStatus").textContent = "Счёт больше не активен · проверь заказ в профиле";
+          $("#payMethods").classList.add("hidden");
+        }
       } catch (_) { /* keep waiting */ }
-    }, 4000);
+      finally { checking = false; }
+    };
+    payPollTimer = setInterval(check, 4000);
+    check();
   }
 
   function openPayLink(url) {
@@ -1008,15 +1164,18 @@
   function startPayMethod(method, url, kind) {
     if (kind === "invoice" && url && tg && typeof tg.openInvoice === "function") {
       try {
+        const activePayment = payWatchId;
         tg.openInvoice(url, status => {
-          if (status === "paid") markPaidUi();
-          else if (status === "cancelled") showToast("Оплата отменена.");
-          else showToast("Не получилось оплатить. Попробуй другой способ.");
+          if (!state.modalStack.includes("payModal") || payWatchId !== activePayment) return;
+          if (status === "paid") { $("#payStatus").textContent = "Проверяем подтверждение оплаты…"; startPayPoll(payWatchId); }
+          else if (status === "cancelled") { $("#payStatus").textContent = "Оплата отменена · можно выбрать способ снова"; showToast("Оплата отменена. Счёт сохранён."); }
+          else { $("#payStatus").textContent = "Ожидаем подтверждение оплаты"; showToast("Проверь статус или попробуй другой способ."); }
         });
         return;
       } catch (_) { /* fall through to link */ }
     }
     if (url && openPayLink(url)) {
+      $("#payStatus").textContent = "Ожидаем подтверждение оплаты";
       showToast("Окно оплаты открыто. Статус обновится сам.");
       return;
     }
@@ -1024,6 +1183,13 @@
   }
 
   function showPaySheet(data) {
+    $("#payModal .pay-sheet").classList.remove("is-paid");
+    $("#payTitle").textContent = "ВЫБЕРИ СПОСОБ.";
+    $("#payPendingView").classList.remove("hidden");
+    $("#paySuccessView").classList.add("hidden");
+    $("#payStatus").textContent = "Счёт создан · ожидает оплаты";
+    $("#payMethods").classList.remove("hidden");
+    $("#payNote").textContent = "Статус обновится сам. Если закроешь окно, вернись к оплате в профиле, в разделе заказов.";
     const amount = $("#payAmount");
     if (amount) amount.textContent = data.amount_label || "—";
     const linesBox = $("#payLines");
@@ -1040,7 +1206,10 @@
     if (box) {
       const methods = Array.isArray(data.methods) ? data.methods : [];
       if (!methods.length) {
-        box.innerHTML = `<p class="pay-lead">Способы оплаты придут сообщением в чат с ботом.</p>`;
+        $("#payTitle").textContent = "ОПЛАТА НЕДОСТУПНА.";
+        $("#payStatus").textContent = "Счёт создан · способы оплаты пока недоступны";
+        $("#payNote").textContent = "Заказ сохранён. Проверить статус и попробовать снова можно в профиле.";
+        box.innerHTML = `<p class="pay-lead">Не удалось получить способы оплаты. Попробуй ещё раз позже.</p>${data.payment_id ? `<button class="button button-outline" type="button" data-pay-retry="${escapeHTML(data.payment_id)}">ПОВТОРИТЬ ↻</button>` : ""}`;
       } else {
         box.innerHTML = methods.map(method => {
           const title = escapeHTML(method.title || method.id);
@@ -1052,6 +1221,7 @@
         }).join("");
       }
     }
+    closeModal("reviewModal");
     closeModal("cartModal");
     closeModal("profileModal");
     openModal("payModal");
@@ -1081,15 +1251,49 @@
         return;
       }
       showPaySheet(data);
+      return true;
     } catch (_) {
       showToast("Сеть не ответила. Попробуй ещё раз.");
     }
+    return false;
+  }
+
+  function checkoutFieldError(id, message) {
+    const field = $("#" + id);
+    const error = $("#" + id + "Error");
+    if (field) {
+      field.setAttribute("aria-invalid", "true");
+      field.focus({ preventScroll: true });
+      field.scrollIntoView({ behavior: reducedMotion() ? "instant" : "smooth", block: "center" });
+    }
+    if (error) { error.textContent = message; error.classList.remove("hidden"); }
+    haptic("error");
+    return null;
+  }
+
+  function clearCheckoutFieldError(field) {
+    field.removeAttribute("aria-invalid");
+    const error = $("#" + field.id + "Error");
+    if (error) { error.textContent = ""; error.classList.add("hidden"); }
+  }
+
+  function askDelivery() {
+    const city = $("#checkoutCity").value.trim();
+    const lines = cartItems().map(({item, product}) => `${product.name} · размер ${item.size} · ${item.qty} шт.`);
+    const text = ["Здравствуйте! Подскажите стоимость и срок доставки до оплаты.",
+      ...lines, `Способ: ${state.deliver}`, city ? `Город: ${city}` : "Город: "].join("\n");
+    const url = checkoutClient.managerUrl(state.data.support_username, text);
+    if (!url) { showToast("Контакт магазина пока не подключён."); return; }
+    if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
+    showToast("Проверь вопрос и отправь его в чат магазина.");
+    haptic("light");
   }
 
   function prepareOrder() {
     const pairs = cartItems();
     if (!state.catalogReady) { showToast("Подожди загрузку каталога."); return null; }
-    if (pairs.length !== state.cart.length || pairs.some(({item, product}) => !Core.available(product) || !product.sizes.includes(item.size))) {
+    if (pairs.length !== state.cart.length || pairs.some(({item, product}) => product.stock_check_unavailable || !Core.available(product) || !product.sizes.includes(item.size))) {
       renderCart();
       showToast("Проверь недоступные позиции в корзине.");
       return null;
@@ -1103,10 +1307,10 @@
     const note = $("#checkoutNote").value.trim();
     const consent = $("#checkoutConsent").checked;
     if (!pairs.length) { showToast("Добавь хотя бы одну вещь."); return null; }
-    if (name.length < 2) { showToast("Напиши имя — менеджеру нужно знать, как обратиться."); return null; }
-    if (phone.replace(/\D/g, "").length < 10) { showToast("Проверь номер телефона."); return null; }
-    if (city.length < 2) { showToast("Укажи город."); return null; }
-    if (!consent) { showToast("Подтверди согласие на обработку данных."); return null; }
+    if (name.length < 2) return checkoutFieldError("checkoutName", "Укажи имя — не меньше двух букв.");
+    if (phone.replace(/\D/g, "").length < 10) return checkoutFieldError("checkoutPhone", "Проверь номер телефона.");
+    if (city.length < 2) return checkoutFieldError("checkoutCity", "Укажи город доставки.");
+    if (!consent) return checkoutFieldError("checkoutConsent", "Подтверди согласие на обработку данных.");
 
     persistProfile({
       ...state.profile,
@@ -1135,6 +1339,22 @@
     return { pairs, payload };
   }
 
+  function reviewOrder() {
+    const prepared = prepareOrder();
+    if (!prepared) return;
+    const customer = prepared.payload.customer;
+    $("#reviewLines").innerHTML = prepared.pairs.map(({ item, product }) => `<div class="review-line"><img src="${escapeHTML(imageFor(product))}" alt=""><div><strong>${escapeHTML(product.name)}</strong><small>Размер ${escapeHTML(item.size)} · ${Number(item.qty)} шт.${item.person ? ` · номер ${escapeHTML(item.person)}` : ""}</small></div><b>${rubles(priceNumber(product.price) * item.qty)}</b></div>`).join("");
+    const gift = state.data.gift;
+    const showGift = Boolean(gift && gift.available && Number(gift.remaining) > 0);
+    $("#reviewGift").classList.toggle("hidden", !showGift);
+    $("#reviewGift").textContent = showGift ? `Подарок: ${gift.name || "Жетон"} · наличие уточняется` : "";
+    $("#reviewCustomer").textContent = [customer.name, customer.phone].filter(Boolean).join(" · ");
+    $("#reviewDelivery").textContent = [`Предпочтение: ${customer.deliver}`, customer.city, customer.address].filter(Boolean).join(" · ");
+    $("#reviewTotal").textContent = rubles(cartTotal());
+    $("#reviewError").classList.add("hidden");
+    openModal("reviewModal");
+  }
+
   function submitManagerOrder() {
     if (state.checkoutPending) return;
     const prepared = prepareOrder();
@@ -1143,6 +1363,7 @@
       const text = checkoutClient.managerMessage({
         customer: prepared.payload.customer,
         totalLabel: rubles(cartTotal()),
+        giftName: state.data.gift && state.data.gift.available && Number(state.data.gift.remaining) > 0 ? state.data.gift.name || "Жетон" : "",
         lines: prepared.pairs.map(({ item, product }) => ({
           name: product.name,
           size: item.size,
@@ -1151,15 +1372,15 @@
           person: item.person || ""
         }))
       });
-      const url = checkoutClient.managerUrl(state.data.support_username, text);
+      const url = checkoutClient.managerUrl(state.data.order_manager_username, text);
       if (!url) {
-        showToast("Менеджер пока не подключён. Онлайн-оплата остаётся доступна отдельной кнопкой.");
+        showToast("Чат магазина пока не подключён. Корзина сохранена.");
         return;
       }
       if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
       else window.open(url, "_blank", "noopener,noreferrer");
       haptic("light");
-      showToast("Чат открыт. Проверь готовый текст и отправь его менеджеру — без сообщения заказа нет.");
+      showToast("Чат открыт. Проверь готовый текст и отправь его — без сообщения заказа нет.");
     } catch (error) {
       showToast(error.message || "Не удалось подготовить текст заказа. Корзина сохранена.");
     }
@@ -1170,7 +1391,7 @@
     const prepared = prepareOrder();
     if (!prepared) return;
     const { payload } = prepared;
-    const button = $("#submitOrder");
+    const button = $("#confirmOrder");
     const previous = button ? button.innerHTML : "";
     state.checkoutPending = true;
     renderCart();
@@ -1188,17 +1409,21 @@
         haptic("success");
         showPaySheet(data);
       } else {
+        closeModal("reviewModal");
         closeModal("cartModal");
         openProfile();
         showToast(data.status === "paid" ? "Этот заказ уже оплачен." : "Заказ уже обработан. Проверь его статус.");
       }
     } catch (error) {
       if (error.code === "gift_unavailable") loadCatalog();
-      showToast(error.message || "Нет подтверждения от сервера. Корзина сохранена.");
+      const message = error.message || "Нет подтверждения от сервера. Корзина сохранена.";
+      $("#reviewError").textContent = message;
+      $("#reviewError").classList.remove("hidden");
+      showToast(message);
       haptic("error");
     } finally {
       state.checkoutPending = false;
-      if (button) button.innerHTML = previous;
+      if (button) { button.innerHTML = previous; button.disabled = false; }
       renderCart();
     }
   }
@@ -1210,14 +1435,30 @@
   }
 
   function openLightbox(src, caption) {
-    $("#lightboxViewport").classList.remove("zoomed");
-    $("#lightboxViewport").scrollTo(0, 0);
-    $("#lightboxZoom").textContent = "Увеличить +";
-    $("#lightboxZoom").setAttribute("aria-pressed", "false");
+    setLightboxZoom(false);
     $("#lightboxImage").src = src;
     $("#lightboxImage").alt = caption || "";
     $("#lightboxCaption").textContent = caption || "";
     openModal("lightbox");
+  }
+
+  function centerLightboxImage() {
+    const viewport = $("#lightboxViewport");
+    viewport.scrollTo((viewport.scrollWidth - viewport.clientWidth) / 2,
+      (viewport.scrollHeight - viewport.clientHeight) / 2);
+  }
+
+  function setLightboxZoom(zoomed) {
+    const viewport = $("#lightboxViewport");
+    viewport.classList.toggle("zoomed", zoomed);
+    $("#lightboxZoom").setAttribute("aria-pressed", String(zoomed));
+    $("#lightboxZoom").textContent = zoomed ? "Весь кадр −" : "Увеличить +";
+    $("#lightboxHint").classList.toggle("hidden", !zoomed);
+    viewport.setAttribute("aria-label", zoomed
+      ? "Увеличенная фотография. Перемещай пальцем, мышью или стрелками."
+      : "Фотография товара. Нажми «Увеличить», чтобы рассмотреть детали.");
+    if (zoomed) window.requestAnimationFrame(centerLightboxImage);
+    else viewport.scrollTo(0, 0);
   }
 
   function configureTelegram() {
@@ -1255,7 +1496,6 @@
       stopWelcomeVideo();
       syncModalLayers();
       syncMainButton();
-      maybeOpenFilmOnce();
     }, reducedMotion() ? 0 : 350);
   }
 
@@ -1263,24 +1503,70 @@
     const boot = $("#boot");
     const welcome = $("#welcome");
     if (boot) boot.classList.add("hidden");
-    if (!welcome) {
-      syncModalLayers();
-      return;
-    }
-    // Заставка остаётся до явного действия пользователя. Каталог и видео
-    // загружаются под ней, но больше не пропускают приветствие автоматически.
-    document.body.classList.add("welcoming");
+    welcome?.classList.remove("hidden");
+    welcome?.classList.remove("is-leaving");
     document.body.classList.remove("booting");
-    welcome.classList.remove("hidden", "is-leaving");
+    document.body.classList.add("welcoming");
     setupWelcomeVideo(mediaConfig());
     syncModalLayers();
     syncMainButton();
-    $("#enterShop")?.focus({ preventScroll: true });
+  }
+
+  function renderReturnVisit() {
+    const section = $("#resumeShopping");
+    if (!section || returnVisit.dismissed || !state.catalogReady) return;
+    const paymentId = "";
+    const hasCart = !paymentId && returnVisit.cart && state.cart.length > 0;
+    const product = !paymentId && !hasCart && returnVisit.viewed.map(productById).find(item => item && Core.buyable(item) && Core.available(item));
+    if (!paymentId && !hasCart && !product) { section.classList.add("hidden"); return; }
+    $("#resumeShoppingTitle").textContent = paymentId ? "ЗАКАЗ ЖДЁТ ОПЛАТЫ." : hasCart ? "ВЕЩИ ЖДУТ ТЕБЯ." : "ПРОДОЛЖИМ?";
+    $("#resumeShoppingText").textContent = paymentId
+      ? "У тебя есть действующий заказ. Продолжи оплату, когда удобно."
+      : hasCart ? "Твоя корзина сохранена на этом устройстве. Проверь вещи и размер."
+      : `Ты смотрел «${product.name}». Вернись к вещи, когда удобно.`;
+    const action = $("#resumeShoppingAction");
+    action.textContent = paymentId ? "ПРОДОЛЖИТЬ ОПЛАТУ ↗" : hasCart ? "ОТКРЫТЬ КОРЗИНУ ↗" : "ВЕРНУТЬСЯ К ВЕЩИ ↗";
+    action.onclick = async () => {
+      if (paymentId) {
+        action.disabled = true;
+        try {
+          const opened = await resumePayment(paymentId);
+          if (!opened) { await refreshReturnPayment(); return; }
+        } finally { action.disabled = false; }
+      }
+      returnVisit.dismissed = true;
+      section.classList.add("hidden");
+      if (!paymentId) { if (hasCart) openCart(); else openProduct(product.id); }
+    };
+    $("#resumeShoppingDismiss").onclick = () => { returnVisit.dismissed = true; section.classList.add("hidden"); };
+    section.classList.remove("hidden");
+  }
+
+  async function refreshReturnPayment() {
+    const generation = ++returnVisit.generation;
+    const initData = tg && tg.initData;
+    if (!initData || returnVisit.dismissed) return;
+    try {
+      const response = await fetch("/api/my-orders", { headers: { Accept: "application/json", "X-Telegram-Init-Data": initData } });
+      if (!response.ok) throw new Error("orders unavailable");
+      const payload = await response.json();
+      if (generation !== returnVisit.generation || returnVisit.dismissed) return;
+      const orders = Array.isArray(payload.orders) ? payload.orders : [];
+      const pending = orders.find(row => row && row.can_pay === true && row.payment_status === "pending" && typeof row.payment_id === "string" && row.payment_id);
+      returnVisit.paymentId = pending ? pending.payment_id : "";
+    } catch (_) {
+      if (generation !== returnVisit.generation || returnVisit.dismissed) return;
+      returnVisit.paymentId = "";
+    }
+    renderReturnVisit();
   }
 
   async function loadCatalog() {
     if (state.catalogLoading) return;
     state.catalogLoading = true;
+    state.catalogReady = false;
+    if (state.modalStack.includes("cartModal")) renderCart();
+    if (state.currentProduct) updatePurchaseSummary();
     $("#catalogStatus").classList.remove("hidden");
     $("#catalogError").classList.add("hidden");
     $("#productGrid").setAttribute("aria-busy", "true");
@@ -1304,6 +1590,7 @@
         privacy.href = state.data.privacy_url;
         privacy.classList.remove("hidden");
       }
+      $("#privacyNotice").classList.toggle("hidden", Boolean(state.data.privacy_url));
       $("#sizeFilters").innerHTML = ["all", ...Core.sizesFor(state.data.products)].map(size => `<button class="filter-chip ${size === state.sizeFilter ? "active" : ""}" data-size-filter="${escapeHTML(size)}" type="button" aria-pressed="${size === state.sizeFilter}">${size === "all" ? "Любой" : escapeHTML(size)}</button>`).join("");
       applyMedia();
       renderCategoryChips();
@@ -1311,14 +1598,17 @@
       renderDropEvent();
       renderCommunity();
       renderClub();
+      renderMascotGift();
+      renderReturnVisit();
       loadClubState();
-      if (state.modalStack.includes("cartModal")) renderCart();
     } catch (_) {
       $("#catalogError").classList.remove("hidden");
       renderProducts();
     } finally {
       clearTimeout(timeout);
       state.catalogLoading = false;
+      if (state.modalStack.includes("cartModal")) renderCart();
+      if (state.currentProduct) updatePurchaseSummary();
       $("#catalogStatus").classList.add("hidden");
       $("#productGrid").setAttribute("aria-busy", "false");
     }
@@ -1329,8 +1619,8 @@
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
     return {
-      welcomeLoop: media.welcome_motion === false ? "" : (media.welcome_loop || "assets/video/welcome-no-intro-22s.mp4"),
-      welcomePoster: media.welcome_poster || "assets/product-proof/tee-sila-front-photo-v1.jpg"
+      welcomeLoop: media.welcome_motion === false ? "" : (!media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") ? "assets/video/welcome-seal-20261029.mp4" : media.welcome_loop),
+      welcomePoster: !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") ? "assets/video/welcome-seal-20261029.jpg" : media.welcome_poster
     };
   }
 
@@ -1345,30 +1635,85 @@
     return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
+  function renderMascotGift() {
+    const section = $("#mascotGift");
+    const gift = state.data.gift;
+    const product = gift && productById(gift.product_id);
+    if (!section) return;
+    section.classList.toggle("hidden", !gift || !product);
+    if (!gift || !product) return;
+    const available = Boolean(gift.available && Number(gift.remaining) > 0);
+    $("#mascotGiftDescription").textContent = available
+      ? "К первому дропу — 100 подарочных жетонов с фирменной гравировкой. Со второго дропа подарочных жетонов не будет."
+      : "Металлический жетон с фирменной гравировкой — знак первого дропа. Наличие подарка уточняется.";
+    $("#mascotGiftStatus").textContent = available
+      ? "Подарок из первой сотни · наличие уточняется"
+      : "Наличие подарка уточняется";
+    $("#mascotGiftLabel").textContent = available ? "ПОДАРОК К ЗАКАЗУ" : "ЖЕТОН ПЕРВОГО ДРОПА";
+    $("#mascotGiftNote").textContent = available
+      ? "Подарок доступен в первом дропе, пока есть жетоны из первой сотни."
+      : "Подарочные жетоны предусмотрены для первого дропа; наличие уточняется.";
+    $("#mascotGiftImage").src = gift.image || product.image;
+    $("#mascotGiftDetails").onclick = () => openProduct(product.id);
+    $("#mascotGiftShop").onclick = () => { scrollToId("catalog"); haptic("light"); };
+    section.classList.toggle("gift-exhausted", !available);
+  }
+
+  function setupClubLifter() {
+    const section = $("#club");
+    const art = $("#clubLifter");
+    const button = $("#clubLifterToggle");
+    if (!section || !art || !button) return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const positions = [[0, 0], [33.333, 0], [66.667, 0], [100, 0],
+      [0, 100], [33.333, 100], [66.667, 100], [100, 100]];
+    let visible = false;
+    let requested = null;
+    let timer = null;
+    let frame = 0;
+    const draw = () => {
+      const [x, y] = positions[frame];
+      art.style.backgroundPosition = `${x}% ${y}%`;
+    };
+    const sync = () => {
+      const wantsMotion = requested === null ? !query.matches && !saverMode() : requested;
+      const shouldPlay = visible && !document.hidden && !document.body.classList.contains("welcoming")
+        && !state.modalStack.length && wantsMotion;
+      if (shouldPlay && timer === null) timer = window.setInterval(() => { frame = (frame + 1) % positions.length; draw(); }, 260);
+      if (!shouldPlay && timer !== null) { window.clearInterval(timer); timer = null; }
+      button.textContent = timer === null ? "▶" : "Ⅱ";
+      button.setAttribute("aria-label", timer === null ? "Включить анимацию" : "Остановить анимацию");
+      button.setAttribute("aria-pressed", String(timer !== null));
+    };
+    button.addEventListener("click", () => { requested = timer === null; sync(); });
+    syncClubLifterMotion = sync;
+    new IntersectionObserver(entries => { visible = entries[0].isIntersecting && entries[0].intersectionRatio >= .15; sync(); }, { threshold: .15 }).observe(art);
+    document.addEventListener("visibilitychange", sync);
+    query.addEventListener?.("change", () => { requested = null; sync(); });
+    navigator.connection?.addEventListener?.("change", sync);
+    draw();
+    sync();
+  }
+
   function applyMedia() {
     const media = mediaConfig();
-    if (state.data.media && state.data.media.hero_image) $("#heroFallback").src = state.data.media.hero_image;
+    /* Approved founder image from page. */
     if (state.data.media && state.data.media.hero_background && $("#heroBackground")) $("#heroBackground").src = state.data.media.hero_background;
     if (state.data.media && state.data.media.hero_subject && $("#heroSubject")) $("#heroSubject").src = state.data.media.hero_subject;
     syncHeroPoster();
-    setupWelcomeVideo(media);
+    if (!$("#welcome").classList.contains("hidden") && !$("#welcome").classList.contains("is-leaving")) setupWelcomeVideo(media);
     // Тираж на заставке берём из каталога, а не пишем руками.
     const stock = $("#welcomeStock");
     const lead = (state.data.products || []).find(p => Core.buyable(p) && (p.featured || p.real_photos) && p.stock_label);
     if (stock && lead) stock.textContent = String(lead.stock_label).toUpperCase();
   }
 
-  const welcomePlayback = { source: "", ready: false, paused: false, blocked: false, saverOk: false, failed: false, bound: false, pending: false, watchdog: 0 };
-
-  function welcomeSaverBlocked() {
-    // Экономия трафика: ролик молча не грузим, пока человек сам не нажмёт «ФИЛЬМ · 22 СЕК».
-    return saverMode() && !welcomePlayback.saverOk;
-  }
+  const welcomePlayback = { source: "", ready: false, paused: false, blocked: false, failed: false, finished: false, bound: false, pending: false, watchdog: 0 };
 
   function welcomeCanPlay() {
     const welcome = $("#welcome");
-    return welcomePlayback.ready && !welcomePlayback.paused && !welcomePlayback.failed
-      && !welcomeSaverBlocked() && !reducedMotion() && !document.hidden && !state.modalStack.length
+    return welcomePlayback.ready && !welcomePlayback.paused && !welcomePlayback.blocked && !welcomePlayback.failed && !welcomePlayback.finished
+      && !reducedMotion() && !document.hidden && !state.modalStack.length
       && !welcome.classList.contains("hidden") && !welcome.classList.contains("is-leaving");
   }
 
@@ -1378,26 +1723,27 @@
     video.muted = true;
     video.defaultMuted = true;
     const control = $("#welcomeMotion");
-    const saverBlocked = welcomeSaverBlocked();
-    // Кнопка видна и в экономии трафика: на ней ▷ — осознанный тап запускает показ.
-    control.classList.toggle("hidden", !welcomePlayback.ready || welcomePlayback.failed || reducedMotion());
-    const waiting = welcomePlayback.paused || welcomePlayback.blocked || saverBlocked;
-    control.setAttribute("aria-label", waiting ? "Запустить видео" : "Остановить видео");
-    control.setAttribute("aria-pressed", String(welcomePlayback.paused || welcomePlayback.blocked));
+    control.classList.toggle("hidden", !welcomePlayback.ready || reducedMotion());
+    const waiting = welcomePlayback.finished || welcomePlayback.paused || welcomePlayback.blocked || welcomePlayback.failed;
+    control.setAttribute("aria-label", welcomePlayback.finished ? "Повторить фильм" : waiting ? "Запустить фильм" : "Остановить фильм");
+    const duration = Math.round(video.duration);
+    $("#welcomeFrameCount").textContent = welcomePlayback.finished ? "ПОВТОРИТЬ ФИЛЬМ"
+      : waiting ? "ЗАПУСТИТЬ ФИЛЬМ" : Number.isFinite(duration) && duration > 0 ? `ФИЛЬМ · ${duration} СЕК` : "ФИЛЬМ";
+    control.setAttribute("aria-pressed", String(waiting));
     $("#welcomeMotionIcon").textContent = waiting ? "▷" : "Ⅱ";
     const canPlay = welcomeCanPlay();
     const fallback = $("#welcomeFallback");
     const isPlaying = video.classList.contains("is-playing");
-    if (fallback) fallback.classList.toggle("hidden", canPlay || (!reducedMotion() && Boolean(welcomePlayback.source)));
+    if (fallback) fallback.classList.toggle("hidden", isPlaying && !reducedMotion() && !welcomePlayback.failed);
     // Источник ставим сразу, не дожидаясь конца загрузки и гейта воспроизведения:
     // ролик буферизуется уже под бут-штампом и стартует мгновенно.
-    if (!saverBlocked && !reducedMotion() && welcomePlayback.source && video.getAttribute("src") !== welcomePlayback.source) {
+    if (!reducedMotion() && welcomePlayback.source && video.getAttribute("src") !== welcomePlayback.source) {
       video.src = welcomePlayback.source;
       video.load();
     }
     if (!canPlay) {
       video.pause();
-      if (saverMode() || reducedMotion() || !welcomePlayback.source) video.classList.remove("is-playing");
+      if (reducedMotion() || !welcomePlayback.source) video.classList.remove("is-playing");
       return;
     }
     if (!video.paused || welcomePlayback.pending) return;
@@ -1426,6 +1772,8 @@
     // Беззвучие прописываем и свойством: без muted-флага WebView не даст автоплей.
     video.muted = true;
     video.defaultMuted = true;
+    video.playsInline = true;
+    video.autoplay = true;
     // Каталог приходит позже старта и приносит тот же файл с новым ?v-штампом.
     // Уже идущий ролик не трогаем, иначе начало проиграется дважды.
     const playing = video.classList.contains("is-playing") || (!video.paused && video.currentTime > 0);
@@ -1441,15 +1789,22 @@
       welcomePlayback.blocked = false;
     }
     $("#welcomeFallback").src = media.welcomePoster;
+    video.poster = media.welcomePoster;
     welcomePlayback.ready = Boolean(media.welcomeLoop);
     if (!welcomePlayback.bound) {
       welcomePlayback.bound = true;
       $("#welcomeMotion").addEventListener("click", () => {
-        if (welcomeSaverBlocked()) {
-          // Тап по «ФИЛЬМ · 22 СЕК» в экономии трафика — согласие загрузить ролик.
-          welcomePlayback.saverOk = true;
+        if (welcomePlayback.finished) {
+          welcomePlayback.finished = false;
           welcomePlayback.paused = false;
           welcomePlayback.blocked = false;
+          video.currentTime = 0;
+          $("#welcomeFrameCount").textContent = `ФИЛЬМ · ${Math.round(video.duration)} СЕК`;
+        } else if (welcomePlayback.failed) {
+          welcomePlayback.failed = false;
+          welcomePlayback.paused = false;
+          welcomePlayback.blocked = false;
+          video.load();
         } else if (welcomePlayback.blocked) {
           // Тап по кнопке со ▷ — пользовательский жест, он снимает запрет автоплея.
           welcomePlayback.blocked = false;
@@ -1459,6 +1814,22 @@
         }
         syncWelcomeVideo();
       });
+      // На фирменном финале чуть приглушаем только заголовок; вход остаётся доступным.
+      const syncWelcomeFinale = () => {
+        const isBrandedFilm = (video.currentSrc || "").includes("welcome-seal-20261029.mp4");
+        const inFinale = isBrandedFilm && video.classList.contains("is-playing")
+          && Number.isFinite(video.duration) && video.duration > 6
+          && (welcomePlayback.finished || (!video.paused && video.currentTime >= video.duration - 3.5));
+        $("#welcome")?.classList.toggle("is-logo-finale", inFinale);
+      };
+      video.addEventListener("ended", () => {
+        welcomePlayback.finished = true;
+        syncWelcomeFinale();
+        syncWelcomeVideo();
+      });
+      video.addEventListener("timeupdate", syncWelcomeFinale);
+      video.addEventListener("pause", syncWelcomeFinale);
+      video.addEventListener("emptied", syncWelcomeFinale);
       video.addEventListener("loadedmetadata", () => {
         const seconds = Math.round(video.duration);
         if (Number.isFinite(seconds) && seconds > 0) {
@@ -1492,7 +1863,8 @@
         welcomePlayback.blocked = false;
         syncWelcomeVideo();
       }, { passive: true });
-      document.addEventListener("visibilitychange", () => { if (!document.hidden) syncWelcomeVideo(); });
+      document.addEventListener("visibilitychange", syncWelcomeVideo);
+      if (tg && typeof tg.onEvent === "function") tg.onEvent("activated", syncWelcomeVideo);
     }
     // Сторожевой таймер: не заиграло за 4 секунды — перезагружаем и повторяем попытку.
     window.clearTimeout(welcomePlayback.watchdog);
@@ -1512,6 +1884,8 @@
     // Гасим источник и сторожевой таймер, иначе syncWelcomeVideo вернёт src
     // и ролик будет грузиться фоном, пока человек в магазине.
     welcomePlayback.source = "";
+    welcomePlayback.finished = false;
+    $("#welcome")?.classList.remove("is-logo-finale");
     welcomePlayback.blocked = false;
     welcomePlayback.pending = false;
     window.clearTimeout(welcomePlayback.watchdog);
@@ -1587,37 +1961,18 @@
 
   /* --- Живой постер 001: реальные слои одного исходного фото --- */
 
-  const HERO_SLIDES = [
-    {
-      kicker: "НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ",
-      productId: "tee-sila-i-chest",
-      isLivingPoster: true
-    },
-    {
-      kicker: "02/05 · СИЛА И ЧЕСТЬ / ХЛОПОК 240Г",
-      productId: "tee-sila-i-chest"
-    },
-    {
-      kicker: "03/05 · КЛИНОК НА СПИНЕ · 001",
-      productId: "tee-sila-i-chest"
-    },
-    {
-      kicker: "04/05 · МОДЕЛЬ «ВЗГЛЯД»",
-      productId: "tee-vzglyad"
-    },
-    {
-      kicker: "05/05 · ОДИН В ПОЛЕ ВОИН / 360°",
-      productId: "tee-odin-v-pole-voin"
-    }
-  ];
+  const HERO_SLIDES = [{
+    kicker: "НИКИТА ВОРОЖБИТОВ / ОСНОВАТЕЛЬ",
+    productId: "tee-sila-i-chest",
+    isLivingPoster: true
+  }];
 
   let heroCarouselTimer = null;
   let heroCarouselIndex = 0;
   let heroCarouselPaused = false;
 
   function getHeroSlideDuration(index) {
-    if (index === 0) return 2600; // Динамичный интро-кикер основателя (не висит статично!)
-    if (index === 4) return 6200; // 360-видео с полным оборотом белой футболки
+    if (index === 0) return 5200; // Портрет и подпись основателя должны успеть прочитать.
     return 3600; // Предметные кадры вещей первого дропа
   }
 
@@ -1652,7 +2007,10 @@
     });
 
     const badgeText = $("#heroLiveText");
-    if (badgeText) badgeText.textContent = slide.kicker;
+    if (badgeText) {
+      if (slide.isLivingPoster) badgeText.innerHTML = '<small>ОСНОВАТЕЛЬ</small><strong>НИКИТА ВОРОЖБИТОВ</strong>';
+      else badgeText.textContent = slide.kicker;
+    }
 
     const progress = $("#heroCarouselProgress");
     if (progress) {
@@ -1666,7 +2024,7 @@
     if (manual) haptic("selection");
 
     window.clearTimeout(heroCarouselTimer);
-    if (!heroCarouselPaused && !reducedMotion()) {
+    if (HERO_SLIDES.length > 1 && !heroCarouselPaused && !reducedMotion()) {
       const duration = getHeroSlideDuration(heroCarouselIndex);
       heroCarouselTimer = window.setTimeout(() => {
         if (!document.hidden && !heroCarouselPaused) showHeroSlide(heroCarouselIndex + 1);
@@ -1678,6 +2036,7 @@
     const media = $("#heroMedia");
     if (!media || media.dataset.carouselBound) return;
     media.dataset.carouselBound = "1";
+    if (HERO_SLIDES.length < 2) { showHeroSlide(0); return; }
 
     const prevBtn = $("#heroCarouselPrev");
     const nextBtn = $("#heroCarouselNext");
@@ -1768,7 +2127,7 @@
 
   function setupHeroParallax() {
     const media = $("#heroMedia");
-    if (!media || media.dataset.parallaxBound) return;
+    if (!media || media.dataset.parallaxBound || $("#heroLivingPoster")?.classList.contains("hero-retouched")) return;
     media.dataset.parallaxBound = "1";
     let frame = 0;
     const apply = (x, y) => {
@@ -1844,7 +2203,7 @@
         ? "Раннее окно ещё не открылось. Таймер — в блоке дропа выше."
         : "Дроп ещё не открыт. Ранний доступ — у участников клуба, закрывших все 7 дней.";
     }
-    if (mode.id === "ended") return mode.broken ? "Дроп временно недоступен. Напиши менеджеру." : "Дроп закрыт. Этот выпуск завершён.";
+    if (mode.id === "ended") return mode.broken ? "Дроп временно недоступен. Попробуй позже." : "Дроп закрыт. Этот выпуск завершён.";
     return "";
   }
 
@@ -1901,14 +2260,15 @@
     } else if (mode.id === "ended") {
       title.textContent = mode.broken ? "ДРОП НА ПАУЗЕ" : "ДРОП ЗАКРЫТ";
       text.textContent = mode.broken
-        ? "Даты дропа уточняются. Напиши менеджеру — подскажет, когда откроем."
+        ? "Даты дропа уточняются. Следи за обновлениями магазина."
         : "Этот выпуск завершён. Следующий сначала увидят участники клуба.";
       timer.classList.add("hidden");
       button.textContent = "В КЛУБ";
       button.onclick = () => scrollToId("club");
     } else {
       title.textContent = "ДРОП ОТКРЫТ";
-      text.textContent = mode.event.note || "Статус и размеры берутся из живого каталога — без придуманных остатков.";
+      const note = String(mode.event.note || "");
+      text.textContent = note && !note.includes("берутся из живого каталога") ? note : "Первый выпуск «Сила и честь». Выбирай вещь, которая говорит за тебя.";
       timer.classList.add("hidden");
       button.textContent = "К ВЕЩАМ";
       button.onclick = () => scrollToId("catalog");
@@ -1932,6 +2292,10 @@
   function passportMediaLine(product) {
     const photos = imagesFor(product).length;
     const spin = Array.isArray(product.spin) ? product.spin.length : 0;
+    if (product.id === "tee-vzglyad") return `${photos} фото · 3D-визуализация 360°`;
+    if (product.spin_kind === "visualization" && spin > 1) {
+      return `${spin} ракурсов · визуализация 360°`;
+    }
     if (product.id === "tee-odin-v-pole-voin" && spin > 1) {
       return `${spin} ${pluralRu(spin, "исходный ракурс", "исходных ракурса", "исходных ракурсов")} · полный подтверждённый оборот 360°`;
     }
@@ -1952,12 +2316,12 @@
     const body = $("#passportBody");
     if (!body || !product) return;
     if ($("#passportCode")) $("#passportCode").textContent = String(product.badge || "001").toUpperCase();
-    const details = (Array.isArray(product.details) ? product.details : []).map(cleanPassportDetail).filter(Boolean).slice(0, 8);
+    const details = (Array.isArray(product.details) ? product.details : []).map(cleanPassportDetail).filter(item => item && !/жетон|подар|хлопок|посадк|крой|плотност/i.test(item)).slice(0, 8);
     // Материал, посадка и статус уже стоят строкой фактов выше — не дублируем их в паспорте.
     body.innerHTML = `
       <div class="passport-row"><span>МЕДИА</span><span>${escapeHTML(passportMediaLine(product))}</span></div>
       ${details.length ? `<div class="passport-row"><span>ДЕТАЛИ</span><ul class="passport-details">${details.map(item => `<li>${escapeHTML(item)}</li>`).join("")}</ul></div>` : ""}
-      ${product.signature ? `<div class="passport-row"><span>СЛОВО</span><span>${escapeHTML(product.signature)}</span></div>` : ""}`;
+      `;
   }
 
   function selectSize(size) {
@@ -1968,10 +2332,10 @@
       node.classList.toggle("selected", active);
       node.setAttribute("aria-pressed", String(active));
     });
-    const advice = SIZE_ADVICE[String(size).toUpperCase()];
-    $("#sizeHint").textContent = advice ? `Размер ${size}: ${advice}.` : `Размер ${size} выбран.`;
+    $("#sizeHint").textContent = `Размер ${size} выбран.`;
     $("#sizeHint").classList.remove("error");
     updatePurchaseSummary();
+    updateCombatSizer();
   }
 
   function savedFit() {
@@ -1991,12 +2355,13 @@
   function resetFitFinder(product) {
     const finder = $("#fitFinder");
     if (!finder) return;
-    const apparel = (product.sizes || []).some(size => ["S", "M", "L", "XL", "XXL"].includes(String(size).toUpperCase()));
-    finder.classList.toggle("hidden", !apparel || !Core.buyable(product));
+    finder.classList.add("hidden");
+    finder.closest("details")?.classList.add("hidden");
     const saved = savedFit();
     if ($("#fitHeight")) $("#fitHeight").value = saved.height || state.profile.height || "";
     if ($("#fitWeight")) $("#fitWeight").value = saved.weight || "";
     setFitChoice(saved.fit || "regular");
+    syncCombatSizer(product);
     const result = $("#fitResult");
     if (result) {
       result.classList.remove("error");
@@ -2004,6 +2369,20 @@
     }
   }
 
+  const combatSizer = { height: 182, weight: 86 };
+  function syncCombatSizer(product) {
+    const root = $("#smartSizer");
+    if (root) root.classList.add("hidden");
+  }
+  function updateCombatSizer() {
+    const root = $("#smartSizer"), product = state.currentProduct; if (!root || !product || root.classList.contains("hidden")) return;
+    $("#sizerHeightVal").textContent = String(combatSizer.height); $("#sizerWeightVal").textContent = String(combatSizer.weight);
+    [["Fit", "regular"], ["Oversize", "oversize"]].forEach(([id, fit]) => {
+      const card = $("#advice" + id + "Card"); const found = Core.recommendSize({height:combatSizer.height, weight:combatSizer.weight, fit}, product.sizes || []); const size = found?.size || "";
+      card.disabled = !size; card.dataset.smartSize = size; card.classList.toggle("selected", state.selectedSize === size); card.setAttribute("aria-pressed", String(!!size && state.selectedSize === size));
+      $("#advice" + id + "Size").textContent = size || "—"; $("#advice" + id + "Target").textContent = size || "—";
+    });
+  }
   function recommendFit() {
     const product = state.currentProduct;
     const result = $("#fitResult");
@@ -2089,7 +2468,7 @@
       image.classList.remove("hidden");
       image.src = scene.image || scene.poster || "";
       image.alt = `${scene.title} — кадр первого дропа`;
-      image.classList.toggle("contain", /product-proof|\/spin\//.test(image.src));
+      image.classList.toggle("contain", /product-proof|product-studio|\/spin\//.test(image.src));
     }
     $("#filmKicker").textContent = scene.kicker;
     $("#filmTitle").textContent = scene.title;
@@ -2147,15 +2526,6 @@
     }
     showFilmScene(index);
     haptic("light");
-  }
-
-  function maybeOpenFilmOnce() {
-    const seen = loadJSON("vorozhbitov_film_seen", "");
-    const dropId = (state.data.drop_event && state.data.drop_event.id) || "drop-001";
-    if (seen === dropId || !filmScenes().length) return;
-    window.setTimeout(() => {
-      if (!document.body.classList.contains("welcoming") && !state.modalStack.length) openStories(0);
-    }, 650);
   }
 
   /* --- Клуб дисциплины: сервер в Telegram, локальный запасной режим в браузере --- */
@@ -2337,6 +2707,12 @@
     const entries = (Array.isArray(state.data.community) ? state.data.community : [])
       .filter(item => item && typeof item.image === "string" && item.image);
     if (!entries.length) {
+      for (const [id, image] of [["tee-sila-i-chest", "assets/client/sila-original.jpg"], ["tee-vzglyad", "assets/client/vzglyad-client-front-20261106.jpg"]]) {
+        const product = productById(id);
+        if (product) entries.push({image, name:"Никита Ворожбитов", caption:product.name, city:"НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ", product_id:id});
+      }
+    }
+    if (!entries.length) {
       grid.innerHTML = `<div class="community-empty"><span>ПЕРВЫЙ ВЫПУСК</span><strong>Стань первым своим.</strong><span>Здесь появятся фотографии покупателей первого дропа.</span></div>`;
       return;
     }
@@ -2344,8 +2720,10 @@
       const product = item.product_id ? productById(item.product_id) : null;
       const title = String(item.caption || item.name || (product && product.name) || "Свой человек");
       const city = String(item.city || "СИЛА И ЧЕСТЬ").toUpperCase();
-      const attrs = product ? `data-community-product="${escapeHTML(product.id)}" role="button" tabindex="0"` : "";
-      return `<figure class="community-card" ${attrs}><img src="${escapeHTML(item.image)}" alt="${escapeHTML(title)} — сообщество «Свои»" loading="lazy" decoding="async"><figcaption><span>${escapeHTML(city)}</span><strong>${escapeHTML(title)}</strong></figcaption></figure>`;
+      const details = [Number(item.height_cm) > 0 ? `${Number(item.height_cm)} см` : "", Number(item.weight_kg) > 0 ? `${Number(item.weight_kg)} кг` : "", item.size ? `Размер ${String(item.size)}` : ""].filter(Boolean).join(" · ");
+      const video = typeof item.video === "string" && /^(?:https:\/\/|assets\/)/.test(item.video) ? item.video : "";
+      const media = video ? `<video src="${escapeHTML(video)}" poster="${escapeHTML(item.image)}" muted playsinline controls preload="none" aria-label="${escapeHTML(title)} — видео образа"></video>` : `<img src="${escapeHTML(item.image)}" alt="${escapeHTML(title)} — сообщество «Свои»" loading="lazy" decoding="async">`;
+      return `<figure class="community-card">${media}<figcaption><span>${escapeHTML(city)}</span><strong>${escapeHTML(title)}</strong>${details ? `<small>${escapeHTML(details)}</small>` : ""}${product ? `<button type="button" data-community-product="${escapeHTML(product.id)}">ОТКРЫТЬ ВЕЩЬ ↗</button>` : ""}</figcaption></figure>`;
     }).join("");
   }
 
@@ -2359,7 +2737,7 @@
     ].join("\n");
     const url = checkoutClient.managerUrl(state.data.support_username, text);
     if (!url) {
-      showToast("Менеджер пока не подключён. Напиши в канал бренда — фото примем там.");
+      showToast("Чат магазина пока не подключён.");
       return;
     }
     if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
@@ -2582,12 +2960,39 @@
       updateMediaPosition();
     });
     $("#view3d").addEventListener("framechange", updateMediaPosition);
+    const lightboxViewport = $("#lightboxViewport");
+    const lightboxDrag = { pointerId: null, x: 0, y: 0, left: 0, top: 0 };
     $("#lightboxZoom").addEventListener("click", () => {
-      const zoomed = $("#lightboxViewport").classList.toggle("zoomed");
-      $("#lightboxZoom").setAttribute("aria-pressed", String(zoomed));
-      $("#lightboxZoom").textContent = zoomed ? "Весь кадр −" : "Увеличить +";
-      if (!zoomed) $("#lightboxViewport").scrollTo(0, 0);
+      setLightboxZoom(!lightboxViewport.classList.contains("zoomed"));
     });
+    $("#lightboxImage").addEventListener("load", () => {
+      if (lightboxViewport.classList.contains("zoomed")) centerLightboxImage();
+    });
+    lightboxViewport.addEventListener("pointerdown", event => {
+      if (!lightboxViewport.classList.contains("zoomed") || lightboxDrag.pointerId !== null || !event.isPrimary) return;
+      lightboxDrag.pointerId = event.pointerId;
+      lightboxDrag.x = event.clientX;
+      lightboxDrag.y = event.clientY;
+      lightboxDrag.left = lightboxViewport.scrollLeft;
+      lightboxDrag.top = lightboxViewport.scrollTop;
+      lightboxViewport.setPointerCapture(event.pointerId);
+      lightboxViewport.classList.add("dragging");
+      event.preventDefault();
+    });
+    lightboxViewport.addEventListener("pointermove", event => {
+      if (event.pointerId !== lightboxDrag.pointerId) return;
+      lightboxViewport.scrollLeft = lightboxDrag.left - (event.clientX - lightboxDrag.x);
+      lightboxViewport.scrollTop = lightboxDrag.top - (event.clientY - lightboxDrag.y);
+    });
+    const endLightboxDrag = event => {
+      if (event.pointerId !== lightboxDrag.pointerId) return;
+      lightboxDrag.pointerId = null;
+      lightboxViewport.classList.remove("dragging");
+      if (lightboxViewport.hasPointerCapture(event.pointerId)) lightboxViewport.releasePointerCapture(event.pointerId);
+    };
+    lightboxViewport.addEventListener("pointerup", endLightboxDrag);
+    lightboxViewport.addEventListener("pointercancel", endLightboxDrag);
+    lightboxViewport.addEventListener("lostpointercapture", endLightboxDrag);
     $$('[data-detail-product]').forEach(button => button.addEventListener('click', () => openProduct(button.dataset.detailProduct, Number(button.dataset.detailPhoto))));
     document.addEventListener("visibilitychange", () => {
       syncModalLayers();
@@ -2595,12 +3000,39 @@
     });
     const enterBtn = $("#enterShop");
     if (enterBtn) {
-      enterBtn.addEventListener("click", enterShop);
-      enterBtn.addEventListener("touchend", event => {
-        event.preventDefault();
-        enterShop();
+      const ritual = $("#sealRitual"), progress = $("#sealProgressFill"), badge = $("#sealTimerBadge");
+      let started = 0, timer = 0, animation = 0, half = false, completed = false, pointer = null, entryPending = false;
+      const reset = () => { clearTimeout(timer); cancelAnimationFrame(animation); started = 0; pointer = null; half = false; ritual?.classList.remove("is-holding"); if (progress) progress.style.strokeDashoffset = "351.9"; if (badge) badge.textContent = ""; };
+      const finishEntry = () => {
+        if (entryPending || $("#welcome")?.classList.contains("is-leaving")) return;
+        entryPending = true;
+        ritual?.classList.add("is-activated");
+        if (badge) badge.textContent = "Открываем магазин";
+        haptic("heavy");
+        window.setTimeout(() => {
+          enterShop();
+          ritual?.classList.remove("is-activated");
+          entryPending = false;
+        }, reducedMotion() ? 0 : 240);
+      };
+      enterBtn.addEventListener("pointerdown", event => {
+        if (entryPending || event.button !== 0 || $("#welcome")?.classList.contains("is-leaving")) return;
+        completed = false; reset(); pointer = event.pointerId; started = performance.now(); ritual?.classList.add("is-holding"); haptic("light");
+        const tick = now => { if (!started) return; const ratio = Math.min(1, (now - started) / 1200); if (progress) progress.style.strokeDashoffset = String(351.9 * (1 - ratio)); if (ratio >= .5 && !half) { half = true; haptic("medium"); } if (ratio < 1) animation = requestAnimationFrame(tick); };
+        animation = requestAnimationFrame(tick);
+        timer = setTimeout(() => { if (pointer === null) return; completed = true; reset(); finishEntry(); }, 1200);
       });
+      window.addEventListener("pointerup", event => { if (event.pointerId === pointer) reset(); });
+      window.addEventListener("pointercancel", event => { if (event.pointerId === pointer) reset(); });
+      enterBtn.addEventListener("click", event => { if (event.detail === 0 || !completed) finishEntry(); });
     }
+    $("#smartSizer")?.addEventListener("click", event => {
+      const step = event.target.closest("[data-sizer]");
+      if (step) { const [field, direction] = step.dataset.sizer.split("-"); const delta = direction === "plus" ? 1 : -1; const limits = field === "height" ? [130,230] : [35,220]; combatSizer[field] = Math.max(limits[0], Math.min(limits[1], combatSizer[field] + delta)); updateCombatSizer(); haptic("light"); return; }
+      const card = event.target.closest("[data-smart-size]"); if (!card || card.disabled) return;
+      const size = card.dataset.smartSize; if (!((state.currentProduct?.sizes || []).includes(size))) return;
+      saveJSON("vorozhbitov_fit", { height: String(combatSizer.height), weight: String(combatSizer.weight), fit: card.id === "adviceOversizeCard" ? "oversize" : "regular" }); selectSize(size); haptic("medium"); $("#addToCartButton")?.focus({preventScroll:true});
+    });
     $$("[data-stage]").forEach(button => button.addEventListener("click", () => {
       setStage(button.dataset.stage);
       haptic("light");
@@ -2663,12 +3095,47 @@
       }
     }, { passive: true });
 
+    $("#returnHelp").addEventListener("click", () => {
+      const product = state.currentProduct;
+      const text = `Здравствуйте! Хочу уточнить вопрос по заказу${product ? ` «${product.name}»` : ""}. Номер заказа: `;
+      const url = checkoutClient.managerUrl(state.data.support_username, text);
+      if (!url) { showToast("Контакт магазина пока не подключён."); return; }
+      if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
+      else window.open(url, "_blank", "noopener,noreferrer");
+      showToast("Чат открыт. Добавь детали и отправь сообщение.");
+    });
+    $("#communityTab").addEventListener("click", () => openModal("communityModal"));
+    $("#openCommunityFromHome").addEventListener("click", () => openModal("communityModal"));
+    $("#compareSize").addEventListener("click", () => {
+      const rows = bodySizeRows(state.currentProduct);
+      const chestText = $("#compareWidth").value.trim();
+      const heightText = $("#compareLength").value.trim();
+      const chest = Number(chestText.replace(",", ".")), height = Number(heightText.replace(",", "."));
+      if (!chestText || !Number.isFinite(chest) || chest < 50 || chest > 170) {
+        $("#compareResult").textContent = "Укажи обхват груди от 50 до 170 см."; return;
+      }
+      if (heightText && (!Number.isFinite(height) || height < 120 || height > 230)) {
+        $("#compareResult").textContent = "Проверь рост: укажи от 120 до 230 см или оставь поле пустым."; return;
+      }
+      const measurements = [{key:"chest", value:chest}, ...[["waist", "#compareWaist", "талию"], ["hips", "#compareHips", "бёдра"]].map(([key, selector, label]) => ({key, text:$(selector).value.trim(), value:Number($(selector).value.trim().replace(",", ".")), label}))];
+      const invalid = measurements.find(m => m.text && (!Number.isFinite(m.value) || m.value < 40 || m.value > 200));
+      if (invalid) { $("#compareResult").textContent = `Проверь ${invalid.label}: укажи обхват от 40 до 200 см или оставь поле пустым.`; return; }
+      const entered = measurements.filter(m => m.key === "chest" || m.text);
+      const matches = rows.filter(row => entered.every(m => m.value >= row[m.key][0] && m.value <= row[m.key][1]));
+      if (!matches.length) {
+        $("#compareResult").textContent = "Эти параметры не попадают в одну строку таблицы. Проверь замеры и сравни соседние размеры; точную посадку по этим данным определить нельзя."; return;
+      }
+      const labels = matches.map(row => row.size).join(" или ");
+      const heightNote = heightText && !matches.some(row => height >= row.height[0] && height <= row.height[1])
+        ? " Указанный рост выходит за диапазоны этих строк." : "";
+      $("#compareResult").textContent = `По указанным обхватам подходят размеры: ${labels}.${heightNote} Сверь талию, бёдра и рост в таблице и выбери размер вручную.`;
+    });
     $("#sizeGuideToggle")?.addEventListener("click", () => {
       const guide = $("#sizeGuide");
       if (!guide) return;
       const isHidden = guide.classList.toggle("hidden");
       $("#sizeGuideToggle").setAttribute("aria-expanded", String(!isHidden));
-      $("#sizeGuideToggle").textContent = isHidden ? "ТАБЛИЦА РАЗМЕРОВ ▾" : "СКРЫТЬ ТАБЛИЦУ ▴";
+      $("#sizeGuideToggle").textContent = isHidden ? "ПОМОЩЬ С РАЗМЕРОМ ▾" : "СКРЫТЬ ПОДСКАЗКУ ▴";
       if (!isHidden) {
         window.requestAnimationFrame(() => {
           guide.scrollIntoView({ behavior: reducedMotion() ? "instant" : "smooth", block: "nearest" });
@@ -2676,6 +3143,7 @@
       }
       haptic("light");
     });
+
 
     $("#sizeList").addEventListener("click", event => {
       const button = event.target.closest("[data-size]");
@@ -2697,11 +3165,61 @@
     });
     if ($("#fitRecommend")) $("#fitRecommend").addEventListener("click", recommendFit);
 
+    $("#beginCheckout").addEventListener("click", () => {
+      const pairs = cartItems();
+      if (!state.catalogReady || !pairs.length || pairs.length !== state.cart.length || pairs.some(({item, product}) => product.stock_check_unavailable || !Core.available(product) || !product.sizes.includes(item.size))) {
+        renderCart(); showToast("Проверь состав корзины и наличие вещей."); return;
+      }
+      const gate = dropPurchaseGate();
+      if (gate) { showToast(gate); return; }
+      const lines = pairs.map(({item, product}, index) => `${index + 1}. ${product.name} · размер ${item.size} · ${item.qty} шт. · ${rubles(priceNumber(product.price) * item.qty)}${item.person ? ` · номер: ${String(item.person).slice(0, 32)}` : ""}${/предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`) ? " · предзаказ" : ""}`);
+      const message = ["Здравствуйте! Хочу оформить заказ в «СИЛА И ЧЕСТЬ»:", ...lines, `Итого за вещи: ${rubles(cartTotal())}`, "Прошу подтвердить наличие, подарок, доставку и оплату."].join("\n");
+      const url = message.length <= 3500 ? checkoutClient.managerUrl(state.data.order_manager_username, message) : "";
+      if (!url) { showToast("Не удалось подготовить заказ. Корзина сохранена."); return; }
+      if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
+      else window.open(url, "_blank", "noopener,noreferrer");
+      haptic("light");
+      showToast("Проверь текст и отправь сообщение в чат. До отправки заказ не создан.");
+    });
+    $("#backToCart").addEventListener("click", () => {
+      state.cartStep = "items";
+      renderCart();
+      $(".cart-sheet").scrollTop = 0;
+      $("#beginCheckout").focus({preventScroll: true});
+    });
+    $("#galleryGroups").addEventListener("click", event => {
+      const button = event.target.closest("[data-gallery-group]");
+      if (!button || !state.currentProduct) return;
+      state.galleryGroup = button.dataset.galleryGroup;
+      renderGallery(state.currentProduct);
+      updateMediaPosition();
+    });
     $("#galleryDots").addEventListener("click", event => {
       const button = event.target.closest("[data-gallery]");
       if (button) setGallery(Number(button.dataset.gallery));
     });
-    $("#sheetImage").addEventListener("click", zoomProduct);
+    $("#galleryDots").addEventListener("error", event => {
+      if (event.target.tagName === "IMG") event.target.style.visibility = "hidden";
+    }, true);
+    $("#galleryDots").addEventListener("load", event => {
+      if (event.target.tagName === "IMG") event.target.style.visibility = "visible";
+    }, true);
+    let photoSwipeFinishedAt = -Infinity;
+    $("#sheetImage").addEventListener("click", event => {
+      // A touch swipe may be followed by a synthetic click; keep tap-to-zoom.
+      if (event.detail !== 0 && performance.now() - photoSwipeFinishedAt < 600) return;
+      zoomProduct();
+    });
+    $("#sheetImage").addEventListener("load", () => $("#mediaError").classList.add("hidden"));
+    $("#sheetImage").addEventListener("error", () => {
+      if (state.stage === "photo") $("#mediaError").classList.remove("hidden");
+    });
+    $("#retryPhoto").addEventListener("click", () => {
+      $("#mediaError").classList.add("hidden");
+      const photo = $("#sheetImage");
+      photo.src = galleryImages(state.currentProduct)[state.galleryIndex];
+      $$("#galleryDots img").forEach(image => { image.src = image.getAttribute("src"); });
+    });
 
     let sheetTouchStartX = 0;
     let sheetTouchStartY = 0;
@@ -2717,6 +3235,7 @@
         const dx = event.changedTouches[0].clientX - sheetTouchStartX;
         const dy = event.changedTouches[0].clientY - sheetTouchStartY;
         if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+          photoSwipeFinishedAt = performance.now();
           stepMedia(dx < 0 ? 1 : -1);
           haptic("light");
         }
@@ -2735,6 +3254,35 @@
     });
 
     $("#addToCartButton").addEventListener("click", addToCart);
+    if ($("#directOrderButton")) {
+      $("#directOrderButton").addEventListener("click", () => {
+        const product = state.currentProduct && productById(state.currentProduct.id);
+        if (!product || !Core.buyable(product)) return;
+        if (!state.selectedSize) {
+          $("#sizeHint").textContent = "Сначала выбери размер.";
+          $("#sizeHint").classList.add("error");
+          $(".size-block")?.scrollIntoView({block:"center", behavior:reducedMotion() ? "instant" : "smooth"});
+          $("#sizeList button")?.focus({preventScroll:true});
+          haptic("error");
+          return;
+        }
+        const verb = /предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`) ? "предзаказ" : "заказ";
+        const phone = (state.profile?.phone || "").trim();
+        const message = [
+          `Здравствуйте! Хочу оформить ${verb}:`,
+          `• ${product.name} · размер ${state.selectedSize} · 1 шт. · ${product.price}`,
+          `• Подарок: ЖЕТОН (первые 100 жетонов к дропу 001, со 2-го дропа в подарок не будет)`,
+          `Телефон: ${phone || "укажу в чате"}`
+        ].join("\n");
+        const manager = state.data?.order_manager_username || "intellectual_sabotage";
+        const url = checkoutClient.managerUrl(manager, message);
+        if (url) {
+          if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
+          else window.open(url, "_blank", "noopener,noreferrer");
+          haptic("light");
+        }
+      });
+    }
     $("#waitlistButton").addEventListener("click", sendWaitlist);
     $("#cartButton").addEventListener("click", openCart);
     $("#bottomCartButton").addEventListener("click", openCart);
@@ -2750,6 +3298,7 @@
     });
     if ($("#saveProfile")) $("#saveProfile").addEventListener("click", saveProfile);
     if ($("#profileOrders")) $("#profileOrders").addEventListener("click", event => {
+      if (event.target.closest("[data-retry-orders]")) { loadProfileOrders(); return; }
       const ownerButton = event.target.closest("[data-owner-card]");
       if (ownerButton) {
         openOwnerCard(ownerButton.dataset.ownerCard);
@@ -2848,8 +3397,30 @@
     $("#resetFilters").addEventListener("click", () => browseCollection());
     $("#emptyReset").addEventListener("click", () => $("#resetFilters").click());
     $("#submitManagerOrder").addEventListener("click", submitManagerOrder);
-    $("#submitOrder").addEventListener("click", submitOrder);
-    if ($("#payMethods")) $("#payMethods").addEventListener("click", event => {
+    $("#askDelivery").addEventListener("click", askDelivery);
+    ["checkoutName", "checkoutPhone", "checkoutCity", "checkoutConsent"].forEach(id => {
+      const field = $("#" + id);
+      field.addEventListener(id === "checkoutConsent" ? "change" : "input", () => clearCheckoutFieldError(field));
+    });
+    $("#submitOrder").addEventListener("click", reviewOrder);
+    $("#confirmOrder").addEventListener("click", submitManagerOrder);
+    $("#successOrders").addEventListener("click", () => { closeModal("payModal"); openProfile(); $("#profileOrders")?.scrollIntoView({ block: "start" }); });
+    $("#successSupport").addEventListener("click", () => {
+      const account = String(state.data.support_username || "").replace(/^@/, "");
+      if (!/^[A-Za-z0-9_]{5,32}$/.test(account)) { showToast("Контакт магазина пока не подключён."); return; }
+      const url = `https://t.me/${account}`;
+      if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
+      else window.open(url, "_blank", "noopener,noreferrer");
+    });
+    if ($("#payMethods")) $("#payMethods").addEventListener("click", async event => {
+      const retry = event.target.closest("[data-pay-retry]");
+      if (retry) {
+        if (retry.disabled) return;
+        retry.disabled = true;
+        try { await resumePayment(retry.dataset.payRetry); }
+        finally { retry.disabled = false; }
+        return;
+      }
       const button = event.target.closest("[data-pay-method]");
       if (!button) return;
       startPayMethod(button.dataset.payMethod, button.dataset.payUrl || "", button.dataset.payKind || "link");
@@ -2906,8 +3477,10 @@
       const button = event.target.closest("[data-deliver]");
       if (!button) return;
       state.deliver = button.dataset.deliver;
-      $$("#deliverRow .filter-chip").forEach(node => node.classList.toggle("active", node === button));
+      $$("#deliverRow .filter-chip").forEach(node => { node.classList.toggle("active", node === button); node.setAttribute("aria-pressed", String(node === button)); });
+      renderDeliverySummary();
     });
+    $("#checkoutCity").addEventListener("change", renderDeliverySummary);
 
     document.addEventListener("click", event => {
       const shot = event.target.closest("[data-lightbox]");
@@ -2983,13 +3556,14 @@
   syncHeroPoster();
   setupHeroCarousel();
   setupOwnerTilt();
+  setupClubLifter();
   renderDropEvent();
   renderCommunity();
   renderClub();
   updateCounters();
-  // Конфиг по умолчанию не скачивает ролик; каталог может явно включить motion.
-  setupWelcomeVideo(mediaConfig());
   startExperience();
   loadCatalog();
+  refreshReturnPayment();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshReturnPayment(); });
   window.VorozhbitovShop = { state, openProduct, openCart };
 })();

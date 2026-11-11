@@ -2437,6 +2437,150 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .hero-media.poster-ready .hero-layer-subject { opacity: 1; }
 .hero-media .hero-shade { z-index: 4; }
 
+/* ---------- Оживление Никиты: Режим 1 (Видео-луп) и Режим 4 (Синемаграф 3D) ---------- */
+.hero-live-wrap {
+  position: absolute; z-index: 5;
+  left: 14px; bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+}
+@media (min-width: 760px) {
+  .hero-live-wrap { right: 22px; bottom: 22px; left: auto; top: auto; }
+}
+
+.hero-mode-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(225, 6, 0, 0.18);
+  border: 1px solid rgba(225, 6, 0, 0.45);
+  border-radius: 99px;
+  padding: 4px 10px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: all .18s ease;
+}
+.hero-mode-pill:hover {
+  background: rgba(225, 6, 0, 0.32);
+  border-color: var(--red);
+  transform: scale(1.04);
+}
+.hero-mode-pill:active { transform: scale(0.96); }
+
+/* Слой живого видео Никиты (Вариант 1) */
+.hero-layer-video {
+  position: absolute; inset: 0;
+  z-index: 2;
+  opacity: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: 50% 15%;
+  transition: opacity .45s ease;
+  pointer-events: none;
+}
+
+/* Эффекты кинематографичного синемаграфа (Вариант 4) */
+.hero-aura-glow {
+  position: absolute; z-index: 2;
+  top: 45%; left: 50%;
+  width: 380px; height: 380px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(225, 6, 0, 0.32) 0%, rgba(225, 6, 0, 0.08) 45%, transparent 70%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .45s ease;
+}
+.hero-light-sweep {
+  position: absolute; z-index: 4; inset: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.12) 50%, transparent 60%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-100%);
+}
+
+/* === РЕЖИМ 1: ЖИВОЙ ВИДЕО-ЛУП (ПО УМОЛЧАНИЮ) === */
+.hero-media.hero-mode-video .hero-layer-video {
+  opacity: 1;
+}
+.hero-media.hero-mode-video .hero-layer-bg,
+.hero-media.hero-mode-video .hero-layer-subject,
+.hero-media.hero-mode-video .hero-layer-fallback {
+  opacity: 0;
+}
+.hero-media.hero-mode-video .hero-poster-type {
+  opacity: 0.25;
+  z-index: 3;
+}
+
+/* === РЕЖИМ 4: КИНЕМАТОГРАФИЧНЫЙ СИНЕМАГРАФ 3D === */
+.hero-media.hero-mode-cinemagraph .hero-layer-video {
+  opacity: 0;
+}
+.hero-media.hero-mode-cinemagraph .hero-layer-bg {
+  opacity: 1;
+}
+.hero-media.hero-mode-cinemagraph .hero-aura-glow {
+  opacity: 1;
+  animation: heroAuraPulse 4.2s ease-in-out infinite;
+}
+.hero-media.hero-mode-cinemagraph .hero-poster-type {
+  opacity: 1;
+}
+.hero-media.hero-mode-cinemagraph .hero-layer-subject {
+  opacity: 1;
+  animation: heroBreathe 4.2s ease-in-out infinite;
+}
+.hero-media.hero-mode-cinemagraph .hero-light-sweep {
+  opacity: 1;
+  animation: heroSheenSweep 5.5s ease-in-out infinite;
+}
+
+@keyframes heroBreathe {
+  0%, 100% {
+    transform: scale(1.012) translate3d(var(--poster-subject-x, 0px), var(--poster-subject-y, 0px), 0);
+  }
+  50% {
+    transform: scale(1.034) translate3d(var(--poster-subject-x, 0px), calc(var(--poster-subject-y, 0px) - 4px), 0);
+  }
+}
+
+@keyframes heroAuraPulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(0.94);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 0.85;
+  }
+}
+
+@keyframes heroSheenSweep {
+  0%, 65% {
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+  75% {
+    opacity: 1;
+  }
+  85%, 100% {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-media.hero-mode-cinemagraph .hero-layer-subject,
+  .hero-media.hero-mode-cinemagraph .hero-aura-glow,
+  .hero-media.hero-mode-cinemagraph .hero-light-sweep {
+    animation: none;
+  }
+}
+
 /* Stories Progress Indicators on Hero */
 .hero-carousel-progress {
   position: absolute; top: 12px; left: 14px; right: 14px; z-index: 6;
@@ -2739,3 +2883,402 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .section-heading h2,
 .sheet-header h2,
 .sheet-content h2 { letter-spacing: -.015em; }
+
+/* ==========================================================================
+   ИДЕЯ 4: ТАКТИЛЬНЫЙ ВХОД «ПРИЛОЖИ ПЕЧАТЬ» (HOLD TO ENTER)
+   ========================================================================== */
+.seal-actions { width: 100%; }
+.seal-ritual {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(14, 14, 17, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  padding: 12px 16px;
+  width: 100%;
+  max-width: 360px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: border-color .22s ease, box-shadow .22s ease, transform .22s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.seal-ritual:hover {
+  border-color: rgba(225, 6, 0, 0.4);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.7), 0 0 15px rgba(225, 6, 0, 0.2);
+}
+.seal-ritual.is-holding {
+  border-color: rgba(225, 6, 0, 0.85);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.8), 0 0 30px rgba(225, 6, 0, 0.45);
+  transform: scale(1.02);
+}
+.seal-ritual.is-activated {
+  border-color: #fff;
+  box-shadow: 0 0 50px rgba(225, 6, 0, 0.9), inset 0 0 20px rgba(225, 6, 0, 0.5);
+  transform: scale(1.04);
+}
+
+.seal-button {
+  position: relative;
+  flex: none;
+  width: 84px;
+  height: 84px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  outline: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.seal-button:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 4px;
+}
+
+.seal-aura {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(225, 6, 0, 0.3) 0%, transparent 72%);
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.seal-ritual.is-holding .seal-aura {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+.seal-progress-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.seal-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 4;
+}
+.seal-fill {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 351.9;
+  stroke-dashoffset: 351.9;
+  filter: drop-shadow(0 0 6px rgba(225, 6, 0, 0.8));
+  transition: stroke-dashoffset 0.06s linear;
+}
+
+.seal-core {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  z-index: 2;
+  transition: transform .15s ease;
+}
+.seal-button:active .seal-core,
+.seal-ritual.is-holding .seal-core {
+  transform: scale(0.95);
+}
+.seal-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.seal-flare {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.25) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.seal-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+.seal-kicker {
+  font-size: 9px;
+  letter-spacing: .14em;
+  color: var(--red);
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  text-transform: uppercase;
+}
+.seal-caption {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: var(--ink);
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+.seal-instructions {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+  margin: 0;
+}
+.seal-meta-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.seal-timer-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: var(--red);
+  background: rgba(225, 6, 0, 0.12);
+  border: 1px solid rgba(225, 6, 0, 0.35);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  transition: all .15s ease;
+}
+.seal-ritual.is-holding .seal-timer-badge {
+  background: var(--red);
+  color: #fff;
+  border-color: var(--red);
+  box-shadow: 0 0 10px rgba(225, 6, 0, 0.6);
+}
+.seal-quick-tap {
+  font-size: 8px;
+  letter-spacing: .06em;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   ИДЕЯ 7: «БОЕВОЙ КАЛЬКУЛЯТОР РАЗМЕРА» (SMART SIZING)
+   ========================================================================== */
+.smart-sizer {
+  background: var(--surface-1);
+  border: 1px solid var(--field-line);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.smart-sizer.hidden { display: none !important; }
+
+.smart-sizer-top {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.smart-sizer-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .10em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+.smart-sizer-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.smart-sizer-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.smart-param-card {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 9px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.smart-param-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.smart-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.stepper-btn {
+  width: 32px;
+  height: 32px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  transition: all .15s ease;
+  user-select: none;
+}
+.stepper-btn:hover {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.stepper-btn:active {
+  transform: scale(0.92);
+}
+.stepper-val-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+.stepper-num {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.stepper-unit {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.smart-advice-deck {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.advice-card {
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  transition: all .18s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.advice-card:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+}
+.advice-card:active {
+  transform: translateY(0);
+}
+.advice-card.is-recommended {
+  background: linear-gradient(145deg, rgba(225, 6, 0, 0.08) 0%, rgba(18, 18, 22, 0.9) 100%);
+  border-color: rgba(225, 6, 0, 0.4);
+}
+.advice-card.selected {
+  border-color: var(--red) !important;
+  background: rgba(225, 6, 0, 0.14) !important;
+  box-shadow: 0 0 16px rgba(225, 6, 0, 0.35);
+}
+
+.advice-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.advice-badge {
+  font-size: 11px;
+  letter-spacing: .08em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.advice-badge b {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--ink);
+  margin-left: 2px;
+}
+.advice-fit-type {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.25;
+}
+.advice-rec-pill {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: #fff;
+  background: var(--red);
+  padding: 2px 6px;
+  border-radius: 99px;
+  margin-top: 2px;
+}
+
+.advice-body {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+  margin: 0;
+  flex: 1;
+}
+
+.advice-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.advice-card.selected .advice-footer {
+  color: var(--red);
+}
+.advice-target-size {
+  font-weight: 900;
+  color: var(--red);
+}
+.advice-arrow {
+  font-size: 14px;
+  color: var(--red);
+  transition: transform .15s ease;
+}
+.advice-card:hover .advice-arrow {
+  transform: translateX(2px);
+}
+
