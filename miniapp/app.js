@@ -1812,10 +1812,10 @@
       welcomePlayback.bound = true;
       // На фирменном финале убираем кикер и крупный заголовок: остаётся кованый знак НВ в кадре и «НЕ НА СЛОВАХ.» над печатью.
       const syncWelcomeFinale = () => {
-        const isBrandedFilm = /welcome-seal-/.test(video.currentSrc || welcomePlayback.source || "");
-        const inFinale = isBrandedFilm && video.classList.contains("is-playing")
-          && Number.isFinite(video.duration) && video.duration > 6
-          && (welcomePlayback.finished || video.currentTime >= video.duration - 3.85);
+        const src = video.currentSrc || video.getAttribute("src") || welcomePlayback.source || "";
+        const isBrandedFilm = /welcome-seal-/.test(src);
+        const inFinale = isBrandedFilm && !welcomePlayback.failed
+          && (welcomePlayback.finished || video.currentTime >= 4.55);
         $("#welcome")?.classList.toggle("is-logo-finale", inFinale);
       };
       $("#welcomeMotion").addEventListener("click", () => {

@@ -8587,14 +8587,28 @@ class StorefrontHandler(BaseHTTPRequestHandler):
     def _stamp_assets(self, body: bytes) -> bytes:
         """Версионировать клиентский код, CSS и все статические медиа-ассеты в HTML."""
         text = body.decode("utf-8", "replace")
-        for name in ("app.js", "checkout.js", "shop-core.js", "viewer3d.js", "telegram-web-app.js", "styles.css", "hero-founder-20261107.webp", "hero-founder.webp"):
+        for name in (
+            "app.js",
+            "checkout.js",
+            "shop-core.js",
+            "viewer3d.js",
+            "telegram-web-app.js",
+            "styles.css",
+            "polish.css",
+            "readability-20261108.css",
+            "hero-founder-20261107.webp",
+            "hero-founder.webp",
+        ):
             asset = self.static_root / name
             try:
                 version = self._asset_version(asset)
             except OSError:
                 continue
-            text = text.replace(f'href="{name}"', f'href="{name}?v={version}"')
-            text = text.replace(f'src="{name}"', f'src="{name}?v={version}"')
+            text = re.sub(
+                rf'(href|src)="{re.escape(name)}(?:\?[^"]*)?"',
+                rf'\1="{name}?v={version}"',
+                text,
+            )
 
         def _stamp_match(m: re.Match[str]) -> str:
             attr = m.group(1)

@@ -3605,27 +3605,26 @@ img[src*="/product-studio-v1/"] {
 
 /* Печать своих: немой короткий фильм и неподвижный фирменный финал. */
 .welcome .welcome-title,
-.welcome-kicker { transition: opacity .45s cubic-bezier(.22,1,.36,1), transform .45s cubic-bezier(.22,1,.36,1); }
+.welcome-kicker {
+  transition: opacity .45s cubic-bezier(.22,1,.36,1), transform .45s cubic-bezier(.22,1,.36,1), visibility 0s linear 0s;
+}
 .welcome-copy .welcome-lede {
-  display: inline-flex; align-items: center; gap: 0;
   color: var(--bone); font-family: var(--font-ui); font-size: 12px; font-weight: 800; letter-spacing: .16em;
   transition: color .45s ease, letter-spacing .45s ease;
 }
-.welcome-copy .welcome-lede::before {
-  content: ""; width: 0; height: 2px; margin-right: 0; background: var(--red);
-  box-shadow: 0 0 10px rgba(225, 6, 0, .55); opacity: 0;
-  transition: width .45s cubic-bezier(.22,1,.36,1), margin-right .45s cubic-bezier(.22,1,.36,1), opacity .35s ease;
-}
 .welcome.is-logo-finale .welcome-shade { opacity: .14; }
-.welcome.is-logo-finale .welcome-kicker { opacity: 0; transform: translateY(-6px); pointer-events: none; }
-.welcome.is-logo-finale .welcome-title { opacity: 0; transform: translateY(-6px); pointer-events: none; }
-.welcome.is-logo-finale .welcome-copy .welcome-lede { color: #f6f0e8; letter-spacing: .21em; }
-.welcome.is-logo-finale .welcome-copy .welcome-lede::before { width: 18px; margin-right: 10px; opacity: 1; }
+.welcome.is-logo-finale .welcome-kicker,
+.welcome.is-logo-finale .welcome-title {
+  opacity: 0; visibility: hidden; transform: translateY(-6px); pointer-events: none;
+  transition: opacity .45s cubic-bezier(.22,1,.36,1), transform .45s cubic-bezier(.22,1,.36,1), visibility 0s linear .45s;
+}
+.welcome.is-logo-finale .welcome-copy .welcome-lede { color: #f6f0e8; letter-spacing: .18em; }
 .welcome.is-logo-finale .seal-ritual { border-color: rgba(239, 224, 211, .42); }
 .welcome.is-logo-finale .seal-core::after { animation: seal-light-pass 1.05s ease-out .75s both; }
 .welcome-motion { min-width: 120px; }
 @media (prefers-reduced-motion: reduce) {
-  .welcome .welcome-title, .welcome-kicker, .welcome-copy .welcome-lede, .welcome-copy .welcome-lede::before { transition: none; }
+  .welcome .welcome-title, .welcome-kicker, .welcome-copy .welcome-lede,
+  .welcome.is-logo-finale .welcome-kicker, .welcome.is-logo-finale .welcome-title { transition: none; }
   .welcome.is-logo-finale .seal-core::after { animation: none; }
 }
 
