@@ -72,7 +72,7 @@
       ],
       "featured": true,
       "media_note": "360° и предметные ракурсы — визуализация по материалам бренда. Посадка и мелкие детали могут отличаться.",
-      "video": "assets/client/sila-studio-12s-20261111c.mp4",
+      "video": "assets/client/sila-studio-12s-20261111d.mp4",
       "card_image": "assets/client/sila-front-studio-20261111c.webp",
       "spin_labels": [
         "Спереди · 0°",
@@ -206,7 +206,7 @@
       "featured": false,
       "media_note": "360° и предметные ракурсы — визуализация по материалам бренда. Посадка и мелкие детали могут отличаться.",
       "card_image": "assets/client/vzglyad-front-studio-20261111c.webp",
-      "video": "assets/client/vzglyad-studio-12s-20261111c.mp4",
+      "video": "assets/client/vzglyad-studio-12s-20261111d.mp4",
       "spin_labels": [
         "Спереди · 0°",
         "Спереди сбоку · 45°",
@@ -748,12 +748,12 @@
   "media": {
     "welcome_loop": "assets/video/welcome-real-fighter-20261028.mp4",
     "welcome_poster": "assets/video/welcome-real-fighter-20261028.jpg",
-    "teaser": "assets/video/power-drop-001-20261111c.mp4",
-    "teaser_poster": "assets/video/power-drop-poster-20261111c.jpg",
+    "teaser": "assets/video/power-drop-001-20261111d.mp4",
+    "teaser_poster": "assets/video/power-drop-poster-20261111d.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",
     "teaser_caption": "Первый дроп 001 · СИЛА И ЧЕСТЬ",
     "teaser_story_url": "",
-    "teaser_thumbnail": "assets/video/power-drop-poster-20261111c.jpg",
+    "teaser_thumbnail": "assets/video/power-drop-poster-20261111d.jpg",
     "hero_image": "assets/drop/hero-founder-retouch-v4.webp",
     "hero_background": "assets/drop/hero-founder-retouch-v4.webp",
     "hero_subject": "assets/drop/hero-founder-retouch-v4.webp",
