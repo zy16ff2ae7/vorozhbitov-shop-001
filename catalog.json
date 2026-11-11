@@ -770,35 +770,44 @@
   },
   "film": [
     {
+      "video": "assets/video/power-drop-001-20261111d.mp4",
+      "poster": "assets/video/power-drop-poster-20261111d.jpg",
+      "image": "assets/video/power-drop-poster-20261111d.jpg",
+      "kicker": "01 / ТИЗЕР ВЫПУСКА 001",
+      "title": "СИЛА И ЧЕСТЬ",
+      "text": "Две футболки первого дропа из плотного хлопка 240–260 г/м² и нумерованный стальной жетон в подарок первой сотне.",
+      "cta": "catalog"
+    },
+    {
       "image": "assets/drop/hero-founder-retouch-v4.webp",
-      "kicker": "01 / ОСНОВАТЕЛЬ",
+      "kicker": "02 / ОСНОВАТЕЛЬ",
       "title": "НИКИТА ВОРОЖБИТОВ",
       "text": "Основатель бренда «СИЛА И ЧЕСТЬ». Форма для тех, кто выбирает характер и дисциплину каждый день."
     },
     {
       "image": "assets/client/sila-front-studio-20261111c.webp",
-      "kicker": "02 / ВЫПУСК 001",
+      "kicker": "03 / ВЫПУСК 001",
       "title": "СИЛА И ЧЕСТЬ",
       "text": "Плотный чёрный хлопок 240–260 г/м², уставной шрифт на груди и жаккардовая бирка НВ на подоле.",
       "product_id": "tee-sila-i-chest"
     },
     {
       "image": "assets/client/sila-back-studio-20261111c.webp",
-      "kicker": "03 / ДЕТАЛЬ СПИНЫ",
+      "kicker": "04 / ДЕТАЛЬ СПИНЫ",
       "title": "КЛИНОК НА ТЕСЬМЕ",
       "text": "Вертикальная планка с монограммой НВ от шва горловины и узкий стальной клинок вдоль позвоночника.",
       "product_id": "tee-sila-i-chest"
     },
     {
       "image": "assets/client/vzglyad-front-studio-20261111c.webp",
-      "kicker": "04 / ПРЕДЗАКАЗ",
+      "kicker": "05 / ПРЕДЗАКАЗ",
       "title": "ВЗГЛЯД",
       "text": "Принт «ВЗГЛЯД» на груди и десять принципов на спине вокруг монограммы с мечом.",
       "product_id": "tee-vzglyad"
     },
     {
       "image": "assets/client/tag-hero-studio-20261111c.webp",
-      "kicker": "05 / ПЕРВАЯ СОТНЯ",
+      "kicker": "06 / ПЕРВАЯ СОТНЯ",
       "title": "ЖЕТОН В ПОДАРОК",
       "text": "Первые 100 заказов первого дропа получают именной нумерованный стальной жетон бесплатно.",
       "cta": "catalog"

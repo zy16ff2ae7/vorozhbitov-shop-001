@@ -3935,10 +3935,11 @@ class BrandBot:
         rows.append(second_row)
         rows.extend(
             [
+                [(icon("catalog", "Первый дроп"), "cat:drop", ce.get("catalog") or ce.get("sword", "")),
+                 ("▶ Тизер выпуска", "teaser", ce.get("looks", ""))],
                 [(icon("orders", "Мои покупки"), "my_orders", ce.get("orders", "")),
                  (icon("account", "Кабинет"), "account", ce.get("account", ""))],
-                [(icon("catalog", "Первый дроп"), "cat:drop", ce.get("catalog") or ce.get("sword", "")),
-                 (icon("seal", "О бренде"), "about", ce.get("seal", ""))],
+                [(icon("seal", "О бренде"), "about", ce.get("seal", ""))],
             ]
         )
         channel_link = self.channel_link()
@@ -4220,6 +4221,8 @@ class BrandBot:
             )
             return
         rows = [[(f"{p['name']} · {'подарок' if p.get('gift') else p['price']}", f"product:{p['id']}")] for p in products]
+        if category_id == "drop":
+            rows.append([("▶ Тизер выпуска 001", "teaser")])
         rows.extend(nav_rows(("Витрина", "catalog")))
         paid_count = sum(1 for p in products if not p.get("gift"))
         gift_count = sum(1 for p in products if p.get("gift"))
@@ -7201,7 +7204,7 @@ class BrandBot:
 
     # Оплата остаётся в истории: счета, отказы и подтверждения ищут позже,
     # поэтому такие экраны не сворачиваются в одно меняющееся сообщение.
-    NON_EDITABLE_CALLBACKS = ("pay:", "pvid:")
+    NON_EDITABLE_CALLBACKS = ("pay:", "pvid:", "teaser")
 
     def take_screen_edit(self, chat_id: int) -> int | None:
         """Отдать и погасить цель правки: одно нажатие — один экран на месте."""
@@ -7312,7 +7315,20 @@ class BrandBot:
             self.show_lookbook(chat_id, user_id)
         elif data == "teaser":
             self.db.event(user_id, "teaser_open")
-            keyboard = inline_keyboard([[(icon("catalog", "Каталог"), "catalog")]] + nav_rows())
+            t_rows: list[list[tuple[str, str]]] = []
+            sila = self.catalog.get("tee-sila-i-chest")
+            vzgl = self.catalog.get("tee-vzglyad")
+            pair: list[tuple[str, str]] = []
+            if sila:
+                pair.append((f"▪ Сила и честь · {sila.get('price', '4 200 ₽')}", "product:tee-sila-i-chest"))
+            if vzgl:
+                pair.append((f"▪ Взгляд · {vzgl.get('price', '3 900 ₽')}", "product:tee-vzglyad"))
+            if pair:
+                t_rows.append(pair)
+            else:
+                t_rows.append([(icon("catalog", "Каталог"), "catalog")])
+            t_rows.extend(nav_rows())
+            keyboard = inline_keyboard(t_rows)
             if not self.send_teaser(chat_id, keyboard=keyboard):
                 self.api.send_message(
                     chat_id,
@@ -7593,8 +7609,8 @@ class BrandBot:
             self.show_my_orders(chat_id, user_id)
             return True
 
-        # 4. Фильм выпуска / Ролик
-        if clean in {"фильм выпуска", "фильм", "ролик", "видео", "тизер"}:
+        # 4. Фильм выпуска / Ролик / Тизер
+        if clean in {"фильм выпуска", "тизер выпуска", "фильм", "ролик", "видео", "тизер"}:
             self.db.clear_state(user_id)
             self.db.event(user_id, "teaser_open")
             self.api.send_message(
