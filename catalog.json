@@ -748,7 +748,7 @@
   "media": {
     "welcome_loop": "assets/video/welcome-real-fighter-20261028.mp4",
     "welcome_poster": "assets/video/welcome-real-fighter-20261028.jpg",
-    "teaser": "assets/video/power-drop-001-20261111e.mp4",
+    "teaser": "assets/video/power-drop-001-20261111f.mp4",
     "teaser_poster": "assets/video/power-drop-poster-20261111e.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",
     "teaser_caption": "Выпуск 001 · СИЛА И ЧЕСТЬ / ВЗГЛЯД · Первые 100 — жетон в подарок",
@@ -770,7 +770,7 @@
   },
   "film": [
     {
-      "video": "assets/video/power-drop-001-20261111e.mp4",
+      "video": "assets/video/power-drop-001-20261111f.mp4",
       "poster": "assets/video/power-drop-poster-20261111e.jpg",
       "image": "assets/video/power-drop-poster-20261111e.jpg",
       "kicker": "01 / ТИЗЕР ВЫПУСКА 001",
