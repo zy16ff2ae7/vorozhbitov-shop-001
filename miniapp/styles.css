@@ -2684,10 +2684,10 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .film-progress span.current i { animation: film-progress var(--film-duration, 5200ms) linear forwards; }
 @keyframes film-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .film-close { top: 34px; }
-.film-media { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: #0a0a0c; }
+.film-media { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: #07080a; }
 .film-media img, .film-media video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .film-media img { object-position: center 22%; }
-.film-media video { object-fit: contain; background: #080809; }
+.film-media video { object-fit: cover; object-position: center 28%; background: #07080a; }
 .film-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.22), transparent 35%, transparent 68%, rgba(0,0,0,.55)); pointer-events: none; }
 .film-nav {
   position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
