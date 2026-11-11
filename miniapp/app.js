@@ -1631,11 +1631,11 @@
 
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
-    const staleLoop = !media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") || media.welcome_loop.includes("welcome-seal-20261029.mp4");
-    const stalePoster = !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") || media.welcome_poster.includes("welcome-seal-20261029.jpg");
+    const staleLoop = !media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") || media.welcome_loop.includes("welcome-seal-20261029.mp4") || media.welcome_loop.includes("welcome-loop-20261112a.mp4");
+    const stalePoster = !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") || media.welcome_poster.includes("welcome-seal-20261029.jpg") || media.welcome_poster.includes("welcome-poster-20261112a.jpg");
     return {
-      welcomeLoop: media.welcome_motion === false ? "" : (staleLoop ? "assets/video/welcome-loop-20261112a.mp4" : media.welcome_loop),
-      welcomePoster: stalePoster ? "assets/video/welcome-poster-20261112a.jpg" : media.welcome_poster
+      welcomeLoop: media.welcome_motion === false ? "" : (staleLoop ? "assets/video/welcome-seal-20261112b.mp4" : media.welcome_loop),
+      welcomePoster: stalePoster ? "assets/video/welcome-poster-20261112b.jpg" : media.welcome_poster
     };
   }
 
@@ -1789,7 +1789,8 @@
     video.defaultMuted = true;
     video.playsInline = true;
     video.autoplay = true;
-    video.loop = true;
+    video.loop = false;
+    video.removeAttribute("loop");
     // Каталог приходит позже старта и приносит тот же файл с новым ?v-штампом.
     // Уже идущий ролик не трогаем, иначе начало проиграется дважды.
     const playing = video.classList.contains("is-playing") || (!video.paused && video.currentTime > 0);
@@ -1809,12 +1810,21 @@
     welcomePlayback.ready = Boolean(media.welcomeLoop);
     if (!welcomePlayback.bound) {
       welcomePlayback.bound = true;
+      // На фирменном финале убираем кикер и крупный заголовок: остаётся кованый знак НВ в кадре и «НЕ НА СЛОВАХ.» над печатью.
+      const syncWelcomeFinale = () => {
+        const isBrandedFilm = /welcome-seal-/.test(video.currentSrc || welcomePlayback.source || "");
+        const inFinale = isBrandedFilm && video.classList.contains("is-playing")
+          && Number.isFinite(video.duration) && video.duration > 6
+          && (welcomePlayback.finished || video.currentTime >= video.duration - 3.85);
+        $("#welcome")?.classList.toggle("is-logo-finale", inFinale);
+      };
       $("#welcomeMotion").addEventListener("click", () => {
         if (welcomePlayback.finished) {
           welcomePlayback.finished = false;
           welcomePlayback.paused = false;
           welcomePlayback.blocked = false;
           video.currentTime = 0;
+          syncWelcomeFinale();
           $("#welcomeFrameCount").textContent = `ФИЛЬМ · ${Math.round(video.duration)} СЕК`;
         } else if (welcomePlayback.failed) {
           welcomePlayback.failed = false;
@@ -1830,14 +1840,6 @@
         }
         syncWelcomeVideo();
       });
-      // На фирменном финале чуть приглушаем только заголовок; вход остаётся доступным.
-      const syncWelcomeFinale = () => {
-        const isBrandedFilm = (video.currentSrc || "").includes("welcome-seal-20261029.mp4");
-        const inFinale = isBrandedFilm && video.classList.contains("is-playing")
-          && Number.isFinite(video.duration) && video.duration > 6
-          && (welcomePlayback.finished || (!video.paused && video.currentTime >= video.duration - 3.5));
-        $("#welcome")?.classList.toggle("is-logo-finale", inFinale);
-      };
       video.addEventListener("ended", () => {
         welcomePlayback.finished = true;
         syncWelcomeFinale();

@@ -167,12 +167,12 @@ img { display: block; max-width: 100%; }
 }
 .welcome-media {
   position: absolute; inset: 0;
-  width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%;
-  filter: contrast(1.08) saturate(.82);
+  width: 100%; height: 100%; object-fit: cover; object-position: 50% 24%;
+  filter: none;
   animation: ken 18s ease-in-out infinite alternate;
 }
 /* Видео лежит поверх фотографии: пока оно не готово, виден постер. */
-video.welcome-media { z-index: 1; animation: none; opacity: 0; transition: opacity .6s ease; object-fit: cover; object-position: 50% 24%; }
+video.welcome-media { z-index: 1; animation: none; opacity: 0; transition: opacity .6s ease; object-fit: cover; object-position: 50% 24%; filter: none; }
 video.welcome-media.is-playing { opacity: 1; }
 .welcome-shade {
   position: absolute; inset: 0;
@@ -3604,15 +3604,30 @@ img[src*="/product-studio-v1/"] {
 @media (max-width: 359px) { .success-heading { padding-block: 20px; } .success-seal, .success-seal .brand-mark { width: 54px; height: 54px; } .success-seal { flex-basis: 54px; } }
 
 /* Печать своих: немой короткий фильм и неподвижный фирменный финал. */
-.welcome-copy .welcome-lede { color: var(--bone); font-family: var(--font-ui); font-size: 12px; font-weight: 800; letter-spacing: .16em; }
-.welcome.is-logo-finale .seal-ritual { border-color: rgba(239, 224, 211, .38); }
+.welcome .welcome-title,
+.welcome-kicker { transition: opacity .45s cubic-bezier(.22,1,.36,1), transform .45s cubic-bezier(.22,1,.36,1); }
+.welcome-copy .welcome-lede {
+  display: inline-flex; align-items: center; gap: 0;
+  color: var(--bone); font-family: var(--font-ui); font-size: 12px; font-weight: 800; letter-spacing: .16em;
+  transition: color .45s ease, letter-spacing .45s ease;
+}
+.welcome-copy .welcome-lede::before {
+  content: ""; width: 0; height: 2px; margin-right: 0; background: var(--red);
+  box-shadow: 0 0 10px rgba(225, 6, 0, .55); opacity: 0;
+  transition: width .45s cubic-bezier(.22,1,.36,1), margin-right .45s cubic-bezier(.22,1,.36,1), opacity .35s ease;
+}
+.welcome.is-logo-finale .welcome-shade { opacity: .14; }
+.welcome.is-logo-finale .welcome-kicker { opacity: 0; transform: translateY(-6px); pointer-events: none; }
+.welcome.is-logo-finale .welcome-title { opacity: 0; transform: translateY(-6px); pointer-events: none; }
+.welcome.is-logo-finale .welcome-copy .welcome-lede { color: #f6f0e8; letter-spacing: .21em; }
+.welcome.is-logo-finale .welcome-copy .welcome-lede::before { width: 18px; margin-right: 10px; opacity: 1; }
+.welcome.is-logo-finale .seal-ritual { border-color: rgba(239, 224, 211, .42); }
+.welcome.is-logo-finale .seal-core::after { animation: seal-light-pass 1.05s ease-out .75s both; }
 .welcome-motion { min-width: 120px; }
-.welcome.is-logo-finale .welcome-title { opacity: 0; }
-.welcome.is-logo-finale .seal-core::after { animation: seal-light-pass 1s ease-out .2s both; }
-@media (prefers-reduced-motion: reduce) { .welcome.is-logo-finale .seal-core::after { animation: none; } }
-.welcome-kicker { transition: opacity .4s ease; }
-.welcome.is-logo-finale .welcome-kicker { opacity: 0; }
-@media (prefers-reduced-motion: reduce) { .welcome-kicker { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .welcome .welcome-title, .welcome-kicker, .welcome-copy .welcome-lede, .welcome-copy .welcome-lede::before { transition: none; }
+  .welcome.is-logo-finale .seal-core::after { animation: none; }
+}
 
 /* Подарок: персонаж становится частью страницы, а жетон — главным действием. */
 @media (max-width: 700px) {
