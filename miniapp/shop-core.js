@@ -49,7 +49,7 @@
   }
 
   function sizesFor(products) {
-    const order = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "ОДИН"];
+    const order = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "ОДИН"];
     const sizes = stringList(products.filter(buyable).flatMap(product => stringList(product.sizes)));
     return sizes.sort((a, b) => {
       const ia = order.indexOf(a), ib = order.indexOf(b);

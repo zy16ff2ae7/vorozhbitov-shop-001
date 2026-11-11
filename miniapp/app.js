@@ -4,7 +4,7 @@
   const Core = window.ShopCore;
   const FALLBACK_CATALOG = {
     brand: { name: "СИЛА И ЧЕСТЬ", descriptor: "Сила и честь", drop: "ВЫПУСК 001" },
-    channel_url: "https://t.me/nokayt_popmma",
+    channel_url: "https://t.me/sila_i_chestb",
     privacy_url: "",
     media: { welcome_motion: true },
     drop_event: {}, film: [], club: {}, community: [],
@@ -119,11 +119,11 @@
 
   function imagesFor(product) {
     const list = Array.isArray(product.images) && product.images.length ? product.images : [product.image || product.image_url || "assets/base-tee.jpg"];
-    return list.map(src => String(src).includes("assets/client/vzglyad-card-approved.png") ? "assets/client/vzglyad-cover-20261108.webp" : String(src));
+    return list.map(src => String(src));
   }
 
   function imageFor(product) {
-    return product.id === "tee-vzglyad" ? "assets/client/vzglyad-cover-20261108.webp" : product.card_image || imagesFor(product)[0];
+    return product.card_image || imagesFor(product)[0];
   }
 
   function backImageFor(product) {
@@ -474,7 +474,7 @@
     const galleryMode = mode === "photo";
     if (!galleryMode) $("#mediaError").classList.add("hidden");
     const canvas = $("#view3d");
-    const real3d = mode === "3d" && state.currentProduct?.id === "tee-vzglyad";
+    const real3d = mode === "3d" && ["tee-sila-i-chest", "tee-vzglyad"].includes(state.currentProduct?.id);
     const real3dFrame = $("#real3dFrame");
     const photo = $("#sheetImage");
     const fit = $("#sheetFit");
@@ -490,8 +490,12 @@
     if (canvas) canvas.classList.toggle("hidden", mode !== "3d" || real3d);
     if (real3dFrame) {
       real3dFrame.classList.toggle("hidden", !real3d);
-      if (real3d && !real3dFrame.getAttribute("src")) real3dFrame.src = "assets/vzglyad-3d/index-20261107f.html";
-      if (!real3d) real3dFrame.removeAttribute("src");
+      if (real3d) {
+        const targetSrc = `assets/vzglyad-3d/index-20261111b.html?product=${state.currentProduct?.id === "tee-sila-i-chest" ? "sila" : "vzglyad"}`;
+        if (real3dFrame.getAttribute("src") !== targetSrc) real3dFrame.src = targetSrc;
+      } else {
+        real3dFrame.removeAttribute("src");
+      }
     }
     if (photo) photo.classList.toggle("hidden", !galleryMode);
     if (fit) fit.classList.toggle("hidden", mode !== "fit");
@@ -552,12 +556,12 @@
 
   function renderProductCard(product, index) {
     const spin = Array.isArray(product.spin) ? product.spin : [];
-    const modelCard = product.id === "tee-vzglyad";
-    const brandedSpin = modelCard || (product.id === "tee-sila-i-chest" && product.spin_kind === "visualization" && spin.length >= 8);
+    const studioModelCard = ["tee-sila-i-chest", "tee-vzglyad"].includes(product.id);
+    const brandedSpin = studioModelCard || (product.spin_kind === "visualization" && spin.length >= 8);
     const spinLabels = Array.isArray(product.spin_labels) ? product.spin_labels : [];
     const backIndex = spinLabels.findIndex(label => /180°|сзади\s*[·—-]?\s*180/i.test(String(label)));
-    const frontImg = modelCard ? "assets/client/vzglyad-cover-20261108.webp" : brandedSpin ? spin[0] : imageFor(product);
-    const backImg = modelCard ? "assets/client/vzglyad-back-studio-20261107.jpg" : brandedSpin ? spin[backIndex >= 0 && backIndex < spin.length ? backIndex : Math.floor(spin.length / 2)] : backImageFor(product);
+    const frontImg = studioModelCard ? imageFor(product) : brandedSpin ? spin[0] : imageFor(product);
+    const backImg = studioModelCard ? backImageFor(product) : brandedSpin ? spin[backIndex >= 0 && backIndex < spin.length ? backIndex : Math.floor(spin.length / 2)] : backImageFor(product);
     return `<article class="product-card ${brandedSpin ? 'is-branded-spin' : ''}" data-product-id="${escapeHTML(product.id)}" style="--i:${index}">
       <div class="product-image ${backImg ? 'has-back' : ''}">
         <img class="product-img-front ${backImg ? 'has-back-pair' : ''}" src="${escapeHTML(frontImg)}" alt="${escapeHTML(product.name)}" ${index === 0 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}>
@@ -565,7 +569,7 @@
         <span class="product-badge">${escapeHTML(product.badge || "БАЗА")}</span>
         ${backImg ? `<button type="button" class="badge-side" aria-label="Показать вид со спины" data-action="flip">СПИНА ↺</button>` : ''}
         ${backImg ? `<div class="card-dots" aria-hidden="true"><span class="card-dot active"></span><span class="card-dot"></span></div>` : ''}
-        ${Array.isArray(product.spin) && product.spin.length > 1 ? `<span class="badge-3d">${product.spin_kind === "visualization" ? "360°" : "ВРАЩЕНИЕ 360°"}</span>` : `<span class="badge-3d">${imagesFor(product).length} ФОТО</span>`}
+        ${studioModelCard ? `<span class="badge-3d">3D · 360°</span>` : Array.isArray(product.spin) && product.spin.length > 1 ? `<span class="badge-3d">${product.spin_kind === "visualization" ? "360°" : "ВРАЩЕНИЕ 360°"}</span>` : `<span class="badge-3d">${imagesFor(product).length} ФОТО</span>`}
         <span class="product-hover">ОТКРЫТЬ КАРТОЧКУ <b>↗</b></span>
       </div>
       <div class="product-info">
@@ -2292,7 +2296,7 @@
   function passportMediaLine(product) {
     const photos = imagesFor(product).length;
     const spin = Array.isArray(product.spin) ? product.spin.length : 0;
-    if (product.id === "tee-vzglyad") return `${photos} фото · 3D-визуализация 360°`;
+    if (["tee-sila-i-chest", "tee-vzglyad"].includes(product.id)) return `${photos} фото · интерактивная 3D-модель 360°`;
     if (product.spin_kind === "visualization" && spin > 1) {
       return `${spin} ракурсов · визуализация 360°`;
     }
@@ -2707,7 +2711,7 @@
     const entries = (Array.isArray(state.data.community) ? state.data.community : [])
       .filter(item => item && typeof item.image === "string" && item.image);
     if (!entries.length) {
-      for (const [id, image] of [["tee-sila-i-chest", "assets/client/sila-original.jpg"], ["tee-vzglyad", "assets/client/vzglyad-client-front-20261106.jpg"]]) {
+      for (const [id, image] of [["tee-sila-i-chest", "assets/drop/hero-founder-retouch-v4.webp"], ["tee-vzglyad", "assets/client/vzglyad-nikita-front-20261111.webp"]]) {
         const product = productById(id);
         if (product) entries.push({image, name:"Никита Ворожбитов", caption:product.name, city:"НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ", product_id:id});
       }

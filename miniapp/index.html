@@ -66,9 +66,8 @@
 .product-grid .product-image { flex:none; width:100%; aspect-ratio:1 / 1; border:0; border-bottom:1px solid #34312f; }
 .product-grid .is-branded-spin .product-image { background:var(--product-studio-bg); }
 .product-grid .is-branded-spin .product-image img { object-fit:contain; object-position:center; background:transparent; padding:0; }
-.product-grid .product-card[data-product-id="tee-sila-i-chest"] .product-image img { transform:translateY(-2%) scale(1.22); }
-.product-grid .product-card[data-product-id="tee-sila-i-chest"] .product-image .product-img-back { transform:scale(1.13); }
-.product-grid .product-card[data-product-id="tee-vzglyad"] .product-img-front { object-fit:cover; }
+.product-grid .product-card[data-product-id="tee-sila-i-chest"] .product-image img,
+.product-grid .product-card[data-product-id="tee-vzglyad"] .product-image img { object-fit:cover; object-position:center 45%; transform:none; }
 .product-grid .is-branded-spin .product-hover { display:none; }
 .product-grid .is-branded-spin .badge-side { top:auto; right:12px; bottom:12px; min-height:44px; z-index:4; }
 .product-grid .product-info { flex:1; display:flex; flex-direction:column; padding:16px; }
@@ -163,7 +162,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
 
   <section class="welcome" id="welcome" aria-label="Приветствие">
     <video class="welcome-media" id="welcomeVideo" muted autoplay playsinline webkit-playsinline preload="auto" aria-hidden="true"></video>
-    <img class="welcome-media hidden" id="welcomeFallback" src="assets/product-studio-v1/sila-000.webp?v=1793032413" alt="Никита Ворожбитов в фирменной футболке">
+    <img class="welcome-media hidden" id="welcomeFallback" src="assets/client/bot-welcome-drop001-20261111.jpg" alt="Никита Ворожбитов в фирменной футболке">
     <div class="welcome-shade"></div>
     <button class="welcome-motion hidden" id="welcomeMotion" type="button" aria-label="Остановить видео"><span id="welcomeFrameCount" aria-hidden="true">ФИЛЬМ · 8 СЕК</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
     <div class="welcome-frame">
@@ -527,7 +526,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
       <div class="sheet-image image-frame">
 
         <div class="view3d" id="view3d" role="tabpanel" tabindex="0" aria-label="Обзор вещи. Повернуть: стрелки влево и вправо." aria-describedby="view3dHint"></div>
-        <iframe id="real3dFrame" class="model3d-frame hidden" title="Трёхмерный обзор футболки ВЗГЛЯД" sandbox="allow-scripts allow-same-origin"></iframe>
+        <iframe id="real3dFrame" class="model3d-frame hidden" title="Трёхмерный обзор футболки СИЛА И ЧЕСТЬ" sandbox="allow-scripts allow-same-origin"></iframe>
         <img id="sheetImage" class="sheet-photo hidden" role="tabpanel" alt=""><div id="mediaError" class="media-error hidden" role="status"><p>Не удалось загрузить кадр</p><button id="retryPhoto" type="button">ПОВТОРИТЬ ↻</button></div>
         <video id="sheetVideo" class="sheet-video hidden" role="tabpanel" muted loop playsinline controls preload="none" aria-label="Видеообзор товара без звука"></video>
         <span class="sheet-badge" id="sheetBadge"></span>
@@ -902,6 +901,6 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
   <script src="shop-core.js?v=1793384381"></script>
   <script src="viewer3d.js?v=studio-20261026-1"></script>
   <script src="checkout.js?v=client-20261105a"></script>
-  <script src="app.js?v=anna-20261111b"></script>
+  <script src="app.js?v=drop001-20261111e"></script>
 </body>
 </html>

@@ -1,0 +1,141 @@
+/* Readability pass: preserve the dark red brand, imagery and display typography. */
+:root {
+  --readable-secondary: #c7c0b6;
+  --readable-label: #d9d2c8;
+  --readable-error: #f58b80;
+}
+
+/* Useful catalogue information stays legible beside the atmospheric imagery. */
+#catalog .product-topline,
+#catalog .product-sizes {
+  color: var(--readable-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: .015em;
+}
+
+/* Separate small decorative headings from information needed to choose a size. */
+#productModal .sheet-kicker {
+  color: var(--readable-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: .045em;
+}
+#productModal .sheet-facts .fact-row {
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 12px;
+}
+#productModal .sheet-facts .fact-row span {
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-transform: none;
+}
+#productModal .sheet-facts .fact-row span:first-child {
+  color: var(--readable-secondary);
+}
+#productModal .sheet-facts .fact-row span:last-child {
+  color: var(--ink);
+}
+#productModal .preorder-notice strong {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: .035em;
+}
+#productModal .preorder-notice p,
+#productModal .size-hint,
+#productModal .size-guide-header p,
+#productModal .size-guide-note,
+#productModal .sheet-details,
+#productModal .sheet-details p,
+#productModal .product-care p,
+#productModal .product-more > p,
+#productModal .sheet-content .sign-block {
+  color: var(--readable-secondary);
+  font-size: 14px;
+  line-height: 1.65;
+  letter-spacing: 0;
+}
+#productModal .size-hint.error {
+  color: var(--readable-error);
+}
+#productModal .size-heading strong,
+#productModal .size-guide-toggle,
+#productModal .product-care summary,
+#productModal .product-more > summary {
+  color: var(--readable-label);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: .025em;
+}
+#productModal .size-guide-toggle {
+  padding-inline: 10px;
+  white-space: nowrap;
+}
+#productModal .compare-fields label {
+  color: var(--readable-label);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-transform: none;
+}
+#productModal .size-guide-header p {
+  text-transform: none;
+  font-weight: 400;
+}
+#productModal .measurement-table {
+  overflow-x: auto;
+}
+#productModal .measurement-table > div {
+  min-width: 320px;
+  grid-template-columns: 52px repeat(4, minmax(0, 1fr));
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+#productModal .measurement-table .measurement-head {
+  color: var(--readable-label);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+#productModal .purchase-bar > span {
+  color: var(--readable-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Delivery, preorder and handoff details are part of the purchase decision. */
+#cartModal .cart-next > p,
+#cartModal .checkout-gift small,
+#cartModal .cart-line-name small,
+#cartModal .checkout-delivery dd,
+#cartModal .checkout-delivery > small {
+  color: var(--readable-secondary);
+  font-size: 14px;
+  line-height: 1.65;
+  letter-spacing: 0;
+}
+#cartModal .cart-next > .cart-preorder-note {
+  color: var(--ink);
+}
+#cartModal .cart-next-total > span {
+  color: var(--readable-secondary);
+  font-size: 14px;
+}
+
+/* Main-page explanatory text uses the same reading size. */
+.manifesto-body .founder-context,
+.community-entry p,
+#dropEvent .drop-event-main p {
+  color: var(--readable-secondary);
+  font-size: 15px;
+  line-height: 1.65;
+  letter-spacing: 0;
+}
+@media (max-width: 360px) {
+  #productModal .size-heading { gap: 8px; }
+  #productModal .size-guide-toggle { font-size: 11px; padding-inline: 8px; }
+  #productModal .compare-fields { grid-template-columns: minmax(0, 1fr); }
+}

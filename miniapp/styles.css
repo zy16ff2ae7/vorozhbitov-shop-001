@@ -35,6 +35,7 @@
 }
 
 :root {
+  /* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4 */
   --bg: #070708;
   --surface: #101012;
   --surface-2: #161619;
@@ -49,6 +50,10 @@
   --bone: #f4eee6;
   --paper: #efe6d8;
   --acid: rgba(255, 255, 255, .12);
+  --steel-warm: #bdb4aa;
+  --steel-shadow: #211d1e;
+  --steel-deep: #121113;
+  --brand-glow: rgba(192, 34, 23, .15);
   --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px), var(--tg-content-safe-area-inset-bottom, 0px));
   --safe-top: max(env(safe-area-inset-top, 0px), var(--tg-safe-area-inset-top, 0px), var(--tg-content-safe-area-inset-top, 0px));
   --font-display: "Sila Chest", "Times New Roman", serif;
@@ -59,6 +64,8 @@
   color: var(--ink);
   font-synthesis: none;
 }
+
+/* The storefront keeps the original brand palette and typography. */
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; background: var(--bg); }
@@ -331,7 +338,7 @@ main > section { scroll-margin-top: calc(70px + var(--safe-top)); }
 .brand-lockup, .footer-brand { display: inline-flex; align-items: center; gap: 10px; }
 .brand-mark {
   width: 32px; height: 32px; display: inline-block;
-  background: url("assets/sila-chest-seal-v3.jpg") center/cover no-repeat;
+  background: #111113 url("assets/brand/sword-monogram-light-v2.png") center / auto 74% no-repeat;
   border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
   font-size: 0; color: transparent; transform: none;
@@ -390,7 +397,7 @@ main > section { scroll-margin-top: calc(70px + var(--safe-top)); }
   padding: 6px 12px; border: 1px solid var(--line); color: var(--muted);
   border-radius: 99px; background: rgba(255,255,255,0.03);
   font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
-  transition: all .2s ease; cursor: pointer;
+  transition: color .2s ease, background-color .2s ease, border-color .2s ease, opacity .2s ease; cursor: pointer;
 }
 .search-hints button:hover, .search-hints button:focus-visible {
   color: var(--bone); border-color: var(--red); background: rgba(225,6,0,.08);
@@ -660,10 +667,6 @@ h1, h2 {
 }
 @media (hover: hover) {
   .product-card:hover .product-image img { transform: scale(1.025); }
-  .product-card:hover .product-img-front.has-back-pair { opacity: 0; }
-  .product-card:hover .product-img-back { opacity: 1; }
-  .product-card:hover .card-dot:first-child { width: 4px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
-  .product-card:hover .card-dot:last-child { width: 13px; border-radius: 2px; background: #f4eee6; }
 }
 .product-card.is-flipped .product-img-front { opacity: 0 !important; }
 .product-card.is-flipped .product-img-back { opacity: 1 !important; }
@@ -690,11 +693,11 @@ h1, h2 {
 
 .badge-side {
   position: absolute; right: 8px; top: 8px; z-index: 3;
-  padding: 4px 7px;
+  min-height: 44px; min-width: 64px; padding: 8px 10px;
   background: rgba(7, 7, 8, 0.82); color: var(--ink);
   border: 1px solid rgba(255, 255, 255, 0.24);
   font-family: var(--font-ui);
-  font-size: 8px; font-weight: 800; letter-spacing: .1em;
+  font-size: 10px; font-weight: 800; letter-spacing: .08em;
   text-transform: uppercase;
   cursor: pointer;
   border-radius: 2px;
@@ -1125,7 +1128,7 @@ h1, h2 {
 .size-guide-toggle {
   background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 4px;
   color: var(--muted); font-size: 10px; letter-spacing: .08em; cursor: pointer;
-  padding: 4px 8px; font-family: inherit; transition: all .2s ease;
+  padding: 4px 8px; font-family: inherit; transition: color .2s ease, background-color .2s ease, border-color .2s ease, opacity .2s ease;
 }
 .size-guide-toggle:hover, .size-guide-toggle:focus-visible {
   color: var(--bone); border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.08);
@@ -1184,7 +1187,7 @@ h1, h2 {
 }
 .profile-avatar {
   width: 52px; height: 52px; display: grid; place-items: center;
-  background: url("assets/sila-chest-seal-v3.jpg") center/cover no-repeat;
+  background: #111113 url("assets/brand/sword-monogram-light-v2.png") center / auto 74% no-repeat;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
@@ -1321,6 +1324,7 @@ h1, h2 {
   font-weight: 900; font-size: 16px;
   color: var(--red); letter-spacing: -.06em;
 }
+.pay-mark:before { content: "↗"; }
 .pay-card[data-pay-method="lava"] .pay-mark:before { content: "₽"; }
 .pay-card[data-pay-method="crypto"] .pay-mark:before { content: "◈"; }
 .pay-card[data-pay-method="stars"] .pay-mark:before { content: "★"; }
@@ -1665,7 +1669,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .search-hints button {
   min-height: 36px; padding: 6px 14px; color: var(--muted); background: rgba(255,255,255,0.03);
   border: 1px solid var(--line); border-radius: 99px; font-size: 11px; letter-spacing: .06em;
-  text-transform: uppercase; transition: all .2s ease; cursor: pointer;
+  text-transform: uppercase; transition: color .2s ease, background-color .2s ease, border-color .2s ease, opacity .2s ease; cursor: pointer;
 }
 .search-hints button:hover, .search-hints button:focus-visible {
   color: var(--bone); border-color: var(--red); background: rgba(225,6,0,.08);
@@ -1705,7 +1709,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   padding: 0 16px; color: var(--ink); font-size: 11px; font-weight: 700; letter-spacing: .08em;
   background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .14);
   border-radius: 24px; backdrop-filter: blur(8px);
-  transition: all .2s ease;
+  transition: color .2s ease, background-color .2s ease, border-color .2s ease, opacity .2s ease;
 }
 .hero-film-button:hover {
   background: rgba(255, 255, 255, .10); border-color: rgba(255, 255, 255, .24);
@@ -1777,7 +1781,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   color: #fff; background: rgba(12, 12, 15, .82); border: 1px solid rgba(255,255,255,.18);
   backdrop-filter: blur(10px); border-radius: 8px; font-size: 10px; font-weight: 700; letter-spacing: .08em;
   justify-content: space-between; align-items: center; padding: 0 14px;
-  transition: all .25s ease;
+  transition: color .25s ease, background-color .25s ease, border-color .25s ease, opacity .25s ease;
 }
 @media (hover: hover) {
   .product-hover { display: flex; opacity: 0; transform: translateY(6px); }
@@ -2050,7 +2054,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .consent-check input { flex: 0 0 20px; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--red-control); }
 .privacy-link { color: var(--ink); }
 .form-note { color: var(--muted); font-size: 12px; line-height: 1.65; }
-#submitOrder { margin-top: 20px; }
+#submitManagerOrder { margin-top: 20px; }
 
 /* ---------- Размеры, оплата, вспомогательные окна ---------- */
 .info-lead { margin: 20px; color: var(--muted); font-size: 14px; line-height: 1.65; }
@@ -2148,7 +2152,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   font-size: 10px; letter-spacing: .08em;
   backdrop-filter: blur(10px);
   cursor: pointer;
-  transition: all .2s ease;
+  transition: color .2s ease, background-color .2s ease, border-color .2s ease, opacity .2s ease;
 }
 .welcome-motion:hover, .welcome-motion:focus-visible {
   border-color: rgba(255,255,255,.5);
@@ -2269,6 +2273,34 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .profile-order-status.is-shipped { color: #83c79c; }
 .profile-order-status.is-received,
 .profile-order-status.is-completed { color: var(--muted); }
+
+@media (max-width: 500px) {
+  .club-task strong { font-size: clamp(18px, 5vw, 22px); }
+}
+
+/* Клуб: персонаж в футболке выполняет повторение рядом с заданием дня. */
+.club-task {
+  position: relative; grid-template-columns: minmax(0, 1fr) minmax(116px, 28%);
+  align-items: center; gap: 12px; min-height: 202px; overflow: hidden;
+}
+.club-task-copy { display: grid; gap: 10px; position: relative; z-index: 1; }
+.club-lifter {
+  width: min(100%, 190px); aspect-ratio: 3 / 4; justify-self: end;
+  align-self: end; margin: -16px 0 -20px;
+  background-image: url("assets/mascot/steel-lifter-sprite-v1.webp");
+  background-size: 400% 200%; background-position: 0 0; background-repeat: no-repeat;
+}
+.club-lifter-toggle {
+  position: absolute; top: 12px; right: 12px; z-index: 2;
+  width: 44px; height: 44px; display: grid; place-items: center;
+  border: 1px solid rgba(255,255,255,.25); border-radius: 50%;
+  background: rgba(15,15,17,.75); color: var(--ink); font-size: 13px; cursor: pointer;
+}
+@media (max-width: 500px) {
+  .club-task { grid-template-columns: minmax(0, 1fr) 112px; min-height: 192px; gap: 4px; padding: 16px 10px 16px 16px; }
+  .club-task strong { font-size: clamp(18px, 5vw, 22px); }
+  .club-lifter { width: 112px; margin-bottom: -16px; }
+}
 
 /* Sila Chest: узкая высококонтрастная антиква требует чуть большего кегля
    в служебных текстах. Заголовки и тёмная editorial-композиция сохранены. */
@@ -2437,150 +2469,6 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .hero-media.poster-ready .hero-layer-subject { opacity: 1; }
 .hero-media .hero-shade { z-index: 4; }
 
-/* ---------- Оживление Никиты: Режим 1 (Видео-луп) и Режим 4 (Синемаграф 3D) ---------- */
-.hero-live-wrap {
-  position: absolute; z-index: 5;
-  left: 14px; bottom: 14px;
-  display: flex; align-items: center; gap: 8px;
-  flex-wrap: wrap;
-}
-@media (min-width: 760px) {
-  .hero-live-wrap { right: 22px; bottom: 22px; left: auto; top: auto; }
-}
-
-.hero-mode-pill {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: rgba(225, 6, 0, 0.18);
-  border: 1px solid rgba(225, 6, 0, 0.45);
-  border-radius: 99px;
-  padding: 4px 10px;
-  color: #fff;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  cursor: pointer;
-  transition: all .18s ease;
-}
-.hero-mode-pill:hover {
-  background: rgba(225, 6, 0, 0.32);
-  border-color: var(--red);
-  transform: scale(1.04);
-}
-.hero-mode-pill:active { transform: scale(0.96); }
-
-/* Слой живого видео Никиты (Вариант 1) */
-.hero-layer-video {
-  position: absolute; inset: 0;
-  z-index: 2;
-  opacity: 0;
-  width: 100%; height: 100%;
-  object-fit: cover; object-position: 50% 15%;
-  transition: opacity .45s ease;
-  pointer-events: none;
-}
-
-/* Эффекты кинематографичного синемаграфа (Вариант 4) */
-.hero-aura-glow {
-  position: absolute; z-index: 2;
-  top: 45%; left: 50%;
-  width: 380px; height: 380px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(225, 6, 0, 0.32) 0%, rgba(225, 6, 0, 0.08) 45%, transparent 70%);
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .45s ease;
-}
-.hero-light-sweep {
-  position: absolute; z-index: 4; inset: 0;
-  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.12) 50%, transparent 60%);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-100%);
-}
-
-/* === РЕЖИМ 1: ЖИВОЙ ВИДЕО-ЛУП (ПО УМОЛЧАНИЮ) === */
-.hero-media.hero-mode-video .hero-layer-video {
-  opacity: 1;
-}
-.hero-media.hero-mode-video .hero-layer-bg,
-.hero-media.hero-mode-video .hero-layer-subject,
-.hero-media.hero-mode-video .hero-layer-fallback {
-  opacity: 0;
-}
-.hero-media.hero-mode-video .hero-poster-type {
-  opacity: 0.25;
-  z-index: 3;
-}
-
-/* === РЕЖИМ 4: КИНЕМАТОГРАФИЧНЫЙ СИНЕМАГРАФ 3D === */
-.hero-media.hero-mode-cinemagraph .hero-layer-video {
-  opacity: 0;
-}
-.hero-media.hero-mode-cinemagraph .hero-layer-bg {
-  opacity: 1;
-}
-.hero-media.hero-mode-cinemagraph .hero-aura-glow {
-  opacity: 1;
-  animation: heroAuraPulse 4.2s ease-in-out infinite;
-}
-.hero-media.hero-mode-cinemagraph .hero-poster-type {
-  opacity: 1;
-}
-.hero-media.hero-mode-cinemagraph .hero-layer-subject {
-  opacity: 1;
-  animation: heroBreathe 4.2s ease-in-out infinite;
-}
-.hero-media.hero-mode-cinemagraph .hero-light-sweep {
-  opacity: 1;
-  animation: heroSheenSweep 5.5s ease-in-out infinite;
-}
-
-@keyframes heroBreathe {
-  0%, 100% {
-    transform: scale(1.012) translate3d(var(--poster-subject-x, 0px), var(--poster-subject-y, 0px), 0);
-  }
-  50% {
-    transform: scale(1.034) translate3d(var(--poster-subject-x, 0px), calc(var(--poster-subject-y, 0px) - 4px), 0);
-  }
-}
-
-@keyframes heroAuraPulse {
-  0%, 100% {
-    transform: translate(-50%, -50%) scale(0.94);
-    opacity: 0.35;
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1.15);
-    opacity: 0.85;
-  }
-}
-
-@keyframes heroSheenSweep {
-  0%, 65% {
-    transform: translateX(-120%);
-    opacity: 0;
-  }
-  75% {
-    opacity: 1;
-  }
-  85%, 100% {
-    transform: translateX(120%);
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hero-media.hero-mode-cinemagraph .hero-layer-subject,
-  .hero-media.hero-mode-cinemagraph .hero-aura-glow,
-  .hero-media.hero-mode-cinemagraph .hero-light-sweep {
-    animation: none;
-  }
-}
-
 /* Stories Progress Indicators on Hero */
 .hero-carousel-progress {
   position: absolute; top: 12px; left: 14px; right: 14px; z-index: 6;
@@ -2643,7 +2531,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   padding: 8px 10px; border: 1px solid rgba(255, 255, 255, .12);
   background: rgba(255, 255, 255, .04); border-radius: 8px;
   color: var(--fg); font-size: 11px; text-align: left; cursor: pointer;
-  transition: all .2s ease; line-height: 1.3;
+  transition: color .2s ease, background-color .2s ease, border-color .2s ease, opacity .2s ease; line-height: 1.3;
 }
 .fit-preset-btn strong { display: block; color: var(--red); font-size: 12px; }
 .fit-preset-btn:hover, .fit-preset-btn:focus-visible {
@@ -2741,7 +2629,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .club-day {
   min-height: 48px; display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, .1);
   border-radius: 10px; color: var(--muted); font-size: 13px; font-weight: 800; background: rgba(255, 255, 255, .04);
-  transition: all .2s ease;
+  transition: color .2s ease, background-color .2s ease, border-color .2s ease, opacity .2s ease;
 }
 .club-day.done { color: #fff; background: linear-gradient(135deg, #c02217, #8b130c); border-color: #d62828; box-shadow: 0 2px 10px rgba(192, 34, 23, .35); }
 .club-day.today { color: #fff; border-color: rgba(255, 255, 255, .4); background: rgba(255, 255, 255, .08); box-shadow: 0 0 12px rgba(255, 255, 255, .08); }
@@ -2883,6 +2771,254 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 .section-heading h2,
 .sheet-header h2,
 .sheet-content h2 { letter-spacing: -.015em; }
+
+.mascot-gift {
+  display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1fr);
+  gap: clamp(28px, 6vw, 80px); align-items: center;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  padding-block: 58px; background: var(--steel-deep);
+}
+.mascot-gift-art { position: relative; width: 100%; max-width: 470px; justify-self: center; overflow: hidden; background: var(--steel-shadow); isolation: isolate; }
+.mascot-visual {
+  display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; object-position: center 35%;
+}
+.mascot-gift-art::after { content: ""; position: absolute; z-index: 1; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.35), transparent 25%, transparent 52%, rgba(0,0,0,.88)); pointer-events: none; }
+.mascot-art-caption { position: absolute; z-index: 2; left: 18px; top: 20px; color: var(--ink); font-size: 10px; font-weight: 700; letter-spacing: .11em; }
+.mascot-gift-details:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.mascot-gift-intro { position: absolute; z-index: 2; inset: auto 20px 22px; pointer-events: none; }
+.mascot-gift-intro .section-kicker { color: var(--bone); }
+.mascot-gift-intro h2 { margin: 12px 0 0; color: var(--ink); font-family: var(--font-display); font-size: clamp(42px, 6vw, 70px); line-height: .96; letter-spacing: -.015em; }
+.mascot-gift-intro h2 span { color: var(--red-hot); }
+.mascot-gift-copy { max-width: 490px; }
+.mascot-gift-copy > p { margin: 0; color: var(--ink); font-size: 15px; line-height: 1.7; max-width: 430px; }
+.mascot-real-gift { display: flex; gap: 16px; align-items: center; margin: 24px 0 20px; padding: 16px 0; border-block: 1px solid var(--line); }
+.mascot-real-gift img { width: 78px; height: 94px; object-fit: cover; object-position: center; flex-shrink: 0; background: var(--steel-shadow); }
+.mascot-real-gift strong { display: block; margin-top: 7px; font-size: 13px; letter-spacing: .04em; }
+.mascot-real-gift span { display: block; margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.mascot-real-gift .mascot-gift-label { margin: 0; color: var(--steel-warm); font-size: 10px; font-weight: 700; letter-spacing: .1em; }
+.mascot-gift-actions { display: grid; gap: 5px; }
+.mascot-gift-actions .button-primary { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.mascot-gift-details { min-height: 44px; padding: 10px 0; background: transparent; border: 0; color: var(--steel-warm); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-align: left; cursor: pointer; }
+.mascot-gift-details span { color: var(--red); padding-left: 6px; }
+.mascot-gift-note { display: block; max-width: 380px; margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+@media (max-width: 700px) {
+  .mascot-gift { grid-template-columns: minmax(0, 1fr); gap: 22px; padding-block: 36px; }
+  .mascot-gift-art { max-width: 470px; }
+  .mascot-gift-copy { width: 100%; max-width: none; }
+  .mascot-gift-intro h2 { font-size: clamp(39px, 12vw, 52px); }
+  .mascot-real-gift { margin-top: 18px; }
+}
+
+/* One studio surface for the three shirts, independent of image dimensions. */
+:root { --product-studio-bg: #171719 url("./assets/product-proof/white-tee-concrete-bg-v1.png") center / cover no-repeat; }
+.product-image:has(img[src*="/product-studio-v1/"]) .product-hover { display: none; }
+.product-image:has(img[src*="/product-studio-v1/"]) .badge-side {
+  top: auto; bottom: 12px; right: 12px; min-height: 44px;
+  padding-inline: 12px; z-index: 4;
+}
+.product-image:has(img[src*="/product-studio-v1/"]),
+.sheet-image.studio-media,
+.studio-media .view3d,
+.gallery-thumbnails button:has(img[src*="/product-studio-v1/"]) {
+  background: var(--product-studio-bg);
+}
+.product-image img[src*="/product-studio-v1/"],
+.studio-media .spin-frame,
+.studio-media .sheet-photo,
+img[src*="/product-studio-v1/"] {
+  object-fit: contain;
+  object-position: center;
+  filter: none;
+}
+.product-card:hover .product-image img[src*="/product-studio-v1/"] { filter: none; }
+.studio-media .sheet-photo { background: var(--product-studio-bg); }
+.studio-media .view3d-hint {
+  left: 12px; right: 68px; bottom: 17px; color: #f0ede6; text-shadow: 0 1px 5px #000;
+  font-size: 9px; letter-spacing: .08em; line-height: 1.4;
+}
+.studio-media .stage-switch { max-width: calc(100% - 28px); }
+.studio-media .stage-btn { padding-inline: 11px; font-size: 10px; letter-spacing: .06em; }
+.media-position-group { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+#mediaViewName {
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink); font-size: 10px; line-height: 1.4;
+}
+.related-card img[src*="/product-studio-v1/"],
+.cart-item img[src*="/product-studio-v1/"],
+.viewed-card img[src*="/product-studio-v1/"],
+.lightbox-viewport:has(img[src*="/product-studio-v1/"]) { background: var(--product-studio-bg); }
+.hero-slide-item:has(img[src*="/product-studio-v1/"]),
+.detail-closeup:has(img[src*="/product-studio-v1/"]),
+.film-media img[src*="/product-studio-v1/"],
+.hero-slide-item img[src*="/product-studio-v1/"],
+.detail-closeup img[src*="/product-studio-v1/"] { background: var(--product-studio-bg); object-fit: contain; }
+@media (max-width: 859px) {
+  .studio-media .spin-frame,
+  .studio-media .sheet-photo[src*="/product-studio-v1/"] { padding: 24px 0 8px; box-sizing: border-box; }
+  .studio-media .stage-btn { min-width: 44px; }
+}
+@media (max-width: 430px) {
+  #mediaViewName { max-width: 150px; font-size: 9px; }
+  .media-toolbar { gap: 7px; }
+  .studio-media .stage-btn { padding-inline: 10px; font-size: 9px; }
+}
+@media (max-width: 500px) {
+  .club-task strong { font-size: clamp(18px, 5vw, 22px); }
+}
+
+/* Галерея первого дропа: портрет без надписей и органов управления на лице. */
+.hero-media .hero-layer-subject {
+  filter: brightness(1.035) contrast(.99) saturate(.97)
+    drop-shadow(0 12px 28px rgba(0,0,0,.65)) drop-shadow(0 0 2px rgba(192,34,23,.25));
+}
+@media (max-width: 959px) {
+  .hero-media { aspect-ratio: auto; height: calc(100vw + 68px); }
+  .hero-living-poster,
+  .hero-slide-item,
+  .hero-media .hero-shade { bottom: 68px; height: auto; }
+  .hero-media .hero-layer { object-position: 50% 12%; }
+  .hero-media .hero-poster-type { display: none; }
+  .hero-media .hero-live {
+    inset: auto 0 0; width: 100%; max-width: none; min-height: 68px;
+    box-sizing: border-box; padding: 12px 118px 12px 20px;
+    display: flex; align-items: center; gap: 10px;
+    background: #0d0d0f; border: 0; border-top: 1px solid rgba(255,255,255,.16);
+    color: #eeeae3; text-align: left; text-shadow: none;
+    font-size: 11px; line-height: 1.35; letter-spacing: .09em;
+  }
+  .hero-media .hero-live .pulse-dot { flex: 0 0 7px; width: 7px; height: 7px; }
+  .hero-carousel-nav,
+  .hero-media:hover .hero-carousel-nav {
+    top: auto; bottom: 12px; transform: none; opacity: 1;
+    width: 44px; height: 44px; font-size: 23px;
+    border-radius: 3px; background: transparent; backdrop-filter: none;
+    border-color: rgba(255,255,255,.22);
+  }
+  .hero-carousel-prev { left: auto; right: 66px; }
+  .hero-carousel-next { right: 14px; }
+}
+@media (max-width: 599px) {
+  .hero-media { height: calc(96vw + 68px); }
+}
+
+/* Founder finish: concrete, quiet metal detail and an uninterrupted portrait. */
+.hero-media .hero-layer-bg {
+  transform: scale(1.01);
+  filter: saturate(.86) brightness(.95);
+}
+.hero-media .hero-layer-subject {
+  transform: none;
+  filter: brightness(1.025) contrast(.995) saturate(.97)
+    drop-shadow(0 5px 12px rgba(0,0,0,.22));
+}
+.hero-media .hero-poster-type { display: none; }
+.hero-media .hero-shade {
+  background: linear-gradient(180deg, rgba(7,7,8,.12), transparent 18%, transparent 94%, rgba(7,7,8,.16));
+}
+.hero-living-poster::after {
+  content: ""; position: absolute; z-index: 2; top: 9%; right: 7%;
+  width: 9%; height: 20%; pointer-events: none;
+  background: url("assets/brand/sword-monogram-light-v2.png") center / contain no-repeat;
+  opacity: .23;
+  filter: brightness(.3) drop-shadow(1px 1px 0 rgba(255,255,255,.24));
+}
+#heroLiveText { min-width: 0; }
+#heroLiveText small {
+  display: block; margin-bottom: 4px; color: var(--muted);
+  font-family: var(--font-body, sans-serif); font-size: 8px; font-weight: 500; letter-spacing: .16em;
+}
+#heroLiveText strong {
+  display: block; font-family: var(--font-display); font-size: 21px;
+  font-weight: 500; line-height: 1.05; letter-spacing: .025em;
+}
+@media (max-width: 959px) {
+  .hero-copy { padding-top: 20px; padding-bottom: 26px; }
+  .hero-copy h1 {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  .hero-copy .hero-lead { margin-top: 12px; font-size: 15px; line-height: 1.5; }
+  .hero-copy .hero-actions { margin-top: 16px; }
+  .hero-copy .hero-actions .button { min-height: 52px; }
+}
+@media (max-width: 359px) {
+  #heroLiveText strong { font-size: 18px; }
+}
+
+/* Drag-to-pan product photography at full size. */
+.lightbox-viewport.zoomed {
+  touch-action: none;
+  cursor: grab;
+  scrollbar-width: none;
+}
+.lightbox-viewport.zoomed::-webkit-scrollbar { display: none; }
+.lightbox-viewport.zoomed.dragging { cursor: grabbing; }
+.lightbox-viewport.zoomed img {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+.lightbox-sheet .lightbox-hint {
+  margin: 12px 16px 0;
+  color: #bcb7af;
+  font-size: 11px;
+  letter-spacing: .08em;
+}
+
+/* A compact steel-mascot gesture inside the cart, above the order lines. */
+.checkout-delivery {
+  margin-top: 16px; padding: 16px; border: 1px solid var(--line); background: var(--surface-2);
+}
+.checkout-delivery > strong { display: block; font-size: 10px; letter-spacing: .1em; }
+.checkout-delivery dl { display: grid; gap: 12px; margin: 16px 0; }
+.checkout-delivery dl > div { display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); gap: 12px; }
+.checkout-delivery dt, .checkout-delivery dd { margin: 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.checkout-delivery dd, .checkout-delivery > small { color: var(--muted); }
+.checkout-delivery > small { display: block; font-size: 11px; line-height: 1.5; }
+.checkout-delivery .checkout-preorder { margin: 14px 0; padding-left: 10px; border-left: 2px solid var(--red); font-size: 12px; line-height: 1.6; }
+.checkout-total-note { margin: 0 0 16px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.preorder-notice { margin: 16px 0; padding: 14px 16px; border-left: 2px solid var(--red); background: var(--surface-2); }
+.preorder-notice strong { font-size: 10px; letter-spacing: .1em; }
+.preorder-notice p { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+/* Checkout: a clear review before creating an invoice. */
+.review-intro { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 10px 0 22px; }
+.review-lines { border-top: 1px solid var(--line); }
+.review-line { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.review-line img { width: 64px; height: 72px; object-fit: cover; background: var(--surface-2); }
+.review-line strong, .review-line small { display: block; overflow-wrap: anywhere; }
+.review-line strong, .review-line b { font-size: 13px; }
+.review-line small { color: var(--muted); font-size: 11px; margin-top: 6px; line-height: 1.5; }
+.review-line b { white-space: nowrap; }
+.review-gift { padding: 12px 0; color: var(--ink); font-size: 12px; border-bottom: 1px solid var(--line); }
+.review-details { margin: 22px 0; display: grid; gap: 7px; }
+.review-details span { color: var(--muted); font-size: 10px; letter-spacing: .12em; }
+.review-details p { margin: 0 0 10px; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+.review-total { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; border-top: 1px solid var(--line); padding-top: 20px; }
+.review-total span { font-size: 10px; letter-spacing: .1em; }
+.review-total strong { font-size: 26px; white-space: nowrap; }
+.review-delivery-note { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 8px 0 20px; }
+.review-error { border-left: 2px solid var(--red); background: var(--surface-2); padding: 12px; font-size: 13px; line-height: 1.5; }
+.pay-status { margin: 12px 0 0; color: var(--ink); font-size: 12px; line-height: 1.5; }
+.pay-status::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 9px; border-radius: 50%; background: var(--red); }
+.payment-success { padding-top: 34px; text-align: center; }
+.payment-success-mark { display: grid; place-items: center; margin: 0 auto 20px; width: 68px; height: 68px; border: 1px solid var(--red); border-radius: 50%; color: var(--ink); font-size: 30px; }
+.payment-success h3 { margin: 14px 0; font-size: clamp(30px, 8vw, 45px); line-height: 1.05; }
+.payment-success p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 auto 26px; max-width: 360px; }
+.sheet-fit { position: absolute; inset: 0; display: flex; align-items: end; padding: 85px 24px 32px; background: radial-gradient(circle at 80% 20%, #371518, transparent 55%), linear-gradient(150deg, #272427, #111012 70%); }
+.sheet-fit-empty { max-width: 310px; }
+.sheet-fit-empty span { color: #d4b0ad; font-size: 10px; letter-spacing: .14em; }
+.sheet-fit-empty strong { display: block; margin: 16px 0; font-size: clamp(28px, 8vw, 48px); line-height: .95; letter-spacing: -.04em; }
+.sheet-fit-empty p { color: #c4bbb7; font-size: 13px; line-height: 1.6; margin: 0; }
+.profile-order { flex-wrap: wrap; }
+.profile-order-main { flex: 1 1 50%; }
+.order-progress { flex: 0 0 100%; display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 2px; }
+.order-progress span { padding: 5px 7px; border: 1px solid var(--line); color: var(--muted); font-size: 9px; letter-spacing: .04em; }
+.order-progress .is-done { color: var(--ink); }
+.order-progress .is-current { color: var(--ink); border-color: var(--red); }
+
+@media (max-width: 959px) { .hero-media .hero-live { padding-right: 20px; } }
 
 /* ==========================================================================
    ИДЕЯ 4: ТАКТИЛЬНЫЙ ВХОД «ПРИЛОЖИ ПЕЧАТЬ» (HOLD TO ENTER)
@@ -3057,7 +3193,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   padding: 2px 7px;
   border-radius: 4px;
   font-variant-numeric: tabular-nums;
-  transition: all .15s ease;
+  transition: color .15s ease, background-color .15s ease, border-color .15s ease, opacity .15s ease;
 }
 .seal-ritual.is-holding .seal-timer-badge {
   background: var(--red);
@@ -3146,7 +3282,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   place-items: center;
   cursor: pointer;
   padding: 0;
-  transition: all .15s ease;
+  transition: color .15s ease, background-color .15s ease, border-color .15s ease, opacity .15s ease;
   user-select: none;
 }
 .stepper-btn:hover {
@@ -3191,7 +3327,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   flex-direction: column;
   justify-content: space-between;
   gap: 8px;
-  transition: all .18s ease;
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease, opacity .18s ease;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -3282,3 +3418,300 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
   transform: translateX(2px);
 }
 
+
+@media(max-width:380px){.seal-ritual{gap:10px;padding:9px 11px}.seal-button{width:70px;height:70px}.seal-instructions{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.seal-ritual,.seal-core,.seal-aura{transition:none!important}}
+
+.fit-expanded{margin:16px 0;color:var(--muted)}.fit-expanded summary{cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.06em}.fit-expanded .fit-finder{margin-top:10px}
+
+
+/* Вход: спокойная и понятная иерархия, заметная печать и читаемый финал фильма. */
+.welcome .welcome-title { transition: opacity .45s ease; }
+.welcome.is-logo-finale .welcome-title { opacity: .22; }
+.welcome-copy { margin-bottom: 14px; }
+.welcome-actions { margin-top: 18px; }
+.welcome-meta { margin-top: 18px; }
+.seal-ritual {
+  gap: 14px; padding: 12px 16px; border-color: rgba(239, 224, 211, .24);
+  background: rgba(13, 12, 14, .91);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255,255,255,.09);
+}
+.seal-aura { opacity: .75; background: radial-gradient(circle, rgba(225,6,0,.38), transparent 72%); }
+.seal-button:focus-visible { outline: 2px solid #f4ded0; outline-offset: 3px; }
+.seal-caption { font-size: 15px; letter-spacing: .055em; }
+.seal-instructions { color: #d4cbc1; font-size: 12px; line-height: 1.4; }
+.seal-status { color: #f0b2a6; font-size: 11px; line-height: 1.3; }
+.seal-status:empty { display: none; }
+.seal-ritual.is-activated .seal-core { transform: scale(1.05); }
+@media (max-height: 720px) {
+  .welcome-frame { padding-top: 65px; padding-bottom: calc(15px + var(--safe-bottom)); }
+  .welcome .welcome-title { margin: 8px 0 10px; font-size: clamp(39px, 12vw, 58px); }
+  .welcome-copy { margin-bottom: 9px; }
+  .welcome-actions { margin-top: 10px; }
+  .welcome-meta { margin-top: 12px; }
+  .seal-ritual { padding-block: 8px; }
+}
+@media (max-width: 380px) {
+  .seal-caption { font-size: 14px; }
+  .seal-instructions { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome .welcome-title { transition: none; }
+  .seal-ritual.is-activated { transform: none; }
+}
+@media (max-height: 620px) {
+  .welcome-meta { display: none; }
+}
+
+/* Печать и подпись — одна большая кнопка для удобного нажатия на телефоне. */
+.seal-ritual { padding: 0; }
+.seal-hit {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px;
+  border: 0; border-radius: inherit; background: transparent; color: inherit;
+  font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.seal-hit:focus-visible { outline: 2px solid #f4ded0; outline-offset: 3px; }
+.seal-instructions { display: block; }
+@media (max-height: 720px) { .seal-ritual { padding: 0; } .seal-hit { padding-block: 8px; } }
+@media (max-width: 380px) { .seal-ritual { padding: 0; } .seal-hit { gap: 10px; padding-inline: 11px; } }
+
+
+/* Финал фильма и короткий световой проход при успешном входе. */
+.welcome-shade { transition: opacity .45s ease; }
+.welcome.is-logo-finale .welcome-shade { opacity: .58; }
+.seal-core::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: linear-gradient(110deg, transparent 28%, rgba(255,248,230,.55) 50%, transparent 72%);
+  transform: translateX(-125%);
+}
+.seal-ritual.is-activated { border-color: rgba(237,191,174,.6); box-shadow: 0 12px 32px rgba(0,0,0,.5), 0 0 16px rgba(225,6,0,.3); transform: scale(1.01); }
+.seal-ritual.is-activated .seal-core::after { animation: seal-light-pass .24s ease-out both; }
+@keyframes seal-light-pass {
+  0% { opacity: 0; transform: translateX(-125%); }
+  15% { opacity: .8; }
+  80% { opacity: .65; }
+  100% { opacity: 0; transform: translateX(125%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome-shade { transition: none; }
+  .seal-ritual.is-activated { transform: none; }
+  .seal-ritual.is-activated .seal-core::after { animation: none; }
+}
+
+/* Редкий мягкий блик подсказывает, что печать можно нажать. */
+.seal-core::before {
+  content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: linear-gradient(110deg, transparent 32%, rgba(255, 244, 226, .34) 50%, transparent 68%);
+  opacity: 0; transform: translateX(-125%);
+  animation: seal-idle-glint 8s ease-in-out .4s infinite;
+}
+@keyframes seal-idle-glint {
+  0%, 12% { opacity: 0; transform: translateX(-125%); }
+  18% { opacity: .55; }
+  30%, 100% { opacity: 0; transform: translateX(125%); }
+}
+.seal-ritual.is-holding .seal-core::before,
+.seal-ritual.is-activated .seal-core::before { animation: none; opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .seal-core::before { animation: none; }
+}
+
+/* СИЛА И ЧЕСТЬ · закрытая территория / визуальная система витрины. */
+.catalog-intro { max-width: 380px; margin: -8px 0 24px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.hero-copy .hero-lead { max-width: 350px; }
+.brand-principles { border-top: 1px solid var(--line); padding-top: 15px; }
+.catalog-section .section-heading { align-items: end; }
+.product-card, .product-card:nth-child(3n+1) { border-radius: 2px; background: var(--steel-deep); }
+.product-image { background-color: var(--steel-shadow); }
+.product-badge, .badge-3d, .badge-side { border-radius: 2px; }
+.product-info { padding: 20px 18px 18px; }
+.product-info h3 { font-family: var(--font-display); font-size: clamp(21px, 5vw, 27px); line-height: 1.15; letter-spacing: -.035em; }
+.product-topline { margin-bottom: 13px; letter-spacing: .09em; }
+.product-bottom { display: flex; justify-content: space-between; align-items: baseline; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.product-card-link { color: var(--steel-warm); font-size: 10px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
+.product-price { font-size: 18px; }
+.passport { border-radius: 2px; background: var(--surface-2); backdrop-filter: none; }
+.passport-head { min-height: 46px; align-items: center; border-left: 2px solid var(--red); }
+.passport-row { grid-template-columns: minmax(68px, .55fr) minmax(0, 1.45fr); }
+.passport-row span { min-width: 0; overflow-wrap: anywhere; }
+.sheet-fit { background: linear-gradient(145deg, var(--steel-shadow), var(--steel-deep) 72%); }
+.sheet-fit-empty { padding-left: 16px; border-left: 2px solid var(--red); }
+.sheet-fit-empty span { color: var(--steel-warm); }
+.sheet-fit-empty strong { font-family: var(--font-display); font-weight: 700; line-height: 1.04; }
+.sheet-fit-empty p { color: var(--steel-warm); }
+.profile-hero { padding: 18px 0 22px; }
+.profile-orders { margin: 24px 0; }
+.profile-order { padding: 16px; border: 1px solid var(--line); background: var(--surface-2); }
+.profile-order + .profile-order { margin-top: 10px; }
+.order-progress span { border-radius: 0; }
+.review-intro { padding-left: 12px; border-left: 2px solid var(--red); }
+.review-details { padding: 16px; background: var(--surface-2); border: 1px solid var(--line); }
+.review-details p:last-child { margin-bottom: 0; }
+.review-total strong, .pay-amount { font-variant-numeric: tabular-nums; }
+.pay-hero { position: relative; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.pay-card { border-radius: 2px; }
+.pay-card:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.payment-success-mark { position: relative; width: 78px; height: 78px; border-color: var(--line); background: var(--surface-2); }
+.payment-success-mark .brand-mark { width: 50px; height: 50px; border: 0; background-color: transparent; }
+.payment-success-check { position: absolute; right: -3px; bottom: -3px; display: grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; background: var(--red); color: var(--ink); font-family: var(--font-ui); font-size: 14px; }
+.payment-success h3 { font-family: var(--font-display); font-weight: 700; }
+@media (max-width: 359px) {
+  .product-info { padding-inline: 14px; }
+  .stage-btn { padding-inline: 9px; font-size: 10px; }
+  .review-total strong { font-size: 23px; }
+}
+
+/* Фирменный персонаж помогает в пустых состояниях, не отвлекая от покупки. */
+.cart-empty-mascot { width: 148px; height: 160px; margin: 0 auto 12px; object-fit: cover; object-position: center 35%; -webkit-mask-image: linear-gradient(#000 58%, transparent); mask-image: linear-gradient(#000 58%, transparent); }
+.profile-empty-mascot { display: grid; grid-template-columns: 72px minmax(0,1fr); gap: 14px; align-items: center; padding: 14px; border-left: 2px solid var(--red); background: var(--surface-2); }
+.profile-empty-mascot img { width: 72px; height: 90px; object-fit: cover; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+.profile-empty-mascot .profile-empty { margin: 0; }
+
+/* Помощь с посадкой и понятные этапы оформления. */
+.fit-help-link { margin-top: 20px; padding: 11px 0; border: 0; border-bottom: 1px solid var(--red); background: transparent; color: #fff; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .06em; cursor: pointer; }
+.size-help { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; margin: 16px 0 0; padding: 15px 16px; border: 1px solid var(--line); border-left: 2px solid var(--red); background: var(--surface-2); color: var(--ink); text-align: left; cursor: pointer; }
+.size-help strong, .size-help small { display: block; }
+.size-help strong { font-size: 11px; letter-spacing: .06em; }
+.size-help small { margin-top: 6px; color: var(--muted); font-size: 12px; }
+.size-help > span:last-child { color: var(--red); font-size: 20px; }
+.fit-help-link:focus-visible, .size-help:focus-visible { outline: 2px solid var(--red); outline-offset: 3px; }
+.checkout-steps { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 4px 0 18px; padding: 14px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .05em; }
+.checkout-steps .active { color: var(--ink); }
+.checkout-steps { font-size: 11px; }
+.delivery-help { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin: 0 0 20px; padding: 14px 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .04em; cursor: pointer; }
+.delivery-help span { color: var(--red); font-size: 18px; }
+.delivery-help:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.field-label input[aria-invalid="true"] { border-color: #ef6b60; }
+.field-error { display: block; margin-top: 7px; color: #f28b80; font-size: 12px; font-weight: 500; line-height: 1.45; letter-spacing: normal; text-transform: none; }
+.privacy-notice { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.pay-amount { font-family: var(--font-ui); font-weight: 800; letter-spacing: -.025em; line-height: 1.1; }
+.pay-card small, .form-note { font-size: 13px; }
+.stage-btn { font-size: 10px; letter-spacing: .06em; }
+/* Подтверждение оплаты: один заголовок, знак бренда и следующий шаг. */
+.pay-sheet.is-paid .sheet-header { align-items: center; padding-block: 14px; }
+.pay-sheet.is-paid .sheet-header h2 { display: none; }
+.payment-success { padding-top: 22px; text-align: left; }
+.success-masthead { display: flex; align-items: center; justify-content: space-between; gap: 20px; color: #c7bdb5; font-size: 10px; font-weight: 700; letter-spacing: .12em; }
+.success-masthead i { margin-inline: 5px; color: var(--red); font-style: normal; }
+.success-seal { position: relative; display: block; flex: 0 0 66px; width: 66px; height: 66px; }
+.success-seal .brand-mark { width: 66px; height: 66px; border-color: #5c5351; background-color: #181719; }
+.success-seal-check { position: absolute; right: -3px; bottom: -3px; display: grid; place-items: center; width: 23px; height: 23px; border: 2px solid #111113; border-radius: 50%; color: #fff; background: var(--red); font-size: 12px; }
+.success-heading { padding: 24px 0 23px; }
+.success-overline, .success-next > span { display: block; color: #c1b8b1; font-size: 10px; font-weight: 700; letter-spacing: .12em; }
+.payment-success .success-heading h3 { margin: 13px 0 18px; font-size: clamp(38px, 11vw, 54px); line-height: .98; letter-spacing: -.035em; }
+.success-heading h3 span { color: var(--red); }
+.payment-success .success-order-number { max-width: none; margin: 0; color: #eee8e1; font-size: 11px; font-weight: 700; letter-spacing: .08em; overflow-wrap: anywhere; }
+.success-next { padding: 20px 0 0; border-top: 1px solid var(--line); }
+.payment-success .success-next p { max-width: 390px; margin: 9px 0 0; color: #d1c8c1; font-size: 14px; line-height: 1.6; }
+.success-actions { display: grid; gap: 4px; margin-top: 24px; }
+.success-actions .button-primary { display: flex; align-items: center; justify-content: space-between; }
+.success-actions #successSupport { min-height: 48px; border-color: transparent; color: #c6bcb5; font-size: 11px; }
+.success-actions #successSupport:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (max-width: 359px) { .success-heading { padding-block: 20px; } .success-seal, .success-seal .brand-mark { width: 54px; height: 54px; } .success-seal { flex-basis: 54px; } }
+
+/* Печать своих: немой короткий фильм и неподвижный фирменный финал. */
+.welcome-copy .welcome-lede { color: var(--bone); font-family: var(--font-ui); font-size: 12px; font-weight: 800; letter-spacing: .16em; }
+.welcome.is-logo-finale .seal-ritual { border-color: rgba(239, 224, 211, .38); }
+.welcome-motion { min-width: 120px; }
+.welcome.is-logo-finale .welcome-title { opacity: 0; }
+.welcome.is-logo-finale .seal-core::after { animation: seal-light-pass 1s ease-out .2s both; }
+@media (prefers-reduced-motion: reduce) { .welcome.is-logo-finale .seal-core::after { animation: none; } }
+.welcome-kicker { transition: opacity .4s ease; }
+.welcome.is-logo-finale .welcome-kicker { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .welcome-kicker { transition: none; } }
+
+/* Подарок: персонаж становится частью страницы, а жетон — главным действием. */
+@media (max-width: 700px) {
+  .mascot-gift { padding-inline: 0; padding-top: 0; gap: 24px; }
+  .mascot-gift-art { max-width: none; }
+  .mascot-gift-copy { padding-inline: 20px; }
+  .mascot-gift-intro { inset-inline: 20px; bottom: 26px; }
+  .mascot-real-gift { gap: 18px; }
+}
+@media (max-width: 360px) { .mascot-gift-copy { padding-inline: 16px; } }
+
+/* Тихое продолжение выбора, без всплывающего окна и сообщений. */
+.resume-shopping { display: flex; align-items: center; justify-content: space-between; gap: 22px; padding-block: 25px; border-block: 1px solid var(--line); background: #171619; }
+.resume-shopping-copy { min-width: 0; }
+.resume-shopping-copy h2 { margin: 8px 0 6px; font: 500 clamp(26px, 6vw, 38px)/1 var(--font-display); color: var(--ink); }
+.resume-shopping-copy p { margin: 0; max-width: 440px; color: var(--steel-warm); font-size: 13px; line-height: 1.5; }
+.resume-shopping-actions { display: flex; align-items: center; gap: 8px; }
+.resume-shopping-actions .button { min-height: 48px; white-space: nowrap; }
+.resume-shopping-dismiss { width: 44px; height: 44px; flex: none; border: 1px solid var(--line); color: var(--ink); background: transparent; font-size: 23px; }
+.resume-shopping-dismiss:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (max-width: 600px) { .resume-shopping { display: block; padding-block: 24px; } .resume-shopping-actions { margin-top: 18px; } .resume-shopping-actions .button { flex: 1; } }
+
+.product-care { margin: 28px 0; border-top: 1px solid #393633; }
+.product-care details { border-bottom: 1px solid #393633; }
+.product-care summary { display: flex; align-items: center; justify-content: space-between; padding: 19px 0; cursor: pointer; font-size: 12px; font-weight: 700; letter-spacing: .09em; list-style: none; }
+.product-care summary::-webkit-details-marker { display: none; }
+.product-care summary span { font-size: 22px; font-weight: 400; color: #c3352d; }
+.product-care details[open] summary span { transform: rotate(45deg); }
+.product-care p { margin: 0 0 16px; color: #b9b4ae; line-height: 1.6; font-size: 14px; }
+.product-care .fit-help-link { margin: 0 0 18px; }
+
+/* Source frames share one portrait window without altering the originals. */
+.studio-media .sheet-photo[src*="/product-originals-"] { object-fit: cover; object-position: center 38%; background: #171719; padding: 0; }
+.cart-empty-brand { max-width: 440px; margin: 0 auto; padding: 28px 20px 44px; text-align: left; }
+.cart-empty-art { position: relative; height: clamp(180px, 30vh, 260px); overflow: hidden; background: #1c1c1b; }
+.cart-empty-brand .cart-empty-mascot { display: block; width: 100%; height: 100%; margin: 0; object-fit: cover; object-position: center 34%; mask-image: linear-gradient(#000 50%, transparent 100%); -webkit-mask-image: linear-gradient(#000 50%, transparent 100%); }
+.cart-empty-art > span { position: absolute; bottom: 14px; left: 16px; color: #ddd6ce; font-size: 10px; letter-spacing: .16em; }
+.cart-empty-copy { padding-top: 24px; }
+.cart-empty-kicker { color: #bf3830; font-size: 10px; font-weight: 700; letter-spacing: .17em; }
+.cart-empty-brand h3 { margin: 10px 0 8px; font-size: clamp(24px, 6vw, 32px); line-height: 1.08; }
+.cart-empty-brand p { margin: 0 0 22px; }
+.cart-empty-brand .button { width: 100%; display: flex; align-items: center; justify-content: space-between; }
+
+.gallery-groups { display:flex; gap:20px; padding:14px 20px 0; }
+.gallery-groups.hidden { display:none; }
+.gallery-groups button { min-height:40px; padding: 0 0 10px; border-bottom:2px solid transparent; color:#a9a39c; font-size:10px; font-weight:700; letter-spacing:.09em; }
+.gallery-groups button.active { color:#f2eee9; border-color:#c63830; }
+@media (max-width: 600px) {
+ .cart-line { grid-template-columns: 84px minmax(0,1fr); gap: 14px; padding: 18px 0; align-items:start; }
+ .cart-line-image { width:84px; height:112px; object-fit:cover; }
+ .cart-line-name strong { font-size:14px; }
+ .cart-line-name small { font-size:12px; }
+ .cart-line-end { grid-column:2; flex-direction:row; justify-content:space-between; align-items:center; margin-top:-8px; }
+ .cart-line-end > strong { font-size:14px; }
+ .remove-line { min-height:44px; padding: 8px 0 8px 12px; font-size:10px; }
+ .cart-checkout { padding-bottom: calc(36px + var(--safe-bottom)); }
+ .purchase-bar { bottom: 0; }
+}
+
+/* Mobile opening: portrait and shopping action on one screen. */
+@media (max-width: 959px) {
+ .hero-media { height: clamp(250px, 42svh, 390px); aspect-ratio: auto; }
+ .hero-media .hero-living-poster { bottom: 0; height: 100%; }
+ .hero-media .hero-layer { object-position: 50% 25%; }
+ .hero-media .hero-shade { inset: 0; height: auto; background: linear-gradient(180deg, transparent 52%, rgba(8,8,9,.78) 100%); }
+ .hero-media .hero-live { top: auto; bottom: 0; left: 0; right: 0; width: auto; height: auto; padding: 16px 20px; background: transparent; border: 0; align-items: center; }
+ #heroLiveText small { color: #ddd5cb; }
+ #heroLiveText strong { font-size: 17px; }
+ .hero-copy { padding: 18px 20px 24px; }
+ .hero-copy .eyebrow { font-size: 9px; }
+ .hero-copy h1 { position: static; width:auto; height:auto; clip-path:none; overflow:visible; white-space:normal; margin: 12px 0 6px; font-size: clamp(29px, 8vw, 44px); line-height: 1; letter-spacing:-.025em; }
+ .hero-copy h1 span { color:#c83b32; }
+ .hero-copy .hero-lead { margin: 0; font-size: 13px; line-height:1.4; }
+ .hero-copy .hero-actions { margin-top: 14px; gap:4px; }
+ .hero-copy .hero-actions .button { min-height: 50px; }
+ .hero-film-button { min-height: 42px; border:0; background:transparent; border-radius:0; }
+ .hero-copy .brand-principles { margin-top: 12px; }
+}
+@media (max-width: 959px) {
+ .hero-media .hero-layer { object-position: 50% 0%; }
+ .hero-media .hero-shade { background: linear-gradient(180deg, transparent 65%, rgba(8,8,9,.65) 100%); }
+}
+@media (max-width: 959px) {
+ .hero-media { height: clamp(350px, 61svh, 530px); }
+ .hero-media .hero-layer { object-position: 50% 12%; }
+ .hero-media .hero-shade { background: linear-gradient(180deg, transparent 72%, rgba(8,8,9,.72) 100%); }
+ .hero-copy { padding-top: 14px; }
+ .hero-copy h1 { margin-top: 8px; }
+}
+@media (max-width: 959px) {
+ .hero-media { height: auto; aspect-ratio: 1203 / 1308; }
+ .hero-media .hero-layer { object-fit: cover; object-position: center; }
+ .hero-media .hero-shade { background: linear-gradient(180deg, rgba(8,8,9,.15), transparent 20%, transparent 85%, rgba(8,8,9,.15)); }
+ .hero-media .hero-live { inset: 12px 12px auto auto; width: auto; max-width: 48%; padding: 8px 10px; background: rgba(10,10,12,.65); border: 1px solid rgba(255,255,255,.12); }
+ #heroLiveText strong { font-size: 13px; }
+}

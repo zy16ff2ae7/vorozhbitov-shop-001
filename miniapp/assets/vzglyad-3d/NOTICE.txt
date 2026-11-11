@@ -1,0 +1,2 @@
+Shirt model: AvatarParzival, https://github.com/AvatarParzival/3d, MIT license (LICENSE-model.txt).
+Three.js contributors: https://github.com/mrdoob/three.js, MIT license (LICENSE-three.txt).

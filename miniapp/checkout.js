@@ -1,7 +1,7 @@
 /* Reliable checkout transport shared by the storefront and offline regression tests. */
 (function (root) {
   "use strict";
-  function managerMessage({ customer = {}, lines = [], totalLabel = "" }) {
+  function managerMessage({ customer = {}, lines = [], totalLabel = "", giftName = "" }) {
     const clean = (value, limit) => String(value ?? "").trim().slice(0, limit);
     const orderLines = lines.map((line, index) => {
       const name = clean(line.name, 120) || "Вещь";
@@ -15,6 +15,7 @@
     const text = [
       "Здравствуйте! Хочу оформить заказ в СИЛА И ЧЕСТЬ:",
       ...orderLines,
+      clean(giftName, 120) ? `Подарок: ${clean(giftName, 120)} · 0 ₽ (наличие уточняется)` : "",
       `Итого за вещи: ${clean(totalLabel, 40) || "уточнить"}`,
       `Имя: ${clean(customer.name, 80)}`,
       `Телефон: ${clean(customer.phone, 40)}`,
