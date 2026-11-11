@@ -5,11 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0c0c0e">
   <meta name="description" content="СИЛА И ЧЕСТЬ — бренд одежды с характером. Выпуск 001. Основатель: Никита Ворожбитов.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="СИЛА И ЧЕСТЬ">
+  <meta property="og:title" content="СИЛА И ЧЕСТЬ · Выпуск 001 — Никита Ворожбитов">
+  <meta property="og:description" content="Две футболки первого дропа (250 г/м² хлопок), 3D и 360°-видео. Первые 100 стальных жетонов — в подарок к заказу.">
+  <meta property="og:url" content="https://vorozhbitov.107-173-89-192.nip.io/">
+  <meta property="og:image" content="https://vorozhbitov.107-173-89-192.nip.io/assets/client/og-preview.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://vorozhbitov.107-173-89-192.nip.io/assets/client/og-preview.jpg">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23070708'/%3E%3Cpath d='M32 8 L35 20 L35 44 L40 48 L40 50 L34 50 L34 56 L30 56 L30 50 L24 50 L24 48 L29 44 L29 20 Z' fill='%23e10600'/%3E%3C/svg%3E">
   <title>СИЛА И ЧЕСТЬ</title>
   <link rel="preload" href="fonts/sila-chest-700.woff2?v=1792969380" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/sila-chest-400.woff2?v=1792969380" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=drop1-20261110">
+  <link rel="stylesheet" href="styles.css?v=concrete-20261111c">
   <script src="telegram-web-app.js?v=anna-20261111b"></script>
   <link rel="stylesheet" href="polish.css?v=product-20261030">
 <style>.size-guide-header { display: flex; align-items: center; gap: 12px; }
@@ -41,11 +51,10 @@
 .sheet-image:has(.sheet-photo[src*="vzglyad-client-"]) { background: #111110; }
 .sheet-image .sheet-photo[src*="vzglyad-client-"] { background: #111110; object-fit: contain; }
 
-/* Product presentation: blackened steel, calm typography, clear purchase hierarchy. */
-:root { --product-studio-bg: #171719 url("assets/product-master/steel-studio.jpg") center / cover no-repeat; }
+/* Product presentation: cast-concrete fight-hall spotlight, calm typography, clear purchase hierarchy. */
+:root { --product-studio-bg: radial-gradient(ellipse at 50% 36%, #24262c 0%, #121316 64%, #09090b 100%); }
 @media (max-width: 600px) {
-  .product-grid .product-image { aspect-ratio: 1 / 1; }
-  .product-grid .product-image img[src*="vzglyad-client-"] { object-position: center 35%; }
+  .product-grid .product-image { aspect-ratio: 4 / 5; }
 }
 .sheet-heading-line { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
 .sheet-heading-line h2 { min-width:0; margin:8px 0; line-height:1.08; }
@@ -60,14 +69,13 @@
 .purchase-bar { box-shadow:0 -8px 24px #0007; }
 @media (max-width: 360px) { .sheet-heading-line h2 { font-size:25px; } .sheet-heading-line .sheet-price { font-size:18px; } }
 
-/* Uniform product cards: visual proportions, controls and baselines. */
+/* Uniform product cards: 4:5 studio proportions across tees and dog tag, clean controls and baselines. */
 .product-grid { align-items:stretch; }
 .product-grid .product-card { display:flex; flex-direction:column; min-width:0; border:1px solid #34312f; background:#101011; }
-.product-grid .product-image { flex:none; width:100%; aspect-ratio:1 / 1; border:0; border-bottom:1px solid #34312f; }
+.product-grid .product-image { flex:none; width:100%; aspect-ratio:4 / 5; border:0; border-bottom:1px solid #34312f; background:var(--product-studio-bg); }
 .product-grid .is-branded-spin .product-image { background:var(--product-studio-bg); }
-.product-grid .is-branded-spin .product-image img { object-fit:contain; object-position:center; background:transparent; padding:0; }
-.product-grid .product-card[data-product-id="tee-sila-i-chest"] .product-image img,
-.product-grid .product-card[data-product-id="tee-vzglyad"] .product-image img { object-fit:cover; object-position:center 45%; transform:none; }
+.product-grid .product-image img,
+.product-grid .is-branded-spin .product-image img { object-fit:cover; object-position:center; background:transparent; padding:0; transform:none; }
 .product-grid .is-branded-spin .product-hover { display:none; }
 .product-grid .is-branded-spin .badge-side { top:auto; right:12px; bottom:12px; min-height:44px; z-index:4; }
 .product-grid .product-info { flex:1; display:flex; flex-direction:column; padding:16px; }

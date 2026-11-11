@@ -640,7 +640,7 @@ h1, h2 {
   .marquee-track { animation: none; }
 }
 
-.product-image { aspect-ratio: 4 / 5; position: relative; overflow: hidden; background: #171719 url("./assets/product-proof/white-tee-concrete-bg-v1.png") center / cover no-repeat; }
+.product-image { aspect-ratio: 4 / 5; position: relative; overflow: hidden; background: radial-gradient(ellipse at 50% 36%, #24262c 0%, #121316 64%, #09090b 100%); }
 .product-image:after {
   content: "";
   position: absolute; inset: 0; pointer-events: none;
@@ -2810,7 +2810,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 }
 
 /* One studio surface for the three shirts, independent of image dimensions. */
-:root { --product-studio-bg: #171719 url("./assets/product-proof/white-tee-concrete-bg-v1.png") center / cover no-repeat; }
+:root { --product-studio-bg: radial-gradient(ellipse at 50% 36%, #24262c 0%, #121316 64%, #09090b 100%); }
 .product-image:has(img[src*="/product-studio-v1/"]) .product-hover { display: none; }
 .product-image:has(img[src*="/product-studio-v1/"]) .badge-side {
   top: auto; bottom: 12px; right: 12px; min-height: 44px;
