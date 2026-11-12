@@ -195,6 +195,21 @@ main .section-heading .section-kicker::before,
 }
 
 /* ---------- 3. Welcome Screen Refinement ---------- */
+#welcomeFallback {
+  object-position: 50% 14% !important;
+}
+
+.welcome:not(.welcome-emblem-phase) .welcome-shade {
+  background:
+    linear-gradient(180deg, rgba(7, 7, 9, 0.24) 0%, rgba(7, 7, 9, 0.12) 38%, rgba(7, 7, 9, 0.90) 58%, rgba(7, 7, 9, 0.98) 73%, #070709 100%) !important;
+  transition: background 0.55s ease, opacity 0.55s ease;
+}
+
+.welcome.welcome-emblem-phase .welcome-shade {
+  background:
+    linear-gradient(180deg, rgba(7, 7, 9, 0.22) 0%, transparent 22%, transparent 70%, rgba(7, 7, 9, 0.92) 86%, #070709 100%) !important;
+}
+
 .welcome-motion {
   border-radius: 99px !important;
   background: rgba(8, 8, 10, 0.58) !important;
@@ -224,7 +239,7 @@ main .section-heading .section-kicker::before,
   font-weight: 700;
 }
 
-/* ---------- 4. Cinema Hero Composition ---------- */
+/* ---------- 4. Cinema Hero Composition (Mobile + Desktop) ---------- */
 .hero {
   background: #08080a !important;
   border-bottom: 1px solid var(--line);
@@ -232,6 +247,110 @@ main .section-heading .section-kicker::before,
 
 .hero-living-poster::after {
   display: none !important;
+}
+
+/* Shared interactive Founder + Story 001 frosted bar */
+.hero-media .hero-live {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: space-between;
+  gap: 10px !important;
+  min-height: 0 !important;
+  padding: 7px 11px !important;
+  border-radius: 3px !important;
+  background: rgba(9, 9, 12, 0.72) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border: 1px solid rgba(244, 239, 230, 0.16) !important;
+  cursor: pointer;
+  text-shadow: none !important;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.hero-media .hero-live:hover {
+  background: rgba(15, 16, 21, 0.86) !important;
+  border-color: rgba(244, 239, 230, 0.36) !important;
+}
+
+#heroLiveText {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+#heroLiveText small {
+  display: inline !important;
+  margin: 0 !important;
+  font-size: 8.5px !important;
+  letter-spacing: 0.15em !important;
+  color: #a8a196 !important;
+}
+
+#heroLiveText small::after {
+  content: "·";
+  margin-left: 7px;
+  color: var(--red);
+}
+
+#heroLiveText strong {
+  display: inline !important;
+  font-family: var(--font-ui) !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.11em !important;
+  color: #f4efe6 !important;
+  white-space: nowrap;
+}
+
+.hero-story-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(244, 239, 230, 0.16);
+  font-family: var(--font-ui);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  color: #e6dfd4;
+  white-space: nowrap;
+}
+
+.hero-copy .eyebrow {
+  display: flex !important;
+  justify-content: flex-start !important;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 10px !important;
+  letter-spacing: 0.18em !important;
+  color: #9e978d !important;
+}
+
+.hero-copy .eyebrow span + span::before {
+  content: "/";
+  margin-right: 10px;
+  color: var(--red);
+}
+
+.hero-copy .brand-principles {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px !important;
+  padding-top: 14px !important;
+  border-top: 1px solid var(--line-soft) !important;
+  font-size: 9.5px !important;
+  font-weight: 700;
+  letter-spacing: 0.2em !important;
+  color: #8f8980 !important;
+}
+
+.hero-copy .brand-principles i {
+  color: rgba(190, 36, 25, 0.7);
+  font-style: normal;
 }
 
 @media (max-width: 959px) {
@@ -256,68 +375,14 @@ main .section-heading .section-kicker::before,
   }
 
   .hero-media .hero-live {
-    inset: auto auto 14px 20px !important;
+    inset: auto 20px 14px 20px !important;
     width: auto !important;
-    max-width: calc(100% - 40px) !important;
-    min-height: 0 !important;
-    padding: 7px 12px !important;
-    border-radius: 3px;
-    background: rgba(9, 9, 12, 0.68) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    border: 1px solid rgba(244, 239, 230, 0.14) !important;
-    gap: 9px !important;
-  }
-
-  #heroLiveText {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-
-  #heroLiveText small {
-    display: inline !important;
-    margin: 0 !important;
-    font-size: 8.5px !important;
-    letter-spacing: 0.16em !important;
-    color: #a8a196 !important;
-  }
-
-  #heroLiveText small::after {
-    content: "·";
-    margin-left: 8px;
-    color: var(--red);
-  }
-
-  #heroLiveText strong {
-    display: inline !important;
-    font-family: var(--font-ui) !important;
-    font-size: 10.5px !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.12em !important;
-    color: #f4efe6 !important;
+    max-width: none !important;
   }
 
   .hero-copy {
     padding: 8px 20px 30px !important;
     background: #08080a !important;
-  }
-
-  .hero-copy .eyebrow {
-    display: flex !important;
-    justify-content: flex-start !important;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-    font-size: 10px !important;
-    letter-spacing: 0.18em !important;
-    color: #9e978d !important;
-  }
-
-  .hero-copy .eyebrow span + span::before {
-    content: "/";
-    margin-right: 10px;
-    color: var(--red);
   }
 
   .hero-copy h1 {
@@ -337,23 +402,85 @@ main .section-heading .section-kicker::before,
   .hero-copy .hero-actions {
     margin-top: 18px !important;
   }
+}
 
-  .hero-copy .brand-principles {
-    display: flex !important;
-    align-items: center;
-    gap: 12px;
-    margin-top: 18px !important;
-    padding-top: 14px !important;
-    border-top: 1px solid var(--line-soft) !important;
-    font-size: 9.5px !important;
-    font-weight: 700;
-    letter-spacing: 0.2em !important;
-    color: #8f8980 !important;
+@media (min-width: 960px) {
+  .hero {
+    display: grid !important;
+    grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr) !important;
+    min-height: clamp(640px, 80vh, 860px) !important;
+    max-height: none !important;
+    align-items: stretch !important;
+    background: #08080a !important;
   }
 
-  .hero-copy .brand-principles i {
-    color: rgba(190, 36, 25, 0.7);
-    font-style: normal;
+  .hero-media {
+    order: 2;
+    position: relative;
+    height: auto !important;
+    min-height: clamp(640px, 80vh, 860px) !important;
+    aspect-ratio: auto !important;
+    overflow: hidden;
+    background: #08080a !important;
+  }
+
+  .hero-media .hero-living-poster {
+    inset: 0 !important;
+    height: 100% !important;
+  }
+
+  .hero-media .hero-layer {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: 50% 8% !important;
+  }
+
+  .hero-media .hero-shade {
+    inset: 0 !important;
+    height: auto !important;
+    background:
+      linear-gradient(90deg, #08080a 0%, rgba(8, 8, 10, 0.55) 14%, transparent 40%),
+      linear-gradient(180deg, rgba(8, 8, 10, 0.22) 0%, transparent 18%, transparent 74%, rgba(8, 8, 10, 0.88) 95%, #08080a 100%) !important;
+  }
+
+  .hero-media .hero-live {
+    inset: auto auto 28px 32px !important;
+    width: auto !important;
+    max-width: calc(100% - 64px) !important;
+    padding: 9px 14px !important;
+  }
+
+  .hero-copy {
+    order: 1;
+    display: flex !important;
+    flex-direction: column;
+    justify-content: center !important;
+    padding: clamp(52px, 6vw, 88px) clamp(40px, 5.5vw, 84px) !important;
+    background: #08080a !important;
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(54px, 5.6vw, 84px) !important;
+    margin: 8px 0 18px !important;
+    line-height: 0.95 !important;
+  }
+
+  .hero-copy .hero-lead {
+    max-width: 38ch !important;
+    font-size: 16px !important;
+    line-height: 1.62 !important;
+    color: #c2bbb0 !important;
+  }
+
+  .hero-copy .hero-actions {
+    margin-top: 28px !important;
+    max-width: 320px !important;
+  }
+
+  .hero-copy .brand-principles {
+    margin-top: 34px !important;
+    padding-top: 18px !important;
   }
 }
 
@@ -371,6 +498,7 @@ main .section-heading .section-kicker::before,
 
 /* Hero & Empty-State Editorial Ivory CTA */
 #heroProductButton,
+#directOrderButton.is-gift-cta,
 .cart-empty-brand .button-primary {
   background: #f3ede3 !important;
   color: #09090b !important;
@@ -379,6 +507,7 @@ main .section-heading .section-kicker::before,
 }
 
 #heroProductButton:hover,
+#directOrderButton.is-gift-cta:hover,
 .cart-empty-brand .button-primary:hover {
   background: #ffffff !important;
   border-color: #ffffff !important;
@@ -617,9 +746,39 @@ main .section-heading .section-kicker::before,
 .mascot-real-gift {
   padding: 14px !important;
   background: #0e1014 !important;
-  border: 1px solid rgba(244, 239, 230, 0.12) !important;
+  border: 1px solid rgba(244, 239, 230, 0.14) !important;
   border-radius: var(--radius-arch) !important;
   align-items: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+}
+
+.mascot-real-gift:hover {
+  background: #13161d !important;
+  border-color: rgba(244, 239, 230, 0.34) !important;
+}
+
+.mascot-real-gift:active {
+  transform: translateY(1px);
+}
+
+.mascot-real-gift-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mascot-gift-open {
+  flex-shrink: 0;
+  padding: 6px 9px;
+  border-radius: 3px;
+  border: 1px solid rgba(244, 239, 230, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #e6dfd4;
+  white-space: nowrap;
 }
 
 .mascot-real-gift img {
@@ -829,25 +988,41 @@ main .section-heading .section-kicker::before,
   border-top: 1px solid rgba(244, 239, 230, 0.11) !important;
 }
 
-/* ---------- 9. Empty Cart Stage Vignette ---------- */
+/* ---------- 9. Empty Cart, Profile, Garment Table, Community & Film ---------- */
 .cart-empty-brand {
   padding: 16px 20px 36px !important;
+  text-align: center !important;
 }
 
 .cart-empty-art {
-  height: clamp(225px, 34vh, 275px) !important;
-  background: transparent !important;
+  position: relative !important;
+  width: min(100%, 268px) !important;
+  aspect-ratio: 4 / 4.1 !important;
+  height: auto !important;
+  margin: 0 auto 4px !important;
+  background: #0b0c0f !important;
   border: 0 !important;
   border-radius: 0 !important;
+  overflow: hidden !important;
 }
 
 .cart-empty-brand .cart-empty-mascot {
   width: 100% !important;
   height: 100% !important;
-  object-fit: contain !important;
-  object-position: center top !important;
-  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 100%) !important;
-  mask-image: linear-gradient(180deg, #000 72%, transparent 100%) !important;
+  object-fit: cover !important;
+  object-position: center 4% !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+
+.cart-empty-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 44%, transparent 40%, rgba(11, 12, 15, 0.72) 72%, #0b0c0f 94%),
+    linear-gradient(180deg, #0b0c0f 0%, transparent 16%, transparent 66%, #0b0c0f 100%);
 }
 
 .cart-empty-art > span {
@@ -856,4 +1031,201 @@ main .section-heading .section-kicker::before,
 
 .cart-empty-kicker {
   color: #a89f94 !important;
+}
+
+/* Profile Empty Mascot & Support Card */
+.profile-empty-mascot {
+  display: grid !important;
+  grid-template-columns: 84px minmax(0, 1fr) !important;
+  gap: 14px !important;
+  align-items: center !important;
+  padding: 14px !important;
+  background: #0f1116 !important;
+  border: 1px solid rgba(244, 239, 230, 0.12) !important;
+  border-left: 1px solid rgba(244, 239, 230, 0.12) !important;
+  border-radius: var(--radius-arch) !important;
+}
+
+.profile-mascot-frame {
+  position: relative;
+  width: 84px;
+  height: 104px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: #0b0c0f;
+  border: 1px solid rgba(244, 239, 230, 0.10);
+}
+
+.profile-mascot-frame video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 6% !important;
+  display: block;
+}
+
+.profile-mascot-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 48%, rgba(11, 12, 15, 0.65) 100%);
+}
+
+.profile-empty-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-empty-kicker {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #9e978d;
+}
+
+.profile-empty-mascot .profile-empty {
+  margin: 0 !important;
+  font-size: 12.5px !important;
+  line-height: 1.52 !important;
+  color: #c2bbb0 !important;
+}
+
+.profile-support-link {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(244, 239, 230, 0.18);
+  color: #f3ede3;
+  font-family: var(--font-ui);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.profile-support-link:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(244, 239, 230, 0.40);
+}
+
+/* 4-Column Garment Size Guide */
+#productModal .measurement-table.garment-measurements {
+  border-top: 1px solid var(--line) !important;
+  margin: 12px 0 10px !important;
+  overflow-x: visible !important;
+}
+
+#productModal .measurement-table.garment-measurements > div {
+  min-width: 0 !important;
+  grid-template-columns: 58px repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  padding: 10px 8px !important;
+  border-bottom: 1px solid var(--line-soft) !important;
+  border-radius: 2px;
+  font-size: 12.5px !important;
+  color: #e6dfd4 !important;
+}
+
+#productModal .measurement-table.garment-measurements .measurement-head {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
+  color: #9e978d !important;
+  padding-bottom: 8px !important;
+}
+
+#productModal .measurement-table.garment-measurements > div.is-selected-row {
+  background: rgba(184, 34, 24, 0.14) !important;
+  border-bottom-color: rgba(212, 56, 44, 0.45) !important;
+  color: #ffffff !important;
+}
+
+/* Community ("НА СВОИХ") Editorial Lookbook Cards */
+.community-card {
+  position: relative;
+  border-radius: var(--radius-arch) !important;
+  border: 1px solid rgba(244, 239, 230, 0.12) !important;
+  background: #0d0e12 !important;
+}
+
+.community-card img,
+.community-card video {
+  aspect-ratio: 4 / 5 !important;
+  object-position: 50% 10% !important;
+}
+
+.community-card figcaption {
+  position: static !important;
+  padding: 16px 18px 18px !important;
+  background: linear-gradient(180deg, #101218 0%, #0b0c10 100%) !important;
+  border-top: 1px solid rgba(244, 239, 230, 0.09) !important;
+  gap: 6px !important;
+}
+
+.community-card figcaption > span {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.15em !important;
+  color: #9e978d !important;
+}
+
+.community-card figcaption > strong {
+  font-family: var(--font-display) !important;
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  line-height: 1.05 !important;
+  color: var(--ink) !important;
+}
+
+.community-card figcaption > small {
+  font-size: 12.5px !important;
+  line-height: 1.5 !important;
+  color: #beb7ac !important;
+}
+
+.community-card figcaption > button {
+  margin-top: 8px;
+  padding: 12px 0 0 !important;
+  min-height: 0 !important;
+  border-top: 1px solid rgba(244, 239, 230, 0.09) !important;
+  font-size: 10.5px !important;
+  letter-spacing: 0.14em !important;
+  color: #f3ede3 !important;
+}
+
+/* Fullscreen Drop Stories (#filmModal) */
+.film-sheet {
+  background: #070709 !important;
+}
+
+.film-copy {
+  background: linear-gradient(180deg, transparent 0%, rgba(8, 8, 10, 0.88) 28%, #08080a 100%) !important;
+}
+
+#filmTitle {
+  font-family: var(--font-display) !important;
+  font-size: clamp(32px, 8.5vw, 46px) !important;
+  letter-spacing: -0.015em !important;
+  line-height: 0.98 !important;
+}
+
+#filmProduct {
+  background: #f3ede3 !important;
+  color: #09090b !important;
+  border-color: #f3ede3 !important;
+}
+
+.film-nav,
+.film-close {
+  border-radius: var(--radius-arch) !important;
+  background: rgba(9, 9, 12, 0.65) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(244, 239, 230, 0.18) !important;
 }

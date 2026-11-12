@@ -246,7 +246,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
             <img class="hero-layer hero-layer-fallback" src="assets/drop/hero-founder-editorial-20261112d.webp" alt="Никита Ворожбитов в футболке «СИЛА И ЧЕСТЬ»" fetchpriority="high" decoding="async" id="heroFallback" width="1202" height="1503">
           </div>
           <div class="hero-shade"></div>
-          <div class="hero-live" id="heroLiveBadge"><span class="pulse-dot"></span> <span id="heroLiveText"><small>ОСНОВАТЕЛЬ</small><strong>НИКИТА ВОРОЖБИТОВ</strong></span></div>
+          <div class="hero-live" id="heroLiveBadge" role="button" tabindex="0" aria-label="Смотреть историю выпуска 001"><span class="pulse-dot"></span> <span id="heroLiveText"><small>ОСНОВАТЕЛЬ</small><strong>НИКИТА ВОРОЖБИТОВ</strong></span><span class="hero-story-pill" aria-hidden="true">▶ ИСТОРИЯ 001</span></div>
         </div>
         <div class="hero-copy">
           <div class="eyebrow"><span>ОДЕЖДА С ХАРАКТЕРОМ</span><span>ДРОП 001</span></div>
@@ -387,9 +387,10 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
         </div>
         <div class="mascot-gift-copy">
           <p id="mascotGiftDescription">К первому дропу — 100 подарочных жетонов с фирменной гравировкой. Со второго дропа подарочных жетонов не будет.</p>
-          <div class="mascot-real-gift">
+          <div class="mascot-real-gift" id="mascotRealGift" role="button" tabindex="0" aria-label="Открыть фотографии и детали подарочного жетона">
             <img id="mascotGiftImage" src="assets/client/tag-hero-studio-20261111c.webp" alt="Металлический жетон — подарок к заказу" width="68" height="84" decoding="async">
-            <div><span class="mascot-gift-label" id="mascotGiftLabel">ПОДАРОК К ЗАКАЗУ</span><strong>ФИРМЕННЫЙ ЖЕТОН</strong><span id="mascotGiftStatus" role="status">Проверяем доступность подарка…</span></div>
+            <div class="mascot-real-gift-copy"><span class="mascot-gift-label" id="mascotGiftLabel">ПОДАРОК К ЗАКАЗУ</span><strong>ФИРМЕННЫЙ ЖЕТОН</strong><span id="mascotGiftStatus" role="status">Проверяем доступность подарка…</span></div>
+            <span class="mascot-gift-open" aria-hidden="true">4 ФОТО ↗</span>
           </div>
           <div class="mascot-gift-actions">
             <button class="button button-primary" id="mascotGiftShop" type="button">ВЫБРАТЬ ВЕЩЬ <span aria-hidden="true">↗</span></button>
@@ -509,7 +510,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
             <h2 id="communityTitle">СВОИ<br><em>В ДЕЛЕ.</em></h2>
           </div>
         </div>
-        <p class="community-lead">Посадка в жизни: фотографии людей в вещах бренда. Параметры моделей показываем, когда они известны.</p>
+        <p class="community-lead">Лукбук первого выпуска на Никите Ворожбитове и живые кадры своих людей. Носишь «СИЛА И ЧЕСТЬ» — пришли своё фото в чат магазина.</p>
         <div class="community-grid" id="communityGrid"></div>
         <div class="community-cta">
           <div>

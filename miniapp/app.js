@@ -204,10 +204,11 @@
     if (!box) return;
     state.profileOrders = Array.isArray(orders) ? orders : [];
     if (!orders.length) {
-      const mascotVid = `<video src="assets/mascot/steel-glasses-anthracite-20261112a.mp4" poster="assets/mascot/steel-glasses-anthracite-20261112a.jpg" autoplay loop muted playsinline webkit-playsinline preload="metadata" aria-hidden="true"></video>`;
-      box.innerHTML = source === "bot"
-        ? `<div class="profile-empty-mascot">${mascotVid}<p class="profile-empty">Заказов пока нет. Здесь появятся заказы, зарегистрированные магазином.</p></div>`
-        : `<div class="profile-empty-mascot">${mascotVid}<p class="profile-empty">Открой витрину из Telegram: здесь будут реальные заказы, способ оплаты и этапы доставки.</p></div>`;
+      const mascotVid = `<div class="profile-mascot-frame"><video src="assets/mascot/steel-glasses-anthracite-20261112a.mp4" poster="assets/mascot/steel-glasses-anthracite-20261112a.jpg" autoplay loop muted playsinline webkit-playsinline preload="metadata" aria-hidden="true"></video></div>`;
+      const copy = source === "bot"
+        ? "Активных заказов пока нет. Оформленные с менеджером заказы и персональная карта владельца появятся здесь."
+        : "Заказы оформляются персонально через чат магазина — подтвердим наличие размера, подарочный жетон и доставку.";
+      box.innerHTML = `<div class="profile-empty-mascot">${mascotVid}<div class="profile-empty-copy"><span class="profile-empty-kicker">ЛИЧНЫЙ КАБИНЕТ · 001</span><p class="profile-empty">${copy}</p><button class="profile-support-link" type="button" data-profile-support>НАПИСАТЬ МЕНЕДЖЕРУ ↗</button></div></div>`;
       return;
     }
     box.innerHTML = `<p class="profile-caption">Заказы</p>` + orders.map((row, orderIndex) => {
@@ -692,41 +693,45 @@
       ? "Добавим бесплатно к заказу, пока есть тираж."
       : product ? `${priceLabel} · ${state.selectedSize ? `размер ${state.selectedSize}` : "Выбери размер"}` : "Выбери размер";
     const blocked = !state.catalogReady || !product || Boolean(product.stock_check_unavailable) || !Core.available(product) || gift;
+    $("#addToCartButton").classList.toggle("hidden", gift);
     $("#addToCartButton").disabled = blocked;
     $("#addToCartButton").innerHTML = !state.catalogReady ? (state.catalogLoading ? "ПРОВЕРЯЕМ НАЛИЧИЕ" : "ОБНОВИ КАТАЛОГ") : gift ? "ТОЛЬКО В ПОДАРОК" : product?.stock_check_unavailable ? "НАЛИЧИЕ УТОЧНЯЕТСЯ" : blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : state.selectedSize ? 'ДОБАВИТЬ В КОРЗИНУ <span>+</span>' : 'ВЫБРАТЬ РАЗМЕР <span>↑</span>';
     const directBtn = $("#directOrderButton");
     if (directBtn) {
-      directBtn.disabled = blocked;
+      directBtn.disabled = gift ? false : blocked;
+      directBtn.classList.toggle("is-gift-cta", gift);
+      directBtn.style.marginBottom = gift ? "0" : "8px";
       const isPreorder = /предзаказ/i.test(`${product?.badge || ""} ${product?.stock_label || ""}`);
-      directBtn.innerHTML = gift ? "ТОЛЬКО В ПОДАРОК" : blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : isPreorder ? "ОФОРМИТЬ ПРЕДЗАКАЗ В TELEGRAM ↗" : "ОФОРМИТЬ ЗАКАЗ В TELEGRAM ↗";
+      directBtn.innerHTML = gift ? "ВЫБРАТЬ ФУТБОЛКУ С ПОДАРКОМ ↗" : blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : isPreorder ? "ОФОРМИТЬ ПРЕДЗАКАЗ В TELEGRAM ↗" : "ОФОРМИТЬ ЗАКАЗ В TELEGRAM ↗";
     }
   }
 
-  // The brand's chart describes body measurements, not garment dimensions.
-  const BODY_SIZE_CHART = [
-    {size:"S", chest:[88,96], waist:[76,84], hips:[92,100], height:[170,176]},
-    {size:"M", chest:[96,104], waist:[84,92], hips:[100,108], height:[176,182]},
-    {size:"L", chest:[104,112], waist:[92,100], hips:[108,116], height:[182,188]},
-    {size:"XL", chest:[112,120], waist:[100,108], hips:[116,124], height:[188,194]},
-    {size:"2XL", chest:[120,128], waist:[108,116], hips:[124,132], height:[194,200]},
-    {size:"3XL", chest:[128,136], waist:[116,124], hips:[132,140], height:[200,206]}
-  ];
+  // Authentic garment width (cm) + athlete height/weight ranges aligned with ShopCore.SIZE_GUIDE.
   const normalizeBodySize = size => String(size).toUpperCase() === "XXL" ? "2XL" : String(size).toUpperCase();
   function bodySizeRows(product) {
     if (!product || !["tee-sila-i-chest", "tee-vzglyad"].includes(product.id)) return [];
+    const guideList = Array.isArray(Core.SIZE_GUIDE) ? Core.SIZE_GUIDE : [];
+    const prodMeasurements = Array.isArray(product.measurements) ? product.measurements : [];
     return (product.sizes || []).map(size => {
-      const row = BODY_SIZE_CHART.find(item => item.size === normalizeBodySize(size));
-      return row ? { ...row, size: String(size) } : null;
+      const canon = normalizeBodySize(size);
+      const guide = guideList.find(item => item.size === canon);
+      const spec = prodMeasurements.find(item => normalizeBodySize(item.size) === canon);
+      const width = (spec && Number(spec.width_cm)) || (guide && Number(guide.width)) || 0;
+      const height = guide ? guide.height : (spec ? [spec.height_min_cm, spec.height_max_cm] : null);
+      const weight = guide ? guide.weight : (spec ? [spec.weight_min_kg, spec.weight_max_kg] : null);
+      if (!width || !height || !weight) return null;
+      return { size: String(size), canon, width, height, weight };
     }).filter(Boolean);
   }
   function renderBodySizeGuide(product) {
     const rows = bodySizeRows(product);
     const range = values => values.join("–");
     const isFitted = product && product.id === "tee-vzglyad";
+    const activeCanon = state.selectedSize ? normalizeBodySize(state.selectedSize) : "";
     const cutNote = isFitted
-      ? "У модели «ВЗГЛЯД» прилегающий крой: для плотной посадки бери свой размер по таблице, для более свободной — на размер больше."
-      : "Значения в таблице — обхваты тела в сантиметрах (грудь, талия, бёдра, рост). У модели «СИЛА И ЧЕСТЬ» прямой свободный крой.";
-    $("#measurementTable").innerHTML = rows.length ? `<div class="measurement-table body-measurements" role="table" aria-label="Таблица параметров тела в сантиметрах"><div class="measurement-head" role="row"><span>РАЗМЕР</span><span>ГРУДЬ</span><span>ТАЛИЯ</span><span>БЁДРА</span><span>РОСТ</span></div>${rows.map(row => `<div role="row"><strong>${escapeHTML(row.size)}</strong><span>${range(row.chest)}</span><span>${range(row.waist)}</span><span>${range(row.hips)}</span><span>${range(row.height)}</span></div>`).join("")}</div><p class="size-guide-note">${escapeHTML(cutNote)}</p>` : "<p class=\"size-guide-note\">Таблица для этой вещи пока недоступна.</p>";
+      ? "У модели «ВЗГЛЯД» прилегающий атлетический крой: ширина указана по груди изделия от подмышки до подмышки (см). Для плотной посадки по фигуре бери свой размер, для свободной — на 1 размер больше."
+      : "Ширина указана по груди изделия от подмышки до подмышки (см). У модели «СИЛА И ЧЕСТЬ» прямой свободный крой — бери свой базовый размер по росту и весу.";
+    $("#measurementTable").innerHTML = rows.length ? `<div class="measurement-table garment-measurements" role="table" aria-label="Промеры изделия и ориентиры по росту и весу"><div class="measurement-head" role="row"><span>РАЗМЕР</span><span>ШИРИНА</span><span>РОСТ, СМ</span><span>ВЕС, КГ</span></div>${rows.map(row => `<div role="row" class="${activeCanon && row.canon === activeCanon ? "is-selected-row" : ""}"><strong>${escapeHTML(row.size)}</strong><span>${escapeHTML(String(row.width))} см</span><span>${range(row.height)}</span><span>${range(row.weight)}</span></div>`).join("")}</div><p class="size-guide-note">${escapeHTML(cutNote)}</p>` : "<p class=\"size-guide-note\">Таблица для этой вещи пока недоступна.</p>";
   }
 
   function renderSheet(product) {
@@ -1690,7 +1695,18 @@
       ? "Подарок доступен в первом дропе, пока есть жетоны из первой сотни."
       : "Подарочные жетоны предусмотрены для первого дропа; наличие уточняется.";
     $("#mascotGiftImage").src = gift.image || product.image;
-    $("#mascotGiftDetails").onclick = () => openProduct(product.id);
+    const openGiftProduct = () => { haptic("light"); openProduct(product.id); };
+    $("#mascotGiftDetails").onclick = openGiftProduct;
+    const realGiftCard = $("#mascotRealGift");
+    if (realGiftCard) {
+      realGiftCard.onclick = openGiftProduct;
+      realGiftCard.onkeydown = event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openGiftProduct();
+        }
+      };
+    }
     $("#mascotGiftShop").onclick = () => { scrollToId("catalog"); haptic("light"); };
     section.classList.toggle("gift-exhausted", !available);
   }
@@ -2375,6 +2391,7 @@
       node.setAttribute("aria-pressed", String(active));
     });
     $("#sizeHint").textContent = `Размер ${size} выбран.`;
+    if (state.currentProduct) renderBodySizeGuide(state.currentProduct);
     $("#sizeHint").classList.remove("error");
     updatePurchaseSummary();
     updateCombatSizer();
@@ -2784,7 +2801,8 @@
       const product = item.product_id ? productById(item.product_id) : null;
       const title = String(item.caption || item.name || (product && product.name) || "Свой человек");
       const city = String(item.city || "СИЛА И ЧЕСТЬ").toUpperCase();
-      const details = [Number(item.height_cm) > 0 ? `${Number(item.height_cm)} см` : "", Number(item.weight_kg) > 0 ? `${Number(item.weight_kg)} кг` : "", item.size ? `Размер ${String(item.size)}` : ""].filter(Boolean).join(" · ");
+      const numericDetails = [Number(item.height_cm) > 0 ? `${Number(item.height_cm)} см` : "", Number(item.weight_kg) > 0 ? `${Number(item.weight_kg)} кг` : "", item.size ? `Размер ${String(item.size)}` : ""].filter(Boolean).join(" · ");
+      const details = [typeof item.fit_note === "string" ? item.fit_note.trim() : "", numericDetails].filter(Boolean).join(" · ");
       const video = typeof item.video === "string" && /^(?:https:\/\/|assets\/)/.test(item.video) ? item.video : "";
       const media = video ? `<video src="${escapeHTML(video)}" poster="${escapeHTML(item.image)}" muted playsinline controls preload="none" aria-label="${escapeHTML(title)} — видео образа"></video>` : `<img src="${escapeHTML(item.image)}" alt="${escapeHTML(title)} — сообщество «Свои»" loading="lazy" decoding="async">`;
       return `<figure class="community-card">${media}<figcaption><span>${escapeHTML(city)}</span><strong>${escapeHTML(title)}</strong>${details ? `<small>${escapeHTML(details)}</small>` : ""}${product ? `<button type="button" data-community-product="${escapeHTML(product.id)}">ОТКРЫТЬ ВЕЩЬ ↗</button>` : ""}</figcaption></figure>`;
@@ -3016,6 +3034,20 @@
       }
     });
     if ($("#dropFilmButton")) $("#dropFilmButton").addEventListener("click", () => openStories(0));
+    const heroLiveBadge = $("#heroLiveBadge");
+    if (heroLiveBadge) {
+      const triggerHeroStories = event => {
+        event.stopPropagation();
+        openStories(0);
+      };
+      heroLiveBadge.addEventListener("click", triggerHeroStories);
+      heroLiveBadge.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          triggerHeroStories(event);
+        }
+      });
+    }
     $("#zoomProduct").addEventListener("click", zoomProduct);
     $("#mediaPrev").addEventListener("click", () => stepMedia(-1));
     $("#mediaNext").addEventListener("click", () => stepMedia(1));
@@ -3363,7 +3395,13 @@
     if ($("#directOrderButton")) {
       $("#directOrderButton").addEventListener("click", () => {
         const product = state.currentProduct && productById(state.currentProduct.id);
-        if (!product || !Core.buyable(product)) return;
+        if (!product) return;
+        if (!Core.buyable(product)) {
+          closeModal("productModal");
+          scrollToId("catalog");
+          haptic("light");
+          return;
+        }
         const gate = dropPurchaseGate();
         if (gate) { showToast(gate); return; }
         if (!state.selectedSize) {
@@ -3421,6 +3459,15 @@
     if ($("#saveProfile")) $("#saveProfile").addEventListener("click", saveProfile);
     if ($("#profileOrders")) $("#profileOrders").addEventListener("click", event => {
       if (event.target.closest("[data-retry-orders]")) { loadProfileOrders(); return; }
+      if (event.target.closest("[data-profile-support]")) {
+        const rawMgr = state.data.order_manager_username || state.data.support_username || "intellectual_sabotage";
+        const account = String(rawMgr).replace(/^@/, "");
+        const url = `https://t.me/${account}`;
+        if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
+        else window.open(url, "_blank", "noopener,noreferrer");
+        haptic("light");
+        return;
+      }
       const ownerButton = event.target.closest("[data-owner-card]");
       if (ownerButton) {
         openOwnerCard(ownerButton.dataset.ownerCard);

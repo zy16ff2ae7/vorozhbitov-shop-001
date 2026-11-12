@@ -760,7 +760,7 @@
     "hero_background": "assets/drop/hero-founder-editorial-20261112d.webp",
     "hero_subject": "assets/drop/hero-founder-editorial-20261112d.webp",
     "welcome_motion": true,
-    "welcome_image": "assets/welcome-sword-logo.jpg"
+    "welcome_image": "assets/video/welcome-poster-20261112b.jpg"
   },
   "drop_event": {
     "id": "drop-001",
@@ -833,29 +833,33 @@
     {
       "image": "assets/drop/hero-founder-editorial-20261112d.webp",
       "name": "Никита Ворожбитов",
-      "caption": "СИЛА И ЧЕСТЬ · перед",
+      "caption": "СИЛА И ЧЕСТЬ · посадка спереди",
       "city": "НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ",
+      "fit_note": "Прямой свободный крой · хлопок 240–260 г/м²",
       "product_id": "tee-sila-i-chest"
     },
     {
       "image": "assets/client/vzglyad-nikita-front-20261111c.webp",
       "name": "Никита Ворожбитов",
       "caption": "ВЗГЛЯД · посадка спереди",
-      "city": "ВЫПУСК 001 · ЛУКБУК",
+      "city": "НИКИТА ВОРОЖБИТОВ · ВЫПУСК 001",
+      "fit_note": "Прилегающий атлетический крой по фигуре",
       "product_id": "tee-vzglyad"
     },
     {
       "image": "assets/client/vzglyad-nikita-back-20261111c.webp",
       "name": "Никита Ворожбитов",
       "caption": "ВЗГЛЯД · 10 принципов со спины",
-      "city": "ВЫПУСК 001 · ЛУКБУК",
+      "city": "НИКИТА ВОРОЖБИТОВ · ВЫПУСК 001",
+      "fit_note": "Прилегающий крой · спина с монограммой НВ",
       "product_id": "tee-vzglyad"
     },
     {
       "image": "assets/client/sila-nikita-back-20261111c.webp",
       "name": "Никита Ворожбитов",
       "caption": "СИЛА И ЧЕСТЬ · клинок на спине",
-      "city": "ВЫПУСК 001 · ЛУКБУК",
+      "city": "НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ",
+      "fit_note": "Прямой свободный крой · планка НВ и клинок на тесьме",
       "product_id": "tee-sila-i-chest"
     }
   ],
