@@ -199,15 +199,55 @@ main .section-heading .section-kicker::before,
   object-position: 50% 14% !important;
 }
 
-.welcome:not(.welcome-emblem-phase) .welcome-shade {
-  background:
-    linear-gradient(180deg, rgba(7, 7, 9, 0.24) 0%, rgba(7, 7, 9, 0.12) 38%, rgba(7, 7, 9, 0.90) 58%, rgba(7, 7, 9, 0.98) 73%, #070709 100%) !important;
-  transition: background 0.55s ease, opacity 0.55s ease;
+#welcomeVideo {
+  display: block !important;
+  object-position: 50% 32% !important;
 }
 
-.welcome.welcome-emblem-phase .welcome-shade {
+.welcome .welcome-kicker,
+.welcome .welcome-title {
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.86), 0 1px 3px rgba(0, 0, 0, 0.92);
+  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1), transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0s !important;
+}
+
+.welcome:not(.is-logo-finale) .welcome-shade {
+  opacity: 1 !important;
   background:
-    linear-gradient(180deg, rgba(7, 7, 9, 0.22) 0%, transparent 22%, transparent 70%, rgba(7, 7, 9, 0.92) 86%, #070709 100%) !important;
+    linear-gradient(180deg, rgba(7, 7, 9, 0.16) 0%, rgba(7, 7, 9, 0.04) 48%, rgba(7, 7, 9, 0.44) 72%, rgba(7, 7, 9, 0.86) 89%, #070709 100%) !important;
+  transition: background 0.48s ease, opacity 0.48s ease !important;
+}
+
+.welcome.is-logo-finale .welcome-shade {
+  opacity: 1 !important;
+  background:
+    linear-gradient(180deg, rgba(7, 7, 9, 0.08) 0%, transparent 16%, transparent 78%, rgba(7, 7, 9, 0.82) 92%, #070709 100%) !important;
+  transition: background 0.48s ease, opacity 0.48s ease !important;
+}
+
+.welcome.is-logo-finale .welcome-kicker,
+.welcome.is-logo-finale .welcome-title {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transform: translateY(-8px) !important;
+  pointer-events: none !important;
+  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1), transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.45s !important;
+}
+
+.welcome.is-logo-finale .welcome-copy .welcome-lede {
+  color: #f6f1e8 !important;
+  letter-spacing: 0.2em !important;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  video.welcome-media,
+  #welcomeVideo {
+    display: block !important;
+    transition: opacity 0.45s ease !important;
+  }
+  .welcome.is-logo-finale .seal-core::after {
+    animation: seal-light-pass 1.05s ease-out 0.75s both !important;
+  }
 }
 
 .welcome-motion {
