@@ -27,7 +27,7 @@
     const fields = ["name", "phone", "city", "address", "entrance", "size", "height", "note"];
     const profile = value && typeof value === "object" && !Array.isArray(value) ? value : {};
     const result = Object.fromEntries(fields.map(key => [key, typeof profile[key] === "string" ? profile[key] : ""]));
-    result.deliver = ["СДЭК", "Яндекс"].includes(profile.deliver) ? profile.deliver : "СДЭК";
+    result.deliver = ["СДЭК", "СДЭК Курьер", "Яндекс", "Почта России"].includes(profile.deliver) ? profile.deliver : "СДЭК";
     return result;
   }
 

@@ -19,6 +19,15 @@ test('manager handoff contains the cart and never calls checkout transport', () 
   assert.match(message, /СИЛА И ЧЕСТЬ · размер M · 2 шт\. · 4 900 ₽/);
   assert.match(message, /Итого за вещи: 9 800 ₽/);
   assert.match(message, /Доставка: СДЭК/);
+  const giftMsg = f.client.managerMessage({
+    customer: { name: 'Buyer', phone: '+79990000000', city: 'Москва', deliver: 'СДЭК Курьер' },
+    lines: [{ name: 'СИЛА И ЧЕСТЬ', size: 'L', quantity: 1, priceLabel: '4 200 ₽' }, { name: 'ВЗГЛЯД', size: 'L', quantity: 1, priceLabel: '3 900 ₽' }],
+    totalLabel: '8 100 ₽',
+    bundleLabel: 'ОБА ХАРАКТЕРА · ДРОП 001',
+    giftWrap: { enabled: true, motto: 'Дисциплина', recipient: 'Брату' }
+  });
+  assert.match(giftMsg, /Комплект: ОБА ХАРАКТЕРА · ДРОП 001/);
+  assert.match(giftMsg, /Подарочная подача: Да · вкладыш «Дисциплина» · для: Брату/);
   const url = f.client.managerUrl('@real_manager', message);
   const parsed = new URL(url);
   assert.equal(parsed.origin, 'https://t.me');

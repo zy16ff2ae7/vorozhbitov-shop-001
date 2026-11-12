@@ -289,17 +289,15 @@
         "M",
         "L",
         "XL",
-        "XXL"
+        "2XL"
       ],
-      "description": "Белая футболка «ОДИН В ПОЛЕ ВОИН». Тёмная фактурная монограмма на груди, фирменная надпись на спине и нашивки на рукаве и у подола. Предзаказ первого выпуска.",
+      "description": "Молочно-белый плотный хлопок 250 г/м² со спинным манифестом второго выпуска.",
       "signature": "Белый вариант. По предзаказу.",
       "photo_url": "",
       "image": "assets/product-studio-v1/white-000.webp",
       "images": [
         "assets/product-studio-v1/white-000.webp",
-        "assets/product-studio-v1/white-180.webp",
-        "assets/product-studio-v1/white-045.webp",
-        "assets/product-studio-v1/white-225.webp"
+        "assets/product-studio-v1/white-180.webp"
       ],
       "badge": "ПРЕДЗАКАЗ",
       "material": "100% хлопок · 240–260 г/м²",
@@ -352,7 +350,9 @@
       ],
       "source_labels": [
         "Исходный макет · принты и детали"
-      ]
+      ],
+      "upcoming": true,
+      "subtitle": "Плотный хлопок 250 г/м² · Выпуск 002"
     },
     {
       "id": "tag-sila-i-chest",
@@ -400,23 +400,23 @@
     {
       "id": "honor-hoodie",
       "category": "drop",
-      "name": "СИЛА И ЧЕСТЬ",
+      "name": "ХУДИ «ЧЕСТЬ»",
       "price": "11 900 ₽",
       "sizes": [
         "S",
         "M",
         "L",
-        "XL"
+        "XL",
+        "2XL"
       ],
-      "description": "Главный сигнал выпуска. Тяжёлый футер, принт «Сила и честь» на груди, красная V на кромке. Кто понял — носит. Кто нет — проходит мимо.",
+      "description": "Тяжёлое архитектурное худи 460 г/м² с двойным капюшоном и спущенным плечом. Закрытый предзаказ второго выпуска.",
       "signature": "Сила и честь. Это не слоган на витрине — это то, с чем выходишь из дома.",
       "print": "СИЛА И\nЧЕСТЬ",
       "shape": "hoodie",
       "photo_url": "",
-      "image": "assets/honor-hoodie.jpg",
+      "image": "assets/client/hoodie-drop002-teaser-20261112h.webp",
       "images": [
-        "assets/honor-hoodie.jpg",
-        "assets/look-ring.jpg"
+        "assets/client/hoodie-drop002-teaser-20261112h.webp"
       ],
       "badge": "ВЫПУСК",
       "material": "100% хлопок · 400 г/м²",
@@ -437,7 +437,9 @@
         "assets/spin/honor-05.jpg",
         "assets/spin/honor-06.jpg",
         "assets/spin/honor-07.jpg"
-      ]
+      ],
+      "upcoming": true,
+      "subtitle": "Плотный футер 460 г/м² · Выпуск 002"
     },
     {
       "id": "year-tee-1993",
@@ -474,7 +476,8 @@
         "assets/spin/year-01.jpg",
         "assets/spin/year-02.jpg",
         "assets/spin/year-04.jpg"
-      ]
+      ],
+      "upcoming": false
     },
     {
       "id": "drop-hoodie-001",
@@ -512,7 +515,8 @@
         "assets/spin/honor-02.jpg",
         "assets/spin/honor-04.jpg",
         "assets/spin/honor-06.jpg"
-      ]
+      ],
+      "upcoming": false
     },
     {
       "id": "drop-tee-001",
@@ -548,7 +552,8 @@
         "assets/base-tee.jpg",
         "assets/spin/year-02.jpg",
         "assets/spin/year-04.jpg"
-      ]
+      ],
+      "upcoming": false
     },
     {
       "id": "field-tee-001",
@@ -584,7 +589,8 @@
         "assets/field-tee.jpg",
         "assets/spin/year-02.jpg",
         "assets/spin/year-04.jpg"
-      ]
+      ],
+      "upcoming": false
     },
     {
       "id": "hoodie-heavy-002",
@@ -622,7 +628,8 @@
         "assets/spin/honor-02.jpg",
         "assets/spin/honor-04.jpg",
         "assets/spin/honor-06.jpg"
-      ]
+      ],
+      "upcoming": false
     },
     {
       "id": "tee-basic-002",
@@ -658,7 +665,8 @@
         "assets/base-tee.jpg",
         "assets/spin/year-02.jpg",
         "assets/spin/year-04.jpg"
-      ]
+      ],
+      "upcoming": false
     },
     {
       "id": "cargo-city-001",
@@ -693,25 +701,25 @@
       "spin": [
         "assets/city-cargo.jpg",
         "assets/look-street.jpg"
-      ]
+      ],
+      "upcoming": false
     },
     {
       "id": "cap-logo-001",
       "category": "drop",
-      "name": "КЕПКА V",
+      "name": "БЕЙСБОЛКА «НВ»",
       "price": "3 200 ₽",
       "sizes": [
         "ONE SIZE"
       ],
-      "description": "Чёрная шестиклинка, красная V. Никаких громких логотипов — свой узнает.",
+      "description": "Жёсткая шестиклинка из тяжёлого матового твила с металлической пряжкой и вышивкой знака НВ.",
       "signature": "V на лбу. Свой узнает. Чужой не обязан.",
       "print": "V",
       "shape": "cap",
       "photo_url": "",
-      "image": "assets/v-cap.jpg",
+      "image": "assets/client/cap-drop002-teaser-20261112h.webp",
       "images": [
-        "assets/v-cap.jpg",
-        "assets/logo-cap.jpg"
+        "assets/client/cap-drop002-teaser-20261112h.webp"
       ],
       "badge": "СИГНАЛ",
       "material": "100% хлопок",
@@ -726,7 +734,9 @@
       "spin": [
         "assets/v-cap.jpg",
         "assets/logo-cap.jpg"
-      ]
+      ],
+      "upcoming": true,
+      "subtitle": "Плотный хлопок · 6 клиньев · Выпуск 002"
     }
   ],
   "lookbook": [

@@ -1,7 +1,7 @@
 /* Reliable checkout transport shared by the storefront and offline regression tests. */
 (function (root) {
   "use strict";
-  function managerMessage({ customer = {}, lines = [], totalLabel = "", giftName = "" }) {
+  function managerMessage({ customer = {}, lines = [], totalLabel = "", giftName = "", giftWrap = null, bundleLabel = "" }) {
     const clean = (value, limit) => String(value ?? "").trim().slice(0, limit);
     const orderLines = lines.map((line, index) => {
       const name = clean(line.name, 120) || "Вещь";
@@ -12,10 +12,18 @@
       return `${index + 1}. ${name} · размер ${size || "уточнить"} · ${quantity} шт.${price ? ` · ${price}` : ""}${person ? ` · номер ${person}` : ""}`;
     });
     if (!orderLines.length) throw new Error("Корзина пуста.");
+    let giftWrapLine = "";
+    if (giftWrap && typeof giftWrap === "object" && giftWrap.enabled) {
+      const motto = clean(giftWrap.motto, 32);
+      const recipient = clean(giftWrap.recipient, 80);
+      giftWrapLine = `Подарочная подача: Да${motto ? ` · вкладыш «${motto}»` : ""}${recipient ? ` · для: ${recipient}` : ""}`;
+    }
     const text = [
       "Здравствуйте! Хочу оформить заказ в СИЛА И ЧЕСТЬ:",
+      clean(bundleLabel, 80) ? `Комплект: ${clean(bundleLabel, 80)}` : "",
       ...orderLines,
       clean(giftName, 120) ? `Подарок: ${clean(giftName, 120)} · 0 ₽ (наличие уточняется)` : "",
+      giftWrapLine,
       `Итого за вещи: ${clean(totalLabel, 40) || "уточнить"}`,
       `Имя: ${clean(customer.name, 80)}`,
       `Телефон: ${clean(customer.phone, 40)}`,

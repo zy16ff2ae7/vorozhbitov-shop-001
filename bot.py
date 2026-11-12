@@ -918,14 +918,47 @@ class Database:
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (product_id, size)
             );
+            CREATE TABLE IF NOT EXISTS leads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                username TEXT NOT NULL DEFAULT '',
+                first_name TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                city TEXT NOT NULL DEFAULT '',
+                deliver TEXT NOT NULL DEFAULT '',
+                address TEXT NOT NULL DEFAULT '',
+                items_json TEXT NOT NULL DEFAULT '[]',
+                total_rub INTEGER NOT NULL DEFAULT 0,
+                gift_wrap TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'new',
+                order_id INTEGER,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS community_submissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                username TEXT NOT NULL DEFAULT '',
+                first_name TEXT NOT NULL DEFAULT '',
+                file_id TEXT NOT NULL,
+                caption TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                product_id TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
             CREATE INDEX IF NOT EXISTS idx_events_event ON events(event);
             CREATE INDEX IF NOT EXISTS idx_users_interest ON users(interest);
             CREATE INDEX IF NOT EXISTS idx_payments_user_status ON payments(user_id, status);
             CREATE INDEX IF NOT EXISTS idx_invoices_payment ON payment_invoices(payment_id, provider);
             CREATE INDEX IF NOT EXISTS idx_transactions_payment ON provider_transactions(payment_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at);
             """
         )
+        club_columns = {row[1] for row in conn.execute("PRAGMA table_info(club_members)")}
+        if "reminder_hour" not in club_columns:
+            conn.execute("ALTER TABLE club_members ADD COLUMN reminder_hour INTEGER")
+        if "last_reminded_on" not in club_columns:
+            conn.execute("ALTER TABLE club_members ADD COLUMN last_reminded_on TEXT NOT NULL DEFAULT ''")
         order_columns = {row[1] for row in conn.execute("PRAGMA table_info(orders)")}
         if "request_id" not in order_columns:
             conn.execute("ALTER TABLE orders ADD COLUMN request_id TEXT")
@@ -1889,7 +1922,7 @@ class Database:
         """Club progress for one member: join date plus one check-in per day."""
         conn = self.connection()
         member = conn.execute(
-            "SELECT user_id, started_on, created_at FROM club_members WHERE user_id=?",
+            "SELECT user_id, started_on, created_at, reminder_hour FROM club_members WHERE user_id=?",
             (user_id,),
         ).fetchone()
         checkins = [
@@ -1899,7 +1932,9 @@ class Database:
                 (user_id,),
             )
         ]
+        active_members = int(conn.execute("SELECT COUNT(*) FROM club_members").fetchone()[0] or 0)
         total = len(checkins)
+        reminder_hour = int(member[3]) if member and member[3] is not None else None
         return {
             "joined": member is not None,
             "started_on": str(member[1]) if member else "",
@@ -1907,9 +1942,231 @@ class Database:
             "total": total,
             "completed": total >= 7,
             "early_access": total >= 7,
+            "reminder_hour": reminder_hour,
+            "active_members": active_members,
             # The mini app must judge "today" by the server day (Europe/Moscow),
             # not the device timezone, or streaks drift around midnight.
             "today": club_now().date().isoformat(),
+        }
+
+    def club_members_count(self) -> int:
+        return int(self.connection().execute("SELECT COUNT(*) FROM club_members").fetchone()[0] or 0)
+
+    def club_set_reminder(self, user_id: int, hour: int | None) -> dict[str, Any]:
+        safe_hour = int(hour) if isinstance(hour, int) and 0 <= int(hour) <= 23 else None
+        self.club_join(user_id)
+        self.connection().execute(
+            "UPDATE club_members SET reminder_hour=?, updated_at=? WHERE user_id=?",
+            (safe_hour, utc_now(), user_id),
+        )
+        return self.club_state(user_id)
+
+    def due_club_reminders(self, today: str, hour: int) -> list[int]:
+        conn = self.connection()
+        rows = conn.execute(
+            """
+            SELECT m.user_id
+            FROM club_members m
+            WHERE m.reminder_hour = ?
+              AND COALESCE(m.last_reminded_on, '') != ?
+              AND (SELECT COUNT(*) FROM club_checkins c WHERE c.user_id = m.user_id) < 7
+              AND NOT EXISTS (
+                  SELECT 1 FROM club_checkins c2 WHERE c2.user_id = m.user_id AND c2.day_date = ?
+              )
+            LIMIT 50
+            """,
+            (hour, today, today),
+        ).fetchall()
+        user_ids = [int(r[0]) for r in rows]
+        for uid in user_ids:
+            conn.execute(
+                "UPDATE club_members SET last_reminded_on=? WHERE user_id=?",
+                (today, uid),
+            )
+        return user_ids
+
+    def verify_serial(self, raw_code: str) -> dict[str, Any]:
+        cleaned = re.sub(r"[^0-9]", "", str(raw_code or ""))
+        if not cleaned or len(cleaned) > 8:
+            return {"ok": False, "error": "Введи номер жетона или заказа (например, 00001 или 47)."}
+        num = int(cleaned)
+        if num <= 0:
+            return {"ok": False, "error": "Номер должен быть больше нуля."}
+        if num == 1:
+            return {
+                "ok": True,
+                "valid": True,
+                "serial_label": "00001",
+                "edition": "ВЫПУСК 001 · ЭТАЛОН",
+                "model_name": "СИЛА И ЧЕСТЬ · ЭКЗЕМПЛЯР ОСНОВАТЕЛЯ",
+                "status_label": "Подлинник № 00001 · закреплён за основателем бренда",
+                "issued_date": "2026",
+            }
+        conn = self.connection()
+        gift_row = conn.execute(
+            """
+            SELECT p.payment_id, p.created_at, o.product_name
+            FROM payments p
+            LEFT JOIN orders o ON o.payment_id = p.payment_id
+            WHERE p.gift_serial = ? AND p.gift_released_at IS NULL
+            ORDER BY p.created_at DESC LIMIT 1
+            """,
+            (num,),
+        ).fetchone()
+        if gift_row:
+            return {
+                "ok": True,
+                "valid": True,
+                "serial_label": f"{num:05d}",
+                "edition": "ВЫПУСК 001 · ПЕРВАЯ СОТНЯ",
+                "model_name": str(gift_row["product_name"] or "СИЛА И ЧЕСТЬ"),
+                "status_label": "Подлинник зарегистрирован в реестре выпуска",
+                "issued_date": str(gift_row["created_at"] or "")[:10],
+            }
+        order_row = conn.execute(
+            """
+            SELECT id, product_name, status, created_at
+            FROM orders
+            WHERE id = ? AND status != 'cancelled'
+            LIMIT 1
+            """,
+            (num,),
+        ).fetchone()
+        if order_row:
+            return {
+                "ok": True,
+                "valid": True,
+                "serial_label": f"{num:05d}",
+                "edition": "ВЫПУСК 001",
+                "model_name": str(order_row["product_name"] or "СИЛА И ЧЕСТЬ"),
+                "status_label": f"Заказ №{int(order_row['id'])} подтверждён в реестре магазина",
+                "issued_date": str(order_row["created_at"] or "")[:10],
+            }
+        if 1 <= num <= 100:
+            return {
+                "ok": True,
+                "valid": False,
+                "available": True,
+                "serial_label": f"{num:05d}",
+                "message": f"Номер № {num:05d} из первой сотни ещё не выдан — закрепляется при подтверждении заказа.",
+            }
+        return {
+            "ok": True,
+            "valid": False,
+            "available": False,
+            "serial_label": f"{num:05d}",
+            "message": "Номер не числится в реестре первого выпуска.",
+        }
+
+    def create_lead(
+        self,
+        user: dict[str, Any] | None,
+        customer: dict[str, Any],
+        lines: list[dict[str, Any]],
+        total_rub: int,
+        gift_wrap: str = "",
+    ) -> int:
+        uid = int(user["id"]) if user and user.get("id") else None
+        uname = str((user or {}).get("username") or "")[:64]
+        fname = str(customer.get("name") or (user or {}).get("first_name") or "")[:80]
+        cur = self.connection().execute(
+            """
+            INSERT INTO leads(
+                user_id, username, first_name, phone, city, deliver, address,
+                items_json, total_rub, gift_wrap, status, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)
+            """,
+            (
+                uid,
+                uname,
+                fname,
+                str(customer.get("phone") or "")[:40],
+                str(customer.get("city") or "")[:80],
+                str(customer.get("deliver") or "")[:40],
+                str(customer.get("address") or "")[:200],
+                compact_json(lines[:20]),
+                max(0, int(total_rub or 0)),
+                str(gift_wrap or "")[:160],
+                utc_now(),
+            ),
+        )
+        return int(cur.lastrowid)
+
+    def get_lead(self, lead_id: int) -> sqlite3.Row | None:
+        return self.connection().execute("SELECT * FROM leads WHERE id=?", (lead_id,)).fetchone()
+
+    def mark_lead_confirmed(self, lead_id: int, order_id: int) -> None:
+        self.connection().execute(
+            "UPDATE leads SET status='confirmed', order_id=? WHERE id=?",
+            (order_id, lead_id),
+        )
+
+    def create_community_submission(
+        self, user: dict[str, Any], file_id: str, caption: str
+    ) -> int:
+        cur = self.connection().execute(
+            """
+            INSERT INTO community_submissions(user_id, username, first_name, file_id, caption, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?)
+            """,
+            (
+                int(user["id"]),
+                str(user.get("username") or "")[:64],
+                str(user.get("first_name") or "")[:80],
+                str(file_id)[:256],
+                str(caption or "")[:400],
+                utc_now(),
+            ),
+        )
+        return int(cur.lastrowid)
+
+    def get_community_submission(self, sub_id: int) -> sqlite3.Row | None:
+        return self.connection().execute(
+            "SELECT * FROM community_submissions WHERE id=?", (sub_id,)
+        ).fetchone()
+
+    def set_community_submission_status(self, sub_id: int, status: str, product_id: str = "") -> None:
+        self.connection().execute(
+            "UPDATE community_submissions SET status=?, product_id=? WHERE id=?",
+            (status, product_id, sub_id),
+        )
+
+    def miniapp_funnel_stats(self) -> dict[str, Any]:
+        conn = self.connection()
+        counts: dict[str, int] = {}
+        for row in conn.execute(
+            """
+            SELECT event, COUNT(*) FROM events
+            WHERE event LIKE 'miniapp_%'
+            GROUP BY event
+            """
+        ):
+            counts[str(row[0])] = int(row[1])
+        size_counts: dict[str, int] = {}
+        for (raw_payload,) in conn.execute(
+            "SELECT payload FROM events WHERE event='miniapp_size_select' ORDER BY id DESC LIMIT 500"
+        ):
+            try:
+                sz = str(json.loads(raw_payload or "{}").get("size") or "").strip().upper()
+                if sz:
+                    size_counts[sz] = size_counts.get(sz, 0) + 1
+            except Exception:
+                pass
+        top_sizes = sorted(size_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:4]
+        leads_total = int(conn.execute("SELECT COUNT(*) FROM leads").fetchone()[0] or 0)
+        leads_confirmed = int(conn.execute("SELECT COUNT(*) FROM leads WHERE status='confirmed'").fetchone()[0] or 0)
+        return {
+            "opens": counts.get("miniapp_open", 0),
+            "product_views": counts.get("miniapp_product_view", 0),
+            "compares": counts.get("miniapp_compare_open", 0),
+            "bundles": counts.get("miniapp_bundle_add", 0),
+            "stories": counts.get("miniapp_story_share", 0),
+            "dm_clicks": counts.get("miniapp_manager_click", 0),
+            "leads_total": leads_total,
+            "leads_confirmed": leads_confirmed,
+            "top_sizes": top_sizes,
+            "club_members": self.club_members_count(),
         }
 
     def club_join(self, user_id: int, today: str | None = None) -> dict[str, Any]:
@@ -2349,7 +2606,30 @@ class Database:
 
 class TelegramAPI:
     def __init__(self, token: str):
+        self.token = token
         self.base_url = f"https://api.telegram.org/bot{token}/"
+
+    def download_file(self, file_id: str, dest: Path, max_bytes: int = 12 * 1024 * 1024) -> bool:
+        info = self.call("getFile", {"file_id": file_id}, timeout=25)
+        file_path = str((info or {}).get("file_path") or "").lstrip("/")
+        if not file_path or ".." in file_path:
+            return False
+        url = f"https://api.telegram.org/file/bot{self.token}/{file_path}"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_suffix(dest.suffix + ".tmp")
+        with urllib.request.urlopen(url, timeout=30) as resp, tmp.open("wb") as out:
+            total = 0
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    tmp.unlink(missing_ok=True)
+                    return False
+                out.write(chunk)
+        tmp.replace(dest)
+        return True
 
     def call(self, method: str, payload: dict[str, Any] | None = None, timeout: int = 70) -> Any:
         body = json.dumps(payload or {}).encode("utf-8")
@@ -4144,6 +4424,17 @@ class BrandBot:
         # Set the persistent navigation first, then show the welcome card.
         if chat_id == user_id:
             self.api.send_message(chat_id, "Меню магазина всегда под рукой.", self.buyer_reply_keyboard(chat_id))
+        if source == "submit_look":
+            self.db.set_state(user_id, "awaiting_community_photo", {})
+            self.api.send_message(
+                chat_id,
+                "<b>РАЗДЕЛ «НА СВОИХ» · СИЛА И ЧЕСТЬ</b>\n\n"
+                "Пришли сюда <b>одним сообщением</b> свою фотографию в футболке бренда, а в подписи укажи:\n"
+                "• Город\n• Модель и размер (например: <i>СИЛА И ЧЕСТЬ, размер L, 184 см / 86 кг</i>)\n\n"
+                "После проверки модератором кадр сразу появится в живой галерее Mini App.\n"
+                "Чтобы выйти — напиши <code>отмена</code>.",
+            )
+            return
         menu = self.main_menu(chat_id)
         brand = esc(self.settings.brand_name)
         seal_mark = self.emoji("sword", "⚔") if self.settings.inline_emoji_enabled else "⚔"
@@ -5748,7 +6039,13 @@ class BrandBot:
     def admin_summary(self, chat_id: int) -> None:
         """Сводка без смешения показателей: деньги, работа и база отдельно."""
         stats = self.db.stats()
+        funnel = self.db.miniapp_funnel_stats()
         paid_amount = int(stats.get("paid_amount") or 0)
+        sizes_line = (
+            ", ".join(f"{esc(sz)} ×{cnt}" for sz, cnt in funnel["top_sizes"])
+            if funnel["top_sizes"]
+            else "пока нет выборов"
+        )
         text = (
             "<b>СВОДКА МАГАЗИНА</b>\n\n"
             f"{ICON['pay']} Оплачено покупок: {stats['paid']}\n"
@@ -5758,6 +6055,12 @@ class BrandBot:
             f"{ICON['orders']} Покупок всего: {stats['orders']} · сегодня: {stats['orders_today']}\n"
             f"{ICON['wait']} В листе ожидания: {stats['waitlist']}\n"
             f"{ICON['trophy']} Приведено друзей: {stats['referrals']}\n\n"
+            "<b>ВОРОНКА MINI APP</b>\n"
+            f"• Открытий витрины: {funnel['opens']} · карточек: {funnel['product_views']}\n"
+            f"• Сравнений кроя: {funnel['compares']} · комплектов: {funnel['bundles']} · сторис: {funnel['stories']}\n"
+            f"• Переходов к менеджеру: {funnel['dm_clicks']} · заявок-страховок: {funnel['leads_total']} (подтв. {funnel['leads_confirmed']})\n"
+            f"• Топ размеров: {sizes_line}\n"
+            f"• Клуб «7 дней слова»: {funnel['club_members']} участн.\n\n"
             f"{ICON['account']} В базе: {stats['users']} · с номером: {stats['contacts']} · "
             f"с согласием: {stats['consents']}"
         )
@@ -7484,6 +7787,27 @@ class BrandBot:
             if len(parts) != 3 or not parts[1] or not parts[2]:
                 return False
             self.restock_reply(chat_id, parts[1], parts[2])
+        elif data.startswith("lead_confirm:") and (self.is_admin(user_id) or chat_id == self.settings.manager_chat_id):
+            try:
+                lead_id = int(data.split(":", 1)[1])
+            except ValueError:
+                return False
+            self.confirm_manager_lead(chat_id, lead_id)
+        elif data.startswith("comm_pub:") and (self.is_admin(user_id) or chat_id == self.settings.manager_chat_id):
+            parts = data.split(":", 2)
+            if len(parts) != 3:
+                return False
+            try:
+                sub_id = int(parts[1])
+            except ValueError:
+                return False
+            self.publish_community_submission(chat_id, sub_id, parts[2])
+        elif data.startswith("comm_rej:") and (self.is_admin(user_id) or chat_id == self.settings.manager_chat_id):
+            try:
+                sub_id = int(data.split(":", 1)[1])
+            except ValueError:
+                return False
+            self.reject_community_submission(chat_id, sub_id)
         elif data.startswith("adm:") and self.is_admin(user_id):
             action = data.split(":", 1)[1]
             if action == "add":
@@ -7710,6 +8034,15 @@ class BrandBot:
             self.start(chat_id, user, text.partition(" ")[2].strip())
             return
         self.db.upsert_user(user)
+        # Админ-команда /setvoice (ответом на голосовое или аудио) и /clearvoice
+        if text in ("/setvoice", "/clearvoice") and self.is_admin(user_id):
+            self.handle_founder_voice_command(chat_id, message, clear=(text == "/clearvoice"))
+            return
+        # Приём фото покупателя в раздел «На своих»
+        current_state = self.db.get_state(user_id)
+        if current_state and current_state[0] == "awaiting_community_photo" and message.get("photo"):
+            self.receive_community_photo(chat_id, user, message)
+            return
         if self.db.get_state(user_id) and self.handle_add_product_text(chat_id, user_id, text):
             return
         if self.handle_faq_text(chat_id, user_id, text):
@@ -7789,6 +8122,13 @@ class BrandBot:
             if text:
                 self.ask_broadcast_segment(chat_id, text)
                 return
+        if name == "awaiting_community_photo":
+            self.api.send_message(
+                chat_id,
+                "Жду именно <b>фотографию</b> (не как файл, а обычным фото) с подписью города и размера.\n"
+                "Для выхода напиши <code>отмена</code>.",
+            )
+            return
         # Состояние неизвестное или пустое: не держим человека в подвешенном.
         self.db.clear_state(user_id)
         self.stale(chat_id, "Не понял, на каком шаге мы остановились.")
@@ -7820,10 +8160,273 @@ class BrandBot:
             return False
         return True
 
+    def handle_founder_voice_command(self, chat_id: int, message: dict[str, Any], clear: bool = False) -> None:
+        if clear:
+            with self.catalog.lock:
+                data = dict(self.catalog.data)
+                media = dict(data.get("media") or {})
+                media.pop("founder_voice", None)
+                data["media"] = media
+                self.catalog.save(data)
+            self.api.send_message(chat_id, "Голосовое обращение основателя убрано из манифеста.")
+            return
+        reply = message.get("reply_to_message") if isinstance(message.get("reply_to_message"), dict) else {}
+        voice_obj = reply.get("voice") or reply.get("audio")
+        if not isinstance(voice_obj, dict) or not voice_obj.get("file_id"):
+            self.api.send_message(
+                chat_id,
+                "Ответь командой <code>/setvoice</code> на голосовое сообщение (или аудио) — "
+                "оно сразу появится в блоке «Слово основателя» в Mini App.\n"
+                "Убрать запись: <code>/clearvoice</code>.",
+            )
+            return
+        ext = ".ogg" if reply.get("voice") else ".mp3"
+        rel_path = f"assets/audio/founder-voice{ext}"
+        dest = BASE_DIR / "miniapp" / rel_path
+        if not self.api.download_file(str(voice_obj["file_id"]), dest, max_bytes=8 * 1024 * 1024):
+            self.api.send_message(chat_id, "Не удалось скачать аудиофайл из Telegram.")
+            return
+        with self.catalog.lock:
+            data = dict(self.catalog.data)
+            media = dict(data.get("media") or {})
+            media["founder_voice"] = rel_path
+            data["media"] = media
+            self.catalog.save(data)
+        self.api.send_message(chat_id, "Готово — голосовое слово основателя подключено в Mini App.")
+
+    def receive_community_photo(self, chat_id: int, user: dict[str, Any], message: dict[str, Any]) -> None:
+        photos = message.get("photo")
+        if not isinstance(photos, list) or not photos:
+            return
+        best = photos[-1]
+        file_id = str(best.get("file_id") or "")
+        if not file_id:
+            return
+        caption = str(message.get("caption") or "").strip()
+        sub_id = self.db.create_community_submission(user, file_id, caption)
+        self.db.clear_state(int(user["id"]))
+        self.api.send_message(
+            chat_id,
+            "<b>КАДР ПРИНЯТ НА ПРОВЕРКУ</b>\n\n"
+            "Спасибо, свой. Как только модератор одобрит фото, пришлём уведомление, "
+            "и образ сразу появится в галерее «На своих».",
+            self.buyer_reply_keyboard(chat_id),
+        )
+        targets = set(self.settings.admin_ids)
+        if self.settings.manager_chat_id:
+            targets.add(self.settings.manager_chat_id)
+        who = f"@{user['username']}" if user.get("username") else str(user.get("first_name") or user["id"])
+        mod_caption = (
+            f"<b>ФОТО В «НА СВОИХ» · ЗАЯВКА №{sub_id}</b>\n"
+            f"От: {esc(who)} (ID <code>{int(user['id'])}</code>)\n"
+            + (f"Подпись: {esc(caption)}\n" if caption else "Подпись не указана\n")
+            + "\nВыбери модель, чтобы сразу опубликовать кадр в Mini App:"
+        )
+        markup = inline_keyboard([
+            [("✅ В «Свои» · СИЛА И ЧЕСТЬ", f"comm_pub:{sub_id}:tee-sila-i-chest")],
+            [("✅ В «Свои» · ВЗГЛЯД", f"comm_pub:{sub_id}:tee-vzglyad")],
+            [("✖ Отклонить", f"comm_rej:{sub_id}")],
+        ])
+        for target in targets:
+            try:
+                self.api.send_photo(target, file_id, mod_caption, markup)
+            except Exception as exc:
+                LOG.warning("Could not send community submission %s to %s: %s", sub_id, target, exc)
+
+    def publish_community_submission(self, chat_id: int, sub_id: int, product_id: str) -> None:
+        sub = self.db.get_community_submission(sub_id)
+        if not sub:
+            self.api.send_message(chat_id, "Заявка не найдена.")
+            return
+        if str(sub["status"]) == "published":
+            self.api.send_message(chat_id, f"Заявка №{sub_id} уже опубликована.")
+            return
+        rel = f"assets/community/look-{sub_id}-{int(time.time())}.jpg"
+        dest = BASE_DIR / "miniapp" / rel
+        if not self.api.download_file(str(sub["file_id"]), dest):
+            self.api.send_message(chat_id, "Не удалось сохранить фото с серверов Telegram.")
+            return
+        product = self.catalog.get_any(product_id)
+        raw_cap = str(sub["caption"] or "").strip()
+        city = str(sub["first_name"] or "СВОЙ ЧЕЛОВЕК").upper()
+        fit_note = raw_cap[:140] if raw_cap else "Образ покупателя первого выпуска"
+        entry = {
+            "image": rel,
+            "name": str(sub["first_name"] or "Участник дропа"),
+            "caption": str((product or {}).get("name") or "СИЛА И ЧЕСТЬ"),
+            "city": city,
+            "fit_note": fit_note,
+            "product_id": product_id if product else "tee-sila-i-chest",
+        }
+        with self.catalog.lock:
+            data = dict(self.catalog.data)
+            comm = list(data.get("community") or [])
+            comm.insert(0, entry)
+            data["community"] = comm[:24]
+            self.catalog.save(data)
+        self.db.set_community_submission_status(sub_id, "published", product_id)
+        self.api.send_message(chat_id, f"✅ Кадр №{sub_id} опубликован в разделе «На своих» Mini App.")
+        try:
+            self.api.send_message(
+                int(sub["user_id"]),
+                "<b>ТВОЙ КАДР В «НА СВОИХ» ✓</b>\n\n"
+                "Модератор одобрил фото — оно уже в живой галерее Mini App СИЛА И ЧЕСТЬ.",
+            )
+        except Exception:
+            pass
+
+    def reject_community_submission(self, chat_id: int, sub_id: int) -> None:
+        sub = self.db.get_community_submission(sub_id)
+        if not sub:
+            self.api.send_message(chat_id, "Заявка не найдена.")
+            return
+        self.db.set_community_submission_status(sub_id, "rejected")
+        self.api.send_message(chat_id, f"Заявка №{sub_id} отклонена.")
+
+    def confirm_manager_lead(self, chat_id: int, lead_id: int) -> None:
+        lead = self.db.get_lead(lead_id)
+        if not lead:
+            self.api.send_message(chat_id, "Заявка не найдена.")
+            return
+        if str(lead["status"]) == "confirmed" and lead["order_id"]:
+            self.api.send_message(chat_id, f"Заявка №{lead_id} уже подтверждена (Заказ №{int(lead['order_id'])}).")
+            return
+        uid = lead["user_id"]
+        if not uid:
+            self.db.mark_lead_confirmed(lead_id, 0)
+            self.api.send_message(chat_id, f"Заявка №{lead_id} отмечена подтверждённой (клиент открывал витрину из браузера без Telegram ID).")
+            return
+        try:
+            items = json.loads(str(lead["items_json"] or "[]"))
+        except Exception:
+            items = []
+        created_ids: list[int] = []
+        for idx, item in enumerate(items if isinstance(items, list) and items else [{"id": "tee-sila-i-chest", "size": "L", "qty": 1}]):
+            prod = self.catalog.get_any(str(item.get("id") or "tee-sila-i-chest")) or {
+                "id": str(item.get("id") or "tee-sila-i-chest"),
+                "name": str(item.get("name") or "СИЛА И ЧЕСТЬ"),
+                "price": "4 200 ₽",
+            }
+            qty = max(1, int(item.get("qty") or 1))
+            try:
+                unit_rub = parse_price_strict(prod.get("price"))
+            except Exception:
+                unit_rub = 0
+            oid, _ = self.db.create_order(
+                request_id=f"lead-{lead_id}-{idx}",
+                user_id=int(uid),
+                product=prod,
+                size=str(item.get("size") or "L"),
+                phone=str(lead["phone"] or ""),
+                quantity=qty,
+                note=str(lead["gift_wrap"] or ""),
+                status="confirmed",
+                amount_rub=unit_rub * qty,
+            )
+            created_ids.append(oid)
+        first_oid = created_ids[0] if created_ids else 0
+        self.db.mark_lead_confirmed(lead_id, first_oid)
+        nums = ", ".join(f"№{i}" for i in created_ids)
+        self.api.send_message(
+            chat_id,
+            f"✅ Заявка №{lead_id} зарегистрирована ({nums}). Покупателю открыта цифровая «Карта владельца».",
+        )
+        try:
+            self.api.send_message(
+                int(uid),
+                f"<b>ЗАКАЗ {nums} ПОДТВЕРЖДЁН ✓</b>\n\n"
+                "Менеджер зарегистрировал твой заказ в реестре выпуска 001. "
+                "В профиле Mini App теперь доступна именная <b>«Карта владельца»</b>.",
+            )
+        except Exception:
+            pass
+
+    def flush_club_reminders(self) -> None:
+        now_msk = club_now()
+        today = now_msk.date().isoformat()
+        hour = now_msk.hour
+        due_users = self.db.due_club_reminders(today, hour)
+        if not due_users:
+            return
+        bot_uname = str(getattr(self, "bot_username", "") or self.db.kv_get("bot_username") or "SilaIChestBot")
+        club_url = f"https://t.me/{bot_uname}?startapp=club"
+        markup = {"inline_keyboard": [[{"text": "⚔ Отметить день в клубе", "url": club_url}]]}
+        for uid in due_users:
+            state = self.db.club_state(uid)
+            day_num = min(int(state.get("total") or 0) + 1, 7)
+            self.db.enqueue_message(
+                f"club-rem:{uid}:{today}",
+                uid,
+                f"<b>7 ДНЕЙ СЛОВА · ДЕНЬ 0{day_num}</b>\n\n"
+                "Дисциплина проверяется без зрителей. Закрой сегодняшнее задание и поставь отметку в клубе.",
+                markup,
+            )
+
+    def handle_inline_query(self, iq: dict[str, Any]) -> None:
+        qid = str(iq.get("id") or "")
+        if not qid:
+            return
+        query = str(iq.get("query") or "").strip().lower()
+        origin = self.settings.public_origin() or "https://sila.theatralka.ru"
+        bot_uname = str(getattr(self, "bot_username", "") or self.db.kv_get("bot_username") or "SilaIChestBot")
+        cards = [
+            (
+                "tee-sila-i-chest",
+                "Футболка «СИЛА И ЧЕСТЬ» · 4 200 ₽",
+                "Прямой свободный крой · Хлопок пенье 250 г/м² · Клинок НВ вдоль спины",
+                f"{origin}/assets/client/sila-collage-20261111c.jpg",
+                f"<b>СИЛА И ЧЕСТЬ · ВЫПУСК 001</b>\nПрямой свободный крой · Хлопок 250 г/м² · 4 200 ₽\nСтальной жетон № 00001–00100 — в подарок первой сотне.",
+            ),
+            (
+                "tee-vzglyad",
+                "Футболка «ВЗГЛЯД» · 3 900 ₽",
+                "Прилегающий атлетический крой · 10 принципов на спине · Предзаказ",
+                f"{origin}/assets/client/vzglyad-collage-20261111c.jpg",
+                f"<b>ВЗГЛЯД · ВЫПУСК 001</b>\nПрилегающий атлетический крой · Хлопок 250 г/м² · 3 900 ₽\nПредзаказ первого дропа бренда Никиты Ворожбитова.",
+            ),
+            (
+                "tag-sila-i-chest",
+                "Стальной жетон № 00001–00100 · Подарок",
+                "Шлифованная сталь 2 мм на шариковой цепи · Не продаётся отдельно",
+                f"{origin}/assets/client/tag-collage-20261111c.jpg",
+                f"<b>ЗНАК СВОИХ · ЖЕТОН ПЕРВОЙ СОТНИ</b>\nШлифованная сталь 2 мм с гравировкой номера · 0 ₽ к заказу из первой сотни.",
+            ),
+            (
+                "drop",
+                "Витрина «СИЛА И ЧЕСТЬ» · Первый дроп 001",
+                "Две футболки. Два характера. Одежда Никиты Ворожбитова.",
+                f"{origin}/assets/client/og-preview-20261112c.jpg",
+                f"<b>СИЛА И ЧЕСТЬ · ПЕРВЫЙ ДРОП 001</b>\nДве футболки. Два характера. Первый выпуск бренда Никиты Ворожбитова.",
+            ),
+        ]
+        results = []
+        for cid, title, desc, photo_url, cap in cards:
+            if query and query not in title.lower() and query not in desc.lower():
+                continue
+            start_arg = cid if cid != "drop" else ""
+            deep = f"https://t.me/{bot_uname}" + (f"?startapp={start_arg}" if start_arg else "")
+            results.append({
+                "type": "photo",
+                "id": cid,
+                "photo_url": photo_url,
+                "thumbnail_url": photo_url,
+                "title": title,
+                "description": desc,
+                "caption": cap,
+                "parse_mode": "HTML",
+                "reply_markup": {"inline_keyboard": [[{"text": "Открыть в СИЛА И ЧЕСТЬ ↗", "url": deep}]]},
+            })
+        try:
+            self.api.call("answerInlineQuery", {"inline_query_id": qid, "results": results[:10], "cache_time": 60})
+        except Exception as exc:
+            LOG.warning("answerInlineQuery failed: %s", exc)
+
     def handle_update(self, update: dict[str, Any]) -> bool:
         try:
             if "pre_checkout_query" in update:
                 self.handle_pre_checkout(update["pre_checkout_query"])
+            elif "inline_query" in update:
+                self.handle_inline_query(update["inline_query"])
             elif "callback_query" in update:
                 self.handle_callback(update["callback_query"])
             elif "message" in update:
@@ -8144,28 +8747,34 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         self._json(result)
 
     def _waitlist(self) -> None:
-        if not self.db or not self.catalog or not self.settings or not self.settings.token:
-            self._json({"error": "Открой витрину из бота."}, 401)
+        if not self.db or not self.catalog:
+            self._json({"error": "Сервис временно недоступен."}, 503)
             return
         user = self._webapp_user()
-        if not user:
-            self._json({"error": "Открой витрину из бота."}, 401)
-            return
         if not self._rate_ok(CHECKOUT_LIMITER, "waitlist", user):
             return
         payload = self._read_json_body() or {}
-        product = self.catalog.get(str(payload.get("product_id") or ""))
+        pid = str(payload.get("product_id") or "")
+        product = self.catalog.get(pid) or self.catalog.get_any(pid)
         size = str(payload.get("size") or "")
         if not product or size not in {str(item) for item in product.get("sizes", [])}:
             self._json({"error": "Вещь или размер недоступны."}, 400)
             return
+        if not user:
+            # Гость в браузере вне Telegram: фиксируем интерес в воронке и подсказываем бота
+            self.db.event(None, "miniapp_waitlist_guest", {"product_id": pid, "size": size})
+            self._json({"ok": True, "added": True, "via": "guest"})
+            return
         self.db.upsert_user(user)
         added = self.db.add_to_waitlist(int(user["id"]), product, size)
-        self._json({"ok": True, "added": added})
+        self.db.event(int(user["id"]), "miniapp_waitlist", {"product_id": pid, "size": size})
+        self._json({"ok": True, "added": added, "via": "bot"})
 
     def _club_get(self) -> None:
+        active_members = self.db.club_members_count() if self.db else 0
         empty = {"joined": False, "started_on": "", "checkins": [], "total": 0,
-                 "completed": False, "early_access": False}
+                 "completed": False, "early_access": False, "reminder_hour": None,
+                 "active_members": active_members}
         if not self.db or not self.settings or not self.settings.token:
             self._json({"ok": True, "club": empty, "source": "preview"})
             return
@@ -8189,14 +8798,133 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             return
         payload = self._read_json_body() or {}
         action = str(payload.get("action") or "")
-        if action not in {"join", "checkin"}:
+        if action not in {"join", "checkin", "reminder"}:
             self._json({"error": "Неизвестное действие клуба."}, 400)
             return
         self.db.upsert_user(user)
         user_id = int(user["id"])
-        state = self.db.club_join(user_id) if action == "join" else self.db.club_checkin(user_id)
-        self.db.event(user_id, f"club_{action}", {"total": state["total"]})
+        if action == "reminder":
+            raw_hour = payload.get("hour")
+            hour = int(raw_hour) if isinstance(raw_hour, int) and not isinstance(raw_hour, bool) and 0 <= raw_hour <= 23 else None
+            state = self.db.club_set_reminder(user_id, hour)
+            self.db.event(user_id, "club_reminder", {"hour": hour})
+        else:
+            state = self.db.club_join(user_id) if action == "join" else self.db.club_checkin(user_id)
+            self.db.event(user_id, f"club_{action}", {"total": state["total"]})
         self._json({"ok": True, "club": state, "source": "bot"})
+
+    def _verify_serial(self) -> None:
+        if not self.db:
+            self._json({"ok": False, "error": "Реестр временно недоступен."}, 503)
+            return
+        if not self._rate_ok(READ_LIMITER, "verify-serial"):
+            return
+        qs = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        raw_code = (qs.get("code") or [""])[0]
+        result = self.db.verify_serial(raw_code)
+        self._json(result, 200 if result.get("ok") else 400)
+
+    def _track_event(self) -> None:
+        if not self.db:
+            self._json({"ok": True})
+            return
+        user = self._webapp_user()
+        if not self._rate_ok(READ_LIMITER, "event", user):
+            return
+        payload = self._read_json_body() or {}
+        raw_name = re.sub(r"[^a-z0-9_]", "", str(payload.get("event") or "").lower())[:36]
+        allowed = {
+            "open", "welcome_done", "product_view", "size_select",
+            "compare_open", "bundle_add", "story_share", "manager_click",
+        }
+        if raw_name not in allowed:
+            self._json({"ok": False}, 400)
+            return
+        meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+        clean_meta = {
+            str(k)[:24]: str(v)[:48]
+            for k, v in list(meta.items())[:6]
+            if isinstance(k, str) and isinstance(v, (str, int, float, bool))
+        }
+        uid = int(user["id"]) if user and user.get("id") else None
+        self.db.event(uid, f"miniapp_{raw_name}", clean_meta)
+        self._json({"ok": True})
+
+    def _lead_capture(self) -> None:
+        if not self.db or not self.settings:
+            self._json({"ok": False}, 503)
+            return
+        user = self._webapp_user()
+        if not self._rate_ok(CHECKOUT_LIMITER, "lead", user):
+            return
+        payload = self._read_json_body() or {}
+        customer = payload.get("customer") if isinstance(payload.get("customer"), dict) else {}
+        raw_lines = payload.get("lines") if isinstance(payload.get("lines"), list) else []
+        if not raw_lines:
+            self._json({"ok": False, "error": "empty"}, 400)
+            return
+        clean_lines = []
+        for item in raw_lines[:15]:
+            if not isinstance(item, dict):
+                continue
+            clean_lines.append({
+                "id": str(item.get("id") or "")[:48],
+                "name": str(item.get("name") or "Вещь")[:80],
+                "size": str(item.get("size") or "")[:16],
+                "qty": max(1, min(20, int(item.get("qty") or 1))),
+                "price": str(item.get("price") or "")[:32],
+            })
+        if not clean_lines:
+            self._json({"ok": False, "error": "empty"}, 400)
+            return
+        if user:
+            self.db.upsert_user(user)
+        total_rub = max(0, int(payload.get("total_rub") or 0))
+        gift_wrap = str(payload.get("gift_wrap") or "")[:160]
+        bundle_label = str(payload.get("bundle_label") or "")[:80]
+        wrap_summary = " · ".join(x for x in (bundle_label, gift_wrap) if x)
+        lead_id = self.db.create_lead(user, customer, clean_lines, total_rub, wrap_summary)
+        uid = int(user["id"]) if user and user.get("id") else None
+        self.db.event(uid, "miniapp_manager_click", {"lead_id": lead_id, "total_rub": total_rub})
+        if self.api and self.settings.manager_chat_id:
+            who_parts = []
+            if user and user.get("username"):
+                who_parts.append(f"@{esc(str(user['username']))}")
+            elif user and user.get("id"):
+                who_parts.append(f'<a href="tg://user?id={int(user["id"])}">{esc(str(user.get("first_name") or "Покупатель"))}</a>')
+            if customer.get("name"):
+                who_parts.append(esc(str(customer["name"])[:60]))
+            if customer.get("phone"):
+                who_parts.append(esc(str(customer["phone"])[:32]))
+            who_line = " · ".join(who_parts) or "Гость из браузера"
+            lines_txt = "\n".join(
+                f"• {esc(it['name'])} · размер <b>{esc(it['size'])}</b> · {it['qty']} шт."
+                for it in clean_lines
+            )
+            delivery_txt = " · ".join(
+                esc(str(customer.get(k) or "").strip()[:100])
+                for k in ("deliver", "city", "address")
+                if str(customer.get(k) or "").strip()
+            )
+            msg = (
+                f"<b>⚡ ЗАЯВКА ИЗ MINI APP №{lead_id}</b>\n"
+                f"Клиент открыл чат с менеджером:\n"
+                f"👤 {who_line}\n\n"
+                f"{lines_txt}\n"
+                + (f"🎁 {esc(wrap_summary)}\n" if wrap_summary else "")
+                + f"💰 Итого за вещи: <b>{esc(format_rub(total_rub))}</b>\n"
+                + (f"🚚 {delivery_txt}\n" if delivery_txt else "")
+                + "\n<i>Страховка лида: если покупатель ещё не нажал «Отправить» в личке, контакт уже здесь.</i>"
+            )
+            markup = (
+                inline_keyboard([[("🪪 Подтвердить заказ и выдать Карту", f"lead_confirm:{lead_id}")]])
+                if uid else None
+            )
+            try:
+                self.api.send_message(self.settings.manager_chat_id, msg, markup)
+            except Exception as exc:
+                LOG.warning("Could not notify manager about lead %s: %s", lead_id, exc)
+        self._json({"ok": True, "lead_id": lead_id})
 
     def _checkout(self) -> None:
         if not self.db or not self.settings or not self.settings.token:
@@ -8364,6 +9092,9 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if path == "/api/club":
             self._club_get()
             return
+        if path == "/api/verify-serial":
+            self._verify_serial()
+            return
         if path == "/api/emoji-pack":
             pack_name = self.settings.custom_emoji_pack if self.settings else "sila_chest_merch"
             payload = {
@@ -8415,15 +9146,21 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                     "privacy_url": settings.privacy_url if settings else "",
                     "support_username": settings.support_username if settings else "",
                     "order_manager_username": order_manager_username(),
+                    "bot_username": (self.db.kv_get("bot_username") if self.db else "") or "SilaIChestBot",
                     "products": self._stamp_product_media([
                         product for product in catalog.data.get("products", []) if product.get("active", True)
+                    ]),
+                    "upcoming_products": self._stamp_product_media([
+                        product for product in catalog.data.get("products", [])
+                        if not product.get("active", True) and product.get("upcoming", False)
                     ]),
                     "categories": catalog.categories,
                     "lookbook": self._stamp_collection(catalog.data.get("lookbook", []), ("image",)),
                     "drop_event": catalog.data.get("drop_event", {}),
                     "film": self._stamp_collection(catalog.data.get("film", []), ("image", "video", "poster")),
                     "club": catalog.data.get("club", {}),
-                    "community": catalog.data.get("community", []),
+                    "club_stats": {"active_members": self.db.club_members_count() if self.db else 0},
+                    "community": self._stamp_collection(catalog.data.get("community", []), ("image", "video")),
                     "media": self._stamp_media(catalog.data.get("media", {})),
                 }
                 gift_product = catalog.get(settings.gift_product_id) if settings else None
@@ -8779,6 +9516,12 @@ class StorefrontHandler(BaseHTTPRequestHandler):
         if path == "/api/club":
             self._club_post()
             return
+        if path == "/api/event":
+            self._track_event()
+            return
+        if path == "/api/lead":
+            self._lead_capture()
+            return
         if path in {"/api/checkout", "/api/pay"} and not ONLINE_PAYMENTS_ENABLED:
             self._json({"ok": False, "error": "Онлайн-оплата временно недоступна. Оформи заказ через чат магазина."}, 409)
             return
@@ -8846,6 +9589,7 @@ def notification_loop(bot: BrandBot) -> None:
                 bot.db.expire_payments()
                 bot.db.backup_database()
                 bot.db.prune_operational_data()
+                bot.flush_club_reminders()
                 bot.flush_notifications()
             except Exception:
                 LOG.exception("Notification retry failed")
@@ -8870,7 +9614,7 @@ def polling_loop(api: TelegramAPI, bot: BrandBot) -> None:
                 {
                     "offset": offset,
                     "timeout": 10,
-                    "allowed_updates": ["message", "callback_query", "pre_checkout_query"],
+                    "allowed_updates": ["message", "callback_query", "pre_checkout_query", "inline_query"],
                 },
                 timeout=15,
             )
@@ -8966,6 +9710,11 @@ def main() -> int:
         return 1
     bot = BrandBot(settings, api, db, catalog)
     bot.bot_username = str(identity.get("username") or "")
+    if bot.bot_username:
+        try:
+            db.kv_set("bot_username", bot.bot_username)
+        except Exception:
+            pass
     LOG.info("Starting @%s for brand %s", bot.bot_username, settings.brand_name)
     try:
         # Системная кнопка «Меню» открывает команды бота: покупатель видит свой

@@ -57,7 +57,13 @@
     filmIndex: 0,
     filmTimer: null,
     ownerOrder: null,
-    dropTimer: null
+    dropTimer: null,
+    upcomingProducts: [],
+    giftWrap: loadJSON("vorozhbitov_gift_wrap", { enabled: false, motto: "Сила", recipient: "" }),
+    bundleSize: "L",
+    hotspotsVisible: true,
+    activeHotspot: -1,
+    soundEnabled: false
   };
 
   // The catalogue now spells this existing size 2XL. Preserve saved carts.
@@ -80,6 +86,82 @@
   const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   let syncClubLifterMotion = () => {};
 
+  const CLOUD_SYNC_KEYS = new Set([
+    "vorozhbitov_cart",
+    "vorozhbitov_profile",
+    "vorozhbitov_fit",
+    "vorozhbitov_club",
+    "vorozhbitov_gift_wrap"
+  ]);
+  const cloudTimers = new Map();
+
+  function queueCloudSave(key, value) {
+    if (!CLOUD_SYNC_KEYS.has(key) || !tg || !tg.CloudStorage || typeof tg.CloudStorage.setItem !== "function") return;
+    if (cloudTimers.has(key)) window.clearTimeout(cloudTimers.get(key));
+    cloudTimers.set(key, window.setTimeout(() => {
+      cloudTimers.delete(key);
+      try {
+        const serialized = JSON.stringify(value);
+        if (serialized && serialized.length <= 4000) {
+          tg.CloudStorage.setItem(key, serialized, () => {});
+        }
+      } catch (_) { /* ignore cloud quota */ }
+    }, 320));
+  }
+
+  function hydrateFromCloudStorage() {
+    if (!tg || !tg.CloudStorage || typeof tg.CloudStorage.getItems !== "function") return;
+    try {
+      tg.CloudStorage.getItems(Array.from(CLOUD_SYNC_KEYS), (err, values) => {
+        if (err || !values || typeof values !== "object") return;
+        let changed = false;
+        const parseCloud = raw => {
+          if (!raw || typeof raw !== "string") return null;
+          try { return JSON.parse(raw); } catch (_) { return null; }
+        };
+        if (!state.cart.length && values.vorozhbitov_cart) {
+          const cloudCart = Core.cleanCart(parseCloud(values.vorozhbitov_cart) || []);
+          if (cloudCart.length) {
+            state.cart = cloudCart;
+            try { localStorage.setItem("vorozhbitov_cart", JSON.stringify(cloudCart)); } catch (_) {}
+            changed = true;
+          }
+        }
+        if (profileScore(state.profile) === 0 && values.vorozhbitov_profile) {
+          const cloudProf = Core.cleanProfile(parseCloud(values.vorozhbitov_profile) || {});
+          if (profileScore(cloudProf) > 0 || cloudProf.size) {
+            state.profile = { ...state.profile, ...cloudProf };
+            try { localStorage.setItem("vorozhbitov_profile", JSON.stringify(state.profile)); } catch (_) {}
+            applyProfileToCheckout();
+            fillProfileForm();
+            changed = true;
+          }
+        }
+        if (!localStorage.getItem("vorozhbitov_fit") && values.vorozhbitov_fit) {
+          const cloudFit = parseCloud(values.vorozhbitov_fit);
+          if (cloudFit && typeof cloudFit === "object") {
+            try { localStorage.setItem("vorozhbitov_fit", JSON.stringify(cloudFit)); } catch (_) {}
+          }
+        }
+        if (!state.giftWrap?.enabled && values.vorozhbitov_gift_wrap) {
+          const cloudWrap = parseCloud(values.vorozhbitov_gift_wrap);
+          if (cloudWrap && typeof cloudWrap === "object") {
+            state.giftWrap = {
+              enabled: Boolean(cloudWrap.enabled),
+              motto: String(cloudWrap.motto || "Сила").slice(0, 32),
+              recipient: String(cloudWrap.recipient || "").slice(0, 80)
+            };
+          }
+        }
+        if (changed) {
+          updateCounters();
+          renderProducts();
+          if (state.modalStack.includes("cartModal")) renderCart();
+        }
+      });
+    } catch (_) { /* older Telegram clients */ }
+  }
+
   function loadJSON(key, fallback) {
     try {
       const parsed = JSON.parse(localStorage.getItem(key) || "null");
@@ -91,6 +173,7 @@
 
   function saveJSON(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* private mode */ }
+    queueCloudSave(key, value);
   }
 
   const checkoutClient = window.ShopCheckout.createClient({
@@ -111,10 +194,81 @@
     try {
       const hap = tg && tg.HapticFeedback;
       if (!hap) return;
-      if (kind === "success") hap.notificationOccurred("success");
-      else if (kind === "error") hap.notificationOccurred("error");
-      else hap.impactOccurred(kind || "light");
+      if (kind === "selection") {
+        if (typeof hap.selectionChanged === "function") hap.selectionChanged();
+        else hap.impactOccurred("light");
+      } else if (kind === "success" || kind === "error" || kind === "warning") {
+        hap.notificationOccurred(kind);
+      } else {
+        hap.impactOccurred(kind || "light");
+      }
     } catch (_) { /* browser */ }
+  }
+
+  function trackEvent(event, meta = {}) {
+    try {
+      const headers = { "Content-Type": "application/json", Accept: "application/json" };
+      if (tg && tg.initData) headers["X-Telegram-Init-Data"] = tg.initData;
+      fetch("/api/event", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ event, meta }),
+        keepalive: true
+      }).catch(() => {});
+    } catch (_) { /* telemetry is strictly non-blocking */ }
+  }
+
+  function activeGiftWrap() {
+    const gw = state.giftWrap;
+    if (!gw || !gw.enabled) return null;
+    return {
+      enabled: true,
+      motto: String(gw.motto || "Сила").trim().slice(0, 32),
+      recipient: String(gw.recipient || "").trim().slice(0, 80)
+    };
+  }
+
+  function giftWrapSummaryText() {
+    const gw = activeGiftWrap();
+    if (!gw) return "";
+    return `Подарочная подача${gw.motto ? ` · вкладыш «${gw.motto}»` : ""}${gw.recipient ? ` · для: ${gw.recipient}` : ""}`;
+  }
+
+  function activeBundleLabel(pairs) {
+    const ids = new Set((pairs || []).map(p => (p.product && p.product.id) || (p.item && p.item.id) || p.id));
+    if (ids.has("tee-sila-i-chest") && ids.has("tee-vzglyad")) {
+      return "ОБА ХАРАКТЕРА (обе модели выпуска 001)";
+    }
+    return "";
+  }
+
+  function sendLeadBackup({ lines = [], totalRub = 0, customer = {}, giftWrap = "", bundleLabel = "" }) {
+    try {
+      if (!Array.isArray(lines) || !lines.length) return;
+      const headers = { "Content-Type": "application/json", Accept: "application/json" };
+      if (tg && tg.initData) headers["X-Telegram-Init-Data"] = tg.initData;
+      fetch("/api/lead", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          lines,
+          total_rub: Math.max(0, Math.round(Number(totalRub) || 0)),
+          customer,
+          gift_wrap: String(giftWrap || "").slice(0, 160),
+          bundle_label: String(bundleLabel || "").slice(0, 80)
+        }),
+        keepalive: true
+      }).catch(() => {});
+    } catch (_) { /* backup lead never blocks redirect */ }
+  }
+
+  function updateDeliveryAddressPlaceholder(deliver, inputEl) {
+    if (!inputEl) return;
+    const mode = String(deliver || "СДЭК");
+    if (mode === "СДЭК Курьер") inputEl.placeholder = "Улица, дом, квартира для курьера СДЭК";
+    else if (mode === "Яндекс") inputEl.placeholder = "Адрес ПВЗ Яндекс Маркета или улица и дом";
+    else if (mode === "Почта России") inputEl.placeholder = "Индекс и адрес отделения Почты России";
+    else inputEl.placeholder = "Адрес удобного ПВЗ СДЭК или улица и дом";
   }
 
   function imagesFor(product) {
@@ -190,6 +344,7 @@
     }
     if ($("#profileFill")) $("#profileFill").textContent = `${profileScore(profile)} / 5`;
     $$("#profileDeliver .filter-chip").forEach(node => node.classList.toggle("active", node.dataset.profileDeliver === (profile.deliver || "СДЭК")));
+    updateDeliveryAddressPlaceholder(profile.deliver || "СДЭК", $("#profileAddress"));
     if ($("#profileCartN")) $("#profileCartN").textContent = String(state.cart.reduce((sum, item) => sum + Number(item.qty || 0), 0));
   }
 
@@ -310,6 +465,7 @@
       state.deliver = profile.deliver;
       $$("#deliverRow .filter-chip").forEach(node => { const active = node.dataset.deliver === profile.deliver; node.classList.toggle("active", active); node.setAttribute("aria-pressed", String(active)); });
     }
+    updateDeliveryAddressPlaceholder(state.deliver, $("#checkoutAddress"));
   }
 
   function persistProfile(profile, pushToBot) {
@@ -336,9 +492,30 @@
     showToast("Профиль сохранён. В заказе подставится сам.");
   }
 
+  function syncHomeScreenStatus() {
+    const btn = $("#addHomeScreenBtn");
+    const note = $("#homeScreenStatus");
+    if (!btn || !note) return;
+    if (tg && typeof tg.checkHomeScreenStatus === "function") {
+      try {
+        tg.checkHomeScreenStatus(status => {
+          if (status === "added") {
+            btn.textContent = "НА ЭКРАНЕ ✓";
+            btn.disabled = true;
+            note.textContent = "Ярлык «СИЛА И ЧЕСТЬ» уже добавлен на рабочий стол телефона.";
+          } else {
+            btn.disabled = false;
+            btn.textContent = "ДОБАВИТЬ ↗";
+          }
+        });
+      } catch (_) { /* ignore */ }
+    }
+  }
+
   function openProfile() {
     fillProfileForm();
     loadProfileOrders();
+    syncHomeScreenStatus();
     openModal("profileModal");
     haptic("light");
   }
@@ -427,11 +604,17 @@
     if (id === "productModal") {
       stop3D();
       pauseProductVideo();
+      modal.classList.remove("is-scrolled-deep");
+      $("#sheetStickyCompact")?.classList.add("hidden");
+      state.activeHotspot = -1;
       const frame = $("#real3dFrame");
       if (frame) frame.removeAttribute("src");
     }
     if (id === "payModal") stopPayPoll();
-    if (id === "filmModal") stopFilm();
+    if (id === "filmModal") {
+      stopFilm();
+      if ($("#welcome")?.classList.contains("hidden")) stopAtmosphereSound();
+    }
     syncModalLayers();
     const previous = state.modalFocus.get(id);
     state.modalFocus.delete(id);
@@ -530,6 +713,7 @@
       button.tabIndex = active ? 0 : -1;
     });
     updateMediaPosition();
+    syncHotspots();
     if (silent) return;
     if (mode === "3d" && state.currentProduct && !real3d) start3D(state.currentProduct);
     else if (mode === "video") playProductVideo();
@@ -618,6 +802,191 @@
     </article>`;
   }
 
+  function syncBundleCard() {
+    const card = $("#bundleCard");
+    if (!card) return;
+    const sila = productById("tee-sila-i-chest");
+    const vzglyad = productById("tee-vzglyad");
+    const canBundle = Boolean(
+      state.catalogReady &&
+      sila && vzglyad &&
+      Core.buyable(sila) && Core.buyable(vzglyad) &&
+      Core.available(sila) && Core.available(vzglyad) &&
+      state.category === "all" &&
+      !state.search.trim()
+    );
+    card.classList.toggle("hidden", !canBundle);
+    if (!canBundle) return;
+    const vzSet = new Set((vzglyad.sizes || []).map(s => normalizeBodySize(s)));
+    const commonSizes = (sila.sizes || []).filter(s => vzSet.has(normalizeBodySize(s)));
+    if (!commonSizes.length) {
+      card.classList.add("hidden");
+      return;
+    }
+    const pref = normalizeBodySize(state.profile?.size || "");
+    if (!commonSizes.includes(state.bundleSize)) {
+      state.bundleSize = commonSizes.find(s => normalizeBodySize(s) === pref) || (commonSizes.includes("L") ? "L" : commonSizes[0]);
+    }
+    const sizeBox = $("#bundleSizes");
+    if (sizeBox) {
+      sizeBox.innerHTML = commonSizes.map(size => `<button type="button" data-bundle-size="${escapeHTML(size)}" class="${state.bundleSize === size ? "active" : ""}" aria-pressed="${state.bundleSize === size}">${escapeHTML(size)}${pref && normalizeBodySize(size) === pref ? '<small class="my-size-dot">МОЙ</small>' : ""}</button>`).join("");
+    }
+    const totalEl = $("#bundleTotalPrice");
+    if (totalEl) {
+      totalEl.textContent = rubles(priceNumber(sila.price) + priceNumber(vzglyad.price));
+    }
+  }
+
+  function addBundleToCart() {
+    if (state.checkoutPending) return showToast("Подожди подтверждения заказа.");
+    if (!state.catalogReady) return showToast("Подожди загрузку каталога.");
+    const gate = dropPurchaseGate();
+    if (gate) { showToast(gate); haptic("error"); return; }
+    const sila = productById("tee-sila-i-chest");
+    const vzglyad = productById("tee-vzglyad");
+    if (!sila || !vzglyad) return;
+    const chosenCanon = normalizeBodySize(state.bundleSize || "L");
+    const sSize = (sila.sizes || []).find(s => normalizeBodySize(s) === chosenCanon);
+    const vSize = (vzglyad.sizes || []).find(s => normalizeBodySize(s) === chosenCanon);
+    if (!sSize || !vSize) return showToast("Выбери доступный размер комплекта.");
+    for (const [prod, size] of [[sila, sSize], [vzglyad, vSize]]) {
+      const key = `${prod.id}::${size}`;
+      const existing = state.cart.find(item => item.key === key);
+      if (existing) {
+        existing.qty = Math.min(Core.MAX_QUANTITY, existing.qty + 1);
+      } else if (state.cart.length < 20) {
+        state.cart.push({ key, id: prod.id, size, qty: 1, person: "" });
+      }
+    }
+    saveJSON("vorozhbitov_cart", state.cart);
+    updateCounters();
+    trackEvent("bundle_add", { size: chosenCanon });
+    haptic("success");
+    showToast(`Комплект «Оба характера» (${chosenCanon}) в корзине.`);
+    openCart();
+  }
+
+  function renderCompareModal() {
+    const body = $("#compareBody");
+    if (!body) return;
+    const sila = productById("tee-sila-i-chest");
+    const vzglyad = productById("tee-vzglyad");
+    if (!sila || !vzglyad) {
+      body.innerHTML = `<p class="compare-empty">Модели первого выпуска загружаются…</p>`;
+      return;
+    }
+    const saved = savedFit();
+    const h = Number(saved.height || state.profile.height || combatSizer.height || 182);
+    const w = Number(saved.weight || combatSizer.weight || 86);
+    const recSila = Core.recommendSize({ height: h, weight: w, fit: "regular" }, sila.sizes || [])?.size || "L";
+    const recVzTight = Core.recommendSize({ height: h, weight: w, fit: "regular" }, vzglyad.sizes || [])?.size || "L";
+    const recVzRelaxed = Core.recommendSize({ height: h, weight: w, fit: "oversize" }, vzglyad.sizes || [])?.size || recVzTight;
+    body.innerHTML = `
+      <p class="compare-lead">Обе футболки отшиты из плотного хлопка 240–260 г/м², но отличаются посадкой и графикой на спине.</p>
+      <div class="compare-cards">
+        <div class="compare-col">
+          <div class="compare-photo"><img src="${escapeHTML(imageFor(sila))}" alt="${escapeHTML(sila.name)}" loading="lazy"><span class="compare-tag">${escapeHTML(sila.stock_label || "Первый тираж")}</span></div>
+          <h3>${escapeHTML(sila.name)}</h3>
+          <strong class="compare-price">${escapeHTML(sila.price)}</strong>
+          <button type="button" class="button button-primary full-button" data-compare-open="${escapeHTML(sila.id)}">ОТКРЫТЬ МОДЕЛЬ ↗</button>
+        </div>
+        <div class="compare-col">
+          <div class="compare-photo"><img src="${escapeHTML(imageFor(vzglyad))}" alt="${escapeHTML(vzglyad.name)}" loading="lazy"><span class="compare-tag is-preorder">${escapeHTML(vzglyad.stock_label || "Предзаказ")}</span></div>
+          <h3>${escapeHTML(vzglyad.name)}</h3>
+          <strong class="compare-price">${escapeHTML(vzglyad.price)}</strong>
+          <button type="button" class="button button-outline full-button" data-compare-open="${escapeHTML(vzglyad.id)}">ОТКРЫТЬ МОДЕЛЬ ↗</button>
+        </div>
+      </div>
+      <div class="compare-matrix" role="table" aria-label="Сравнение характеристик">
+        <div class="compare-row" role="row"><span class="compare-key">КРОЙ</span><div><b>Прямой свободный</b><small>Классический воздух в торсе и рукаве</small></div><div><b>Атлетический по фигуре</b><small>Плотно садится по груди и плечам</small></div></div>
+        <div class="compare-row" role="row"><span class="compare-key">СПИНА</span><div><b>Клинок на тесьме</b><small>Узкий клинок вдоль позвоночника + планка НВ</small></div><div><b>Круг 10 принципов</b><small>Монограмма НВ с мечом и устав принципов</small></div></div>
+        <div class="compare-row" role="row"><span class="compare-key">ТКАНЬ</span><div><b>240–260 г/м²</b><small>95% хлопок / 5% лайкра · держит ворот</small></div><div><b>240–260 г/м²</b><small>95% хлопок / 5% лайкра · эластичный возврат</small></div></div>
+        <div class="compare-row" role="row"><span class="compare-key">ОРИЕНТИР (${h} СМ / ${w} КГ)</span><div><b>Размер ${escapeHTML(recSila)}</b><small>Твой базовый размер без запаса</small></div><div><b>${escapeHTML(recVzTight)} / ${escapeHTML(recVzRelaxed)}</b><small>${escapeHTML(recVzTight)} — по торсу, ${escapeHTML(recVzRelaxed)} — свободнее</small></div></div>
+        <div class="compare-row" role="row"><span class="compare-key">ПОДАРОК 001</span><div><b>Стальной жетон 0 ₽</b><small>Первая сотня заказов</small></div><div><b>Стальной жетон 0 ₽</b><small>Первая сотня заказов</small></div></div>
+      </div>
+    `;
+  }
+
+  function openCompareModal() {
+    renderCompareModal();
+    openModal("compareModal");
+    trackEvent("compare_open");
+    haptic("light");
+  }
+
+  const upcomingSelectedSizes = new Map();
+
+  function renderUpcomingDrop() {
+    const section = $("#upcomingSection");
+    const grid = $("#upcomingGrid");
+    if (!section || !grid) return;
+    const items = Array.isArray(state.upcomingProducts) ? state.upcomingProducts : [];
+    section.classList.toggle("hidden", !items.length);
+    if (!items.length) {
+      grid.innerHTML = "";
+      return;
+    }
+    const waitlisted = new Set(loadJSON("vorozhbitov_waitlist", []));
+    const prefCanon = normalizeBodySize(state.profile?.size || "L");
+    grid.innerHTML = items.map(item => {
+      const sizes = Array.isArray(item.sizes) && item.sizes.length ? item.sizes : ["ONE SIZE"];
+      let activeSize = upcomingSelectedSizes.get(item.id);
+      if (!activeSize || !sizes.includes(activeSize)) {
+        activeSize = sizes.find(s => normalizeBodySize(s) === prefCanon) || sizes[Math.min(2, sizes.length - 1)] || sizes[0];
+        upcomingSelectedSizes.set(item.id, activeSize);
+      }
+      const isSaved = waitlisted.has(`${item.id}::${activeSize}`);
+      return `<article class="upcoming-card" data-upcoming-id="${escapeHTML(item.id)}">
+        <div class="upcoming-media">
+          <img src="${escapeHTML(imageFor(item))}" alt="${escapeHTML(item.name)}" loading="lazy" decoding="async">
+          <span class="upcoming-badge">${escapeHTML(item.badge || "ВЫПУСК 002")}</span>
+        </div>
+        <div class="upcoming-body">
+          <div class="upcoming-meta"><span>${escapeHTML(item.fit || "В разработке")}</span><strong>${escapeHTML(item.price || "Скоро")}</strong></div>
+          <h3>${escapeHTML(item.name)}</h3>
+          <p>${escapeHTML(item.description || "")}</p>
+          <div class="upcoming-sizes" role="group" aria-label="Размер для уведомления">
+            ${sizes.map(sz => `<button type="button" data-upcoming-size="${escapeHTML(sz)}" class="${sz === activeSize ? "active" : ""}">${escapeHTML(sz)}</button>`).join("")}
+          </div>
+          <button type="button" class="button ${isSaved ? "button-ghost is-saved" : "button-outline"} full-button" data-upcoming-waitlist="${escapeHTML(item.id)}">${isSaved ? `В ЛИСТЕ ОЖИДАНИЯ · ${escapeHTML(activeSize)} ✓` : `УЗНАТЬ ПЕРВЫМ · ${escapeHTML(activeSize)}`}</button>
+        </div>
+      </article>`;
+    }).join("");
+  }
+
+  async function submitUpcomingWaitlist(productId, buttonEl) {
+    const item = (state.upcomingProducts || []).find(p => p.id === productId);
+    if (!item) return;
+    const size = upcomingSelectedSizes.get(productId) || (item.sizes && item.sizes[0]) || "ONE SIZE";
+    if (buttonEl) buttonEl.disabled = true;
+    try {
+      const headers = { Accept: "application/json", "Content-Type": "application/json" };
+      if (tg && tg.initData) headers["X-Telegram-Init-Data"] = tg.initData;
+      const response = await fetch("/api/waitlist", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ product_id: productId, size })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось записать в лист ожидания.");
+      const list = loadJSON("vorozhbitov_waitlist", []);
+      const key = `${productId}::${size}`;
+      if (!list.includes(key)) list.push(key);
+      saveJSON("vorozhbitov_waitlist", list);
+      renderUpcomingDrop();
+      haptic("success");
+      if (data.via === "guest") {
+        showToast("Записали интерес! Открой бота @SilaIChestBot, чтобы получить личное уведомление.");
+      } else {
+        showToast(`Сообщим в боте о выходе «${item.name}» (${size}).`);
+      }
+    } catch (err) {
+      haptic("error");
+      showToast(err.message || "Попробуй ещё раз чуть позже.");
+      if (buttonEl) buttonEl.disabled = false;
+    }
+  }
+
   function renderProducts() {
     const buyableTotal = (state.data.products || []).filter(Core.buyable).length;
     $(".catalog-tools")?.classList.toggle("hidden", buyableTotal <= 4);
@@ -626,6 +995,12 @@
     $("#productCount").textContent = Core.productCount(products.length);
     root.innerHTML = products.map(renderProductCard).join("");
     $("#emptyState").classList.toggle("hidden", products.length > 0 || !state.catalogReady);
+    const compareBtn = $("#openCompareBtn");
+    if (compareBtn) {
+      const hasBothTees = Boolean(productById("tee-sila-i-chest") && productById("tee-vzglyad"));
+      compareBtn.classList.toggle("hidden", !hasBothTees);
+    }
+    syncBundleCard();
     iconize(root);
     updateCounters();
   }
@@ -672,14 +1047,83 @@
     $("#spinToggle").setAttribute("aria-pressed", String(rotating));
   }
 
+  const PRODUCT_HOTSPOTS = {
+    "tee-sila-i-chest": [
+      { x: 50, y: 19, code: "01", title: "Усиленная горловина НВ", text: "Плотная рибана держит форму ворота после тренировок и стирок; сзади — фирменная планка с монограммой.", targetIndex: 2 },
+      { x: 50, y: 38, code: "02", title: "Уставной принт на груди", text: "Стойкая шелкография «СИЛА И ЧЕСТЬ» — чёткий контур букв без плёночного блеска.", targetIndex: 0 },
+      { x: 30, y: 50, code: "03", title: "Хлопок 240–260 г/м² + клинок", text: "Тяжёлое полотно 95% хлопок / 5% лайкра. Вдоль спины — узкий клинок на фактурной тесьме.", targetIndex: 3 },
+      { x: 35, y: 80, code: "04", title: "Жаккардовая бирка 001", text: "Тканый шеврон с белой монограммой НВ на нижнем срезе каждого экземпляра.", targetIndex: 4 }
+    ],
+    "tee-vzglyad": [
+      { x: 33, y: 24, code: "01", title: "Атлетическая линия плеча", text: "Выверенный рукав и пройма подчёркивают дельты и грудь без сковывания движений.", targetIndex: 2 },
+      { x: 50, y: 39, code: "02", title: "Графика «ВЗГЛЯД»", text: "Контрастный принт взгляда, девиз бренда и монограмма НВ с мечом по центру груди.", targetIndex: 4 },
+      { x: 67, y: 51, code: "03", title: "Круг из 10 принципов", text: "На спине — монограмма с мечом в кольце принципов: Сила, Честь, Дом, Семья, Воля, Дисциплина.", targetIndex: 5 },
+      { x: 35, y: 80, code: "04", title: "Шеврон подлинности НВ", text: "Фирменная жаккардовая нашивка первого выпуска на подоле изделия.", targetIndex: 6 }
+    ]
+  };
+
+  function renderHotspotCard() {
+    const card = $("#hotspotCard");
+    const product = state.currentProduct;
+    if (!card) return;
+    const spots = (product && PRODUCT_HOTSPOTS[product.id]) || [];
+    const spot = spots[state.activeHotspot];
+    const show = Boolean(
+      spot &&
+      state.hotspotsVisible &&
+      state.stage === "photo" &&
+      state.galleryGroup === "studio" &&
+      state.galleryIndex === 0
+    );
+    card.classList.toggle("hidden", !show);
+    if (!show) {
+      card.innerHTML = "";
+      return;
+    }
+    const canJump = Number.isInteger(spot.targetIndex) && spot.targetIndex > 0 && spot.targetIndex < galleryImages(product).length;
+    card.innerHTML = `
+      <div class="hotspot-card-head">
+        <span>УЗЕЛ ${escapeHTML(spot.code)}</span>
+        <button type="button" class="hotspot-card-close" data-hotspot-close aria-label="Скрыть описание узла">×</button>
+      </div>
+      <strong>${escapeHTML(spot.title)}</strong>
+      <p>${escapeHTML(spot.text)}</p>
+      ${canJump ? `<button type="button" class="hotspot-card-jump" data-hotspot-jump="${spot.targetIndex}">ОТКРЫТЬ МАКРО-КАДР ↗</button>` : ""}
+    `;
+  }
+
+  function syncHotspots() {
+    const layer = $("#stageHotspots");
+    const toggle = $("#hotspotToggle");
+    const product = state.currentProduct;
+    if (!layer || !toggle) return;
+    const spots = (product && PRODUCT_HOTSPOTS[product.id]) || [];
+    const eligible = Boolean(spots.length && state.stage === "photo" && state.galleryGroup === "studio" && state.galleryIndex === 0);
+    toggle.classList.toggle("hidden", !eligible);
+    if (!eligible) {
+      layer.classList.add("hidden");
+      $("#hotspotCard")?.classList.add("hidden");
+      return;
+    }
+    toggle.textContent = state.hotspotsVisible ? `УЗЛЫ 0${spots.length}` : "УЗЛЫ СКРЫТЫ";
+    toggle.setAttribute("aria-pressed", String(state.hotspotsVisible));
+    layer.classList.toggle("hidden", !state.hotspotsVisible);
+    if (state.hotspotsVisible) {
+      layer.innerHTML = spots.map((spot, idx) => `<button type="button" class="hotspot-pin ${state.activeHotspot === idx ? "active" : ""}" style="left:${spot.x}%;top:${spot.y}%;" data-hotspot-idx="${idx}" aria-label="Узел ${escapeHTML(spot.code)}: ${escapeHTML(spot.title)}"><span>${escapeHTML(spot.code)}</span></button>`).join("");
+    }
+    renderHotspotCard();
+  }
+
   function renderGallery(product) {
     const images = galleryImages(product);
     state.galleryIndex = 0;
+    state.activeHotspot = -1;
     $("#mediaError").classList.add("hidden");
     $(".sheet-image").classList.toggle("source-media", state.galleryGroup === "source");
     $("#sheetImage").src = images[0];
     $("#sheetImage").alt = `${product.name} — ${galleryLabel(product, 0)}`;
     $("#galleryDots").innerHTML = images.map((src, index) => `<button type="button" data-gallery="${index}" class="${index === 0 ? "active" : ""}" aria-pressed="${index === 0}" aria-label="${escapeHTML(galleryLabel(product, index))}"><span aria-hidden="true">${String(index + 1).padStart(2, "0")}</span><img src="${escapeHTML(src)}" alt="" decoding="async"></button>`).join("");
+    syncHotspots();
   }
 
   function setGallery(index) {
@@ -688,6 +1132,7 @@
     const images = galleryImages(product);
     $("#mediaError").classList.add("hidden");
     state.galleryIndex = (index + images.length) % images.length;
+    if (state.galleryIndex !== 0) state.activeHotspot = -1;
     const sheetImg = $("#sheetImage");
     if (sheetImg) {
       sheetImg.style.opacity = "0.7";
@@ -700,6 +1145,7 @@
       node.setAttribute("aria-pressed", String(i === state.galleryIndex));
     });
     updateMediaPosition();
+    syncHotspots();
   }
 
   function stepMedia(delta) {
@@ -737,6 +1183,28 @@
       directBtn.style.marginBottom = gift ? "0" : "8px";
       const isPreorder = /предзаказ/i.test(`${product?.badge || ""} ${product?.stock_label || ""}`);
       directBtn.innerHTML = gift ? "ВЫБРАТЬ ФУТБОЛКУ С ПОДАРКОМ ↗" : blocked ? "ЖДЁМ ПОПОЛНЕНИЕ" : isPreorder ? "ОФОРМИТЬ ПРЕДЗАКАЗ В TELEGRAM ↗" : "ОФОРМИТЬ ЗАКАЗ В TELEGRAM ↗";
+    }
+    const stickyBar = $("#sheetStickyCompact");
+    if (stickyBar) {
+      if (product && !gift) {
+        if ($("#stickyThumb")) {
+          $("#stickyThumb").src = imageFor(product);
+          $("#stickyThumb").alt = product.name;
+        }
+        if ($("#stickyModelName")) $("#stickyModelName").textContent = product.name;
+        if ($("#stickySizePrice")) {
+          $("#stickySizePrice").textContent = state.selectedSize
+            ? `${priceLabel} · размер ${state.selectedSize}`
+            : `${priceLabel} · выбери размер`;
+        }
+        const stickyBtn = $("#stickyOrderBtn");
+        if (stickyBtn) {
+          stickyBtn.disabled = blocked;
+          stickyBtn.textContent = state.selectedSize ? "В TELEGRAM ↗" : "РАЗМЕР ↑";
+        }
+      } else {
+        stickyBar.classList.add("hidden");
+      }
     }
   }
 
@@ -824,7 +1292,11 @@
     $("#sheetFacts").innerHTML = `${fitFact}<div class="fact-row"><span>Материал</span><span>${escapeHTML(product.material || "Уточняется")}</span></div><div class="fact-row"><span>Статус</span><span>${escapeHTML(product.stock_check_unavailable ? "Наличие уточняется" : (product.stock_label || "В наличии"))}</span></div>`;
     $("#preorderNotice").classList.toggle("hidden", !/предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`));
     renderPassport(product);
-    $("#sizeList").innerHTML = (product.sizes || []).map(size => `<button class="size-button ${state.selectedSize === size ? "selected" : ""}" data-size="${escapeHTML(size)}" aria-pressed="${state.selectedSize === size}" type="button">${escapeHTML(size)}</button>`).join("");
+    const savedCanon = normalizeBodySize((state.profile.size || "").trim());
+    $("#sizeList").innerHTML = (product.sizes || []).map(size => {
+      const isMine = Boolean(savedCanon && normalizeBodySize(size) === savedCanon);
+      return `<button class="size-button ${state.selectedSize === size ? "selected" : ""} ${isMine ? "is-my-size" : ""}" data-size="${escapeHTML(size)}" aria-pressed="${state.selectedSize === size}" type="button"><span>${escapeHTML(size)}</span>${isMine ? '<small class="my-size-pill">МОЙ</small>' : ""}</button>`;
+    }).join("");
     $("#sizeHint").textContent = product.stock_check_unavailable ? "Не удалось проверить наличие размеров. Попробуй позже." : state.selectedSize ? `Размер ${state.selectedSize} выбран.` : (product.sizes || []).length ? "Выбери размер вручную или нажми подходящий вариант в калькуляторе выше." : "Наличие размеров пока уточняется.";
     $("#sizeHint").classList.remove("error");
     const hasApparelSizes = (product.sizes || []).some(s => ["S", "M", "L", "XL", "XXL", "2XL", "3XL"].includes(String(s).toUpperCase()));
@@ -880,11 +1352,14 @@
     if (!product) return;
     rememberViewed(id);
     renderSheet(product);
+    $("#productModal")?.classList.remove("is-scrolled-deep");
+    $("#sheetStickyCompact")?.classList.add("hidden");
     openModal("productModal");
     $(".product-scroll").scrollTop = 0;
     setStage("photo");
     setGallery(Number.isInteger(photoIndex) ? photoIndex : 0);
     prefetchReal3dAssets();
+    trackEvent("product_view", { id: product.id });
     haptic("light");
   }
 
@@ -1098,6 +1573,17 @@
     $("#beginCheckout").disabled = unavailable || state.checkoutPending || !orderContactReady;
     const preorderItems = state.cart.map(item => productById(item.id)).filter(product => product && /предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`));
     $("#cartPreorderNote").classList.toggle("hidden", !preorderItems.length);
+    const gw = state.giftWrap || { enabled: false, motto: "Сила", recipient: "" };
+    if ($("#giftWrapToggle")) $("#giftWrapToggle").checked = Boolean(gw.enabled);
+    $("#giftWrapOptions")?.classList.toggle("hidden", !gw.enabled);
+    $$("[data-gift-motto]").forEach(btn => {
+      const active = btn.dataset.giftMotto === (gw.motto || "Сила");
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", String(active));
+    });
+    if ($("#giftWrapRecipient") && document.activeElement !== $("#giftWrapRecipient")) {
+      $("#giftWrapRecipient").value = gw.recipient || "";
+    }
     renderCheckoutGift();
     renderCartDeliveryProfile();
     renderDeliverySummary();
@@ -1435,8 +1921,15 @@
     $("#reviewLines").innerHTML = prepared.pairs.map(({ item, product }) => `<div class="review-line"><img src="${escapeHTML(imageFor(product))}" alt=""><div><strong>${escapeHTML(product.name)}</strong><small>Размер ${escapeHTML(item.size)} · ${Number(item.qty)} шт.${item.person ? ` · номер ${escapeHTML(item.person)}` : ""}</small></div><b>${rubles(priceNumber(product.price) * item.qty)}</b></div>`).join("");
     const gift = state.data.gift;
     const showGift = Boolean(gift && gift.available && Number(gift.remaining) > 0);
-    $("#reviewGift").classList.toggle("hidden", !showGift);
-    $("#reviewGift").textContent = showGift ? `Подарок: ${gift.name || "Жетон"} · наличие уточняется` : "";
+    const wrapSummary = giftWrapSummaryText();
+    const bundleText = activeBundleLabel(prepared.pairs);
+    const giftNotes = [
+      bundleText ? `Комплект: ${bundleText}` : "",
+      showGift ? `Подарок: ${gift.name || "Жетон"} · наличие уточняется` : "",
+      wrapSummary
+    ].filter(Boolean);
+    $("#reviewGift").classList.toggle("hidden", !giftNotes.length);
+    $("#reviewGift").textContent = giftNotes.join(" · ");
     $("#reviewCustomer").textContent = [customer.name, customer.phone].filter(Boolean).join(" · ");
     $("#reviewDelivery").textContent = [`Предпочтение: ${customer.deliver}`, customer.city, customer.address].filter(Boolean).join(" · ");
     $("#reviewTotal").textContent = rubles(cartTotal());
@@ -1449,23 +1942,39 @@
     const prepared = prepareOrder();
     if (!prepared) return;
     try {
+      const totalVal = cartTotal();
+      const bundleLabel = activeBundleLabel(prepared.pairs);
+      const gw = activeGiftWrap();
+      const lines = prepared.pairs.map(({ item, product }) => ({
+        id: product.id,
+        name: product.name,
+        size: item.size,
+        quantity: item.qty,
+        qty: item.qty,
+        price: product.price,
+        priceLabel: rubles(priceNumber(product.price) * item.qty),
+        person: item.person || ""
+      }));
       const text = checkoutClient.managerMessage({
         customer: prepared.payload.customer,
-        totalLabel: rubles(cartTotal()),
+        totalLabel: rubles(totalVal),
         giftName: state.data.gift && state.data.gift.available && Number(state.data.gift.remaining) > 0 ? state.data.gift.name || "Жетон" : "",
-        lines: prepared.pairs.map(({ item, product }) => ({
-          name: product.name,
-          size: item.size,
-          quantity: item.qty,
-          priceLabel: rubles(priceNumber(product.price) * item.qty),
-          person: item.person || ""
-        }))
+        giftWrap: gw,
+        bundleLabel,
+        lines
       });
       const url = checkoutClient.managerUrl(state.data.order_manager_username, text);
       if (!url) {
         showToast("Чат магазина пока не подключён. Корзина сохранена.");
         return;
       }
+      sendLeadBackup({
+        lines,
+        totalRub: totalVal,
+        customer: prepared.payload.customer,
+        giftWrap: giftWrapSummaryText(),
+        bundleLabel
+      });
       if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
       else window.open(url, "_blank", "noopener,noreferrer");
       haptic("light");
@@ -1569,6 +2078,7 @@
         if ($("#checkoutName") && !$("#checkoutName").value) $("#checkoutName").value = state.profile.name || user.first_name;
       }
       applyProfileToCheckout();
+      hydrateFromCloudStorage();
     } catch (_) { /* browser preview */ }
   }
 
@@ -1577,7 +2087,9 @@
     if (!welcome || welcome.classList.contains("is-leaving")) return;
     welcome.classList.add("is-leaving");
     stopWelcomeVideo();
+    stopAtmosphereSound();
     document.body.classList.remove("welcoming", "booting");
+    trackEvent("welcome_done");
     haptic("medium");
     window.setTimeout(() => {
       welcome.classList.add("hidden");
@@ -1673,6 +2185,7 @@
         privacy_url: remote.privacy_url || "",
         support_username: remote.support_username || ""
       };
+      state.upcomingProducts = Array.isArray(remote.upcoming_products) ? remote.upcoming_products : [];
       state.catalogReady = true;
       const privacy = $("#privacyLink");
       const privacyBtn = $("#privacyInfoButton");
@@ -1688,6 +2201,7 @@
       applyMedia();
       renderCategoryChips();
       renderProducts();
+      renderUpcomingDrop();
       renderDropEvent();
       renderCommunity();
       renderClub();
@@ -1742,6 +2256,46 @@
     if (targetProduct) {
       dismissWelcomeNow();
       openProduct(targetProduct.id);
+    }
+  }
+
+  async function shareToTelegramStory(mode = "product") {
+    const product = mode === "owner" ? null : state.currentProduct;
+    const pid = product ? product.id : "";
+    let posterRel = "/assets/stories/story-drop-20261112h.jpg";
+    let storyText = "СИЛА И ЧЕСТЬ · Выпуск 001";
+    let widgetUrl = window.location.origin + "/";
+    if (pid === "tee-sila-i-chest") {
+      posterRel = "/assets/stories/story-sila-20261112h.jpg";
+      storyText = "«СИЛА И ЧЕСТЬ» · Прямой свободный крой · Выпуск 001";
+      widgetUrl = `${window.location.origin}/?product=tee-sila-i-chest`;
+    } else if (pid === "tee-vzglyad") {
+      posterRel = "/assets/stories/story-vzglyad-20261112h.jpg";
+      storyText = "«ВЗГЛЯД» · Атлетический крой · Выпуск 001";
+      widgetUrl = `${window.location.origin}/?product=tee-vzglyad`;
+    } else if (pid === "tag-sila-i-chest") {
+      posterRel = "/assets/stories/story-tag-20261112h.jpg";
+      storyText = "Стальной жетон первой сотни · СИЛА И ЧЕСТЬ";
+      widgetUrl = `${window.location.origin}/?product=tag-sila-i-chest`;
+    } else if (mode === "owner" && state.ownerOrder) {
+      storyText = `Карта владельца №${state.ownerOrder.id || "001"} · СИЛА И ЧЕСТЬ`;
+    }
+    const mediaUrl = new URL(posterRel, window.location.origin).href;
+    trackEvent("story_share", { target: pid || mode });
+    if (tg && typeof tg.shareToStory === "function") {
+      try {
+        tg.shareToStory(mediaUrl, {
+          text: storyText,
+          widget_link: { url: widgetUrl, name: "СИЛА И ЧЕСТЬ · 001" }
+        });
+        haptic("success");
+        return;
+      } catch (_) { /* fall back to standard share */ }
+    }
+    if (mode === "owner") {
+      await shareOwnerCard();
+    } else {
+      await shareCurrentProduct();
     }
   }
 
@@ -1803,17 +2357,27 @@
     section.classList.toggle("hidden", !gift || !product);
     if (!gift || !product) return;
     const available = Boolean(gift.available && Number(gift.remaining) > 0);
+    const rem = Number(gift.remaining) || 0;
+    const totalStock = Number(gift.stock) || 100;
     $("#mascotGiftDescription").textContent = available
       ? "К первому дропу — 100 подарочных жетонов с фирменной гравировкой. Со второго дропа подарочных жетонов не будет."
       : "Металлический жетон с фирменной гравировкой — знак первого дропа. Наличие подарка уточняется.";
     $("#mascotGiftStatus").textContent = available
-      ? "Подарок из первой сотни · наличие уточняется"
+      ? `Первая сотня · свободно ${rem} из ${totalStock} шт.`
       : "Наличие подарка уточняется";
-    $("#mascotGiftLabel").textContent = available ? "ПОДАРОК К ЗАКАЗУ" : "ЖЕТОН ПЕРВОГО ДРОПА";
+    $("#mascotGiftLabel").textContent = available ? "ПОДАРОК К ЗАКАЗУ · ПЕРВАЯ СОТНЯ" : "ЖЕТОН ПЕРВОГО ДРОПА";
     $("#mascotGiftNote").textContent = available
       ? "Подарок доступен в первом дропе, пока есть жетоны из первой сотни."
       : "Подарочные жетоны предусмотрены для первого дропа; наличие уточняется.";
-    $("#mascotGiftImage").src = gift.image || product.image;
+    const imgEl = $("#mascotGiftImage");
+    if (imgEl) {
+      const frontSrc = gift.image || product.image || "assets/client/tag-front-20261111c.webp";
+      const backSrc = (Array.isArray(product.images) && product.images[1]) || "assets/client/tag-back-20261111c.webp";
+      imgEl.dataset.front = frontSrc;
+      imgEl.dataset.back = backSrc;
+      const isFlipped = $("#tagFlipWrap")?.classList.contains("is-flipped");
+      imgEl.src = isFlipped ? backSrc : frontSrc;
+    }
     const openGiftProduct = () => { haptic("light"); openProduct(product.id); };
     $("#mascotGiftDetails").onclick = openGiftProduct;
     const realGiftCard = $("#mascotRealGift");
@@ -1866,12 +2430,156 @@
     sync();
   }
 
+  /* --- Атмосферный звук зала и ковки (Web Audio, выключен по умолчанию) --- */
+  const atmosphereAudio = { ctx: null, master: null, oscA: null, oscB: null, lfo: null, anvilPlayed: false };
+
+  function syncSoundButtons() {
+    const on = Boolean(state.soundEnabled);
+    [$("#welcomeSound"), $("#filmSoundBtn")].forEach(btn => {
+      if (!btn) return;
+      btn.textContent = on ? "ЗВУК ВКЛ" : "ЗВУК ВЫКЛ";
+      btn.setAttribute("aria-pressed", String(on));
+      btn.classList.toggle("is-active", on);
+    });
+  }
+
+  function ensureAtmosphereNodes() {
+    if (atmosphereAudio.ctx) return atmosphereAudio.ctx;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    try {
+      const ctx = new AudioCtx();
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 195;
+      filter.Q.value = 1.4;
+      const master = ctx.createGain();
+      master.gain.value = 0.0001;
+      const oscA = ctx.createOscillator();
+      oscA.type = "sine";
+      oscA.frequency.value = 55;
+      const oscB = ctx.createOscillator();
+      oscB.type = "triangle";
+      oscB.frequency.value = 110.25;
+      const gainB = ctx.createGain();
+      gainB.gain.value = 0.28;
+      const lfo = ctx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.value = 0.18;
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 34;
+      lfo.connect(lfoGain);
+      lfoGain.connect(filter.frequency);
+      oscA.connect(filter);
+      oscB.connect(gainB);
+      gainB.connect(filter);
+      filter.connect(master);
+      master.connect(ctx.destination);
+      oscA.start();
+      oscB.start();
+      lfo.start();
+      atmosphereAudio.ctx = ctx;
+      atmosphereAudio.master = master;
+      atmosphereAudio.oscA = oscA;
+      atmosphereAudio.oscB = oscB;
+      atmosphereAudio.lfo = lfo;
+      return ctx;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function triggerAnvilStrike() {
+    if (!state.soundEnabled) return;
+    const ctx = ensureAtmosphereNodes();
+    if (!ctx || ctx.state !== "running") return;
+    try {
+      const now = ctx.currentTime;
+      for (const [freq, amp, decay] of [[196, 0.09, 1.5], [587.3, 0.045, 0.9], [1174.6, 0.022, 0.45]]) {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(freq, now);
+        g.gain.setValueAtTime(amp, now);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + decay + 0.05);
+      }
+    } catch (_) { /* ignore audio glitch */ }
+  }
+
+  function toggleAtmosphereSound() {
+    const ctx = ensureAtmosphereNodes();
+    if (!ctx) {
+      showToast("Звук зала недоступен в этом браузере.");
+      return;
+    }
+    state.soundEnabled = !state.soundEnabled;
+    if (state.soundEnabled) {
+      ctx.resume().then(() => {
+        const now = ctx.currentTime;
+        atmosphereAudio.master.gain.cancelScheduledValues(now);
+        atmosphereAudio.master.gain.setValueAtTime(Math.max(0.0001, atmosphereAudio.master.gain.value), now);
+        atmosphereAudio.master.gain.linearRampToValueAtTime(0.055, now + 0.45);
+        triggerAnvilStrike();
+      }).catch(() => {});
+      haptic("selection");
+    } else {
+      stopAtmosphereSound();
+    }
+    syncSoundButtons();
+  }
+
+  function stopAtmosphereSound() {
+    state.soundEnabled = false;
+    syncSoundButtons();
+    $("#founderWordCard")?.classList.remove("is-reading");
+    const voiceEl = $("#founderVoiceAudio");
+    if (voiceEl && !voiceEl.paused) voiceEl.pause();
+    syncFounderAudioButton();
+    const ctx = atmosphereAudio.ctx;
+    if (!ctx || !atmosphereAudio.master) return;
+    try {
+      const now = ctx.currentTime;
+      atmosphereAudio.master.gain.cancelScheduledValues(now);
+      atmosphereAudio.master.gain.setValueAtTime(Math.max(0.0001, atmosphereAudio.master.gain.value), now);
+      atmosphereAudio.master.gain.linearRampToValueAtTime(0.0001, now + 0.25);
+      window.setTimeout(() => {
+        if (!state.soundEnabled && ctx.state === "running") ctx.suspend().catch(() => {});
+      }, 280);
+    } catch (_) {}
+  }
+
+  function syncFounderAudioButton() {
+    const btn = $("#founderAudioBtn");
+    const audio = $("#founderVoiceAudio");
+    const card = $("#founderWordCard");
+    if (!btn) return;
+    const voiceUrl = String(state.data?.media?.founder_voice || "").trim();
+    if (voiceUrl && audio) {
+      if (!sameMediaFile(audio.getAttribute("src") || "", voiceUrl)) {
+        audio.src = voiceUrl;
+      }
+      const playing = !audio.paused && !audio.ended;
+      btn.textContent = playing ? "Ⅱ ПАУЗА" : "▶ ГОЛОС ОСНОВАТЕЛЯ";
+      btn.setAttribute("aria-pressed", String(playing));
+      card?.classList.toggle("is-playing", playing);
+    } else {
+      const reading = Boolean(card?.classList.contains("is-reading"));
+      btn.textContent = reading ? "Ⅱ ОСТАНОВИТЬ" : "▶ АТМОСФЕРА ЗАЛА";
+      btn.setAttribute("aria-pressed", String(reading));
+    }
+  }
+
   function applyMedia() {
     const media = mediaConfig();
     /* Approved founder image from page. */
     if (state.data.media && state.data.media.hero_background && $("#heroBackground")) $("#heroBackground").src = state.data.media.hero_background;
     if (state.data.media && state.data.media.hero_subject && $("#heroSubject")) $("#heroSubject").src = state.data.media.hero_subject;
     syncHeroPoster();
+    syncFounderAudioButton();
     if (!$("#welcome").classList.contains("hidden") && !$("#welcome").classList.contains("is-leaving")) setupWelcomeVideo(media);
     // Тираж на заставке берём из каталога, а не пишем руками.
     const stock = $("#welcomeStock");
@@ -2000,6 +2708,10 @@
         const isBrandedFilm = /welcome-seal-/.test(src);
         const inFinale = isBrandedFilm && !welcomePlayback.failed
           && (welcomePlayback.finished || video.currentTime >= 4.55);
+        if (inFinale && !atmosphereAudio.anvilPlayed) {
+          atmosphereAudio.anvilPlayed = true;
+          triggerAnvilStrike();
+        }
         const welcomeEl = $("#welcome");
         welcomeEl?.classList.toggle("is-logo-finale", inFinale);
         welcomeEl?.classList.toggle("welcome-emblem-phase", inFinale);
@@ -2020,6 +2732,7 @@
           welcomePlayback.finished = false;
           welcomePlayback.paused = false;
           welcomePlayback.blocked = false;
+          atmosphereAudio.anvilPlayed = false;
           video.currentTime = 0;
           syncWelcomeFinale();
           $("#welcomeFrameCount").textContent = `ФИЛЬМ · ${Math.round(video.duration) || 9} СЕК`;
@@ -2106,6 +2819,7 @@
     // и ролик будет грузиться фоном, пока человек в магазине.
     welcomePlayback.source = "";
     welcomePlayback.finished = false;
+    atmosphereAudio.anvilPlayed = false;
     $("#welcome")?.classList.remove("is-logo-finale", "welcome-emblem-phase");
     welcomePlayback.blocked = false;
     welcomePlayback.pending = false;
@@ -2551,16 +3265,34 @@
   function selectSize(size) {
     if (!size) return;
     state.selectedSize = size;
+    if (state.profile && ["S", "M", "L", "XL", "XXL", "2XL", "3XL"].includes(String(size).toUpperCase())) {
+      state.profile.size = size;
+      saveJSON("vorozhbitov_profile", state.profile);
+    }
+    const savedCanon = normalizeBodySize((state.profile?.size || "").trim());
     $$(".size-button", $("#sizeList")).forEach(node => {
       const active = node.dataset.size === size;
+      const isMine = Boolean(savedCanon && normalizeBodySize(node.dataset.size || "") === savedCanon);
       node.classList.toggle("selected", active);
+      node.classList.toggle("is-my-size", isMine);
       node.setAttribute("aria-pressed", String(active));
+      const pill = node.querySelector(".my-size-pill");
+      if (isMine && !pill) {
+        const badge = document.createElement("small");
+        badge.className = "my-size-pill";
+        badge.textContent = "МОЙ";
+        node.appendChild(badge);
+      } else if (!isMine && pill) {
+        pill.remove();
+      }
     });
-    $("#sizeHint").textContent = `Размер ${size} выбран.`;
+    $("#sizeHint").textContent = `Размер ${size} выбран и запомнен как твой.`;
     if (state.currentProduct) renderBodySizeGuide(state.currentProduct);
     $("#sizeHint").classList.remove("error");
     updatePurchaseSummary();
     updateCombatSizer();
+    syncBundleCard();
+    trackEvent("size_select", { id: state.currentProduct?.id || "", size });
   }
 
   function savedFit() {
@@ -2593,23 +3325,16 @@
     const w = Number(saved.weight);
     if (Number.isFinite(h) && h >= 130 && h <= 230) combatSizer.height = Math.round(h);
     if (Number.isFinite(w) && w >= 35 && w <= 220) combatSizer.weight = Math.round(w);
+    if (saved.fit && ["close", "regular", "oversize"].includes(saved.fit)) {
+      setFitChoice(saved.fit);
+    } else {
+      setFitChoice(state.fitChoice || "regular");
+    }
     const isFitted = product.id === "tee-vzglyad";
     if ($("#smartSizerSubtitle")) {
       $("#smartSizerSubtitle").textContent = isFitted
         ? "У «ВЗГЛЯДА» прилегающий атлетический крой — сидит плотно по торсу"
         : "У «СИЛА И ЧЕСТЬ» прямой свободный крой — выбери желаемую посадку";
-    }
-    $("#adviceFitCard")?.classList.toggle("is-recommended", !isFitted);
-    $("#adviceOversizeCard")?.classList.toggle("is-recommended", isFitted);
-    if ($("#adviceFitPill")) {
-      $("#adviceFitPill").textContent = "БАЗА ПО КРОЮ";
-      $("#adviceFitPill").classList.toggle("hidden", isFitted);
-    }
-    if ($("#adviceFitType")) $("#adviceFitType").textContent = isFitted ? "Плотно по торсу" : "По фигуре · База";
-    if ($("#adviceFitText")) {
-      $("#adviceFitText").textContent = isFitted
-        ? "Прилегающая посадка по груди и плечам. Подчёркивает форму."
-        : "Классическая прямая посадка по твоим параметрам.";
     }
     if ($("#adviceOversizeType")) $("#adviceOversizeType").textContent = isFitted ? "Комфортно · Свободнее" : "Свободно · Оверсайз";
     if ($("#adviceOversizePill")) $("#adviceOversizePill").textContent = isFitted ? "+1 РАЗМЕР" : "ОВЕРСАЙЗ";
@@ -2623,7 +3348,26 @@
   function updateCombatSizer() {
     const root = $("#smartSizer"), product = state.currentProduct; if (!root || !product || root.classList.contains("hidden")) return;
     $("#sizerHeightVal").textContent = String(combatSizer.height); $("#sizerWeightVal").textContent = String(combatSizer.weight);
-    [["Fit", "regular"], ["Oversize", "oversize"]].forEach(([id, fit]) => {
+    const isFitted = product.id === "tee-vzglyad";
+    const fitMode = state.fitChoice === "close" ? "close" : "regular";
+    const preferOversize = state.fitChoice === "oversize" || (isFitted && state.fitChoice !== "close" && state.fitChoice !== "regular");
+    $("#adviceFitCard")?.classList.toggle("is-recommended", !preferOversize && state.fitChoice !== "oversize");
+    $("#adviceOversizeCard")?.classList.toggle("is-recommended", state.fitChoice === "oversize");
+    if ($("#adviceFitPill")) {
+      $("#adviceFitPill").textContent = fitMode === "close" ? "ПО ТОРСУ" : "БАЗА ПО КРОЮ";
+      $("#adviceFitPill").classList.toggle("hidden", state.fitChoice === "oversize");
+    }
+    if ($("#adviceFitType")) {
+      $("#adviceFitType").textContent = fitMode === "close"
+        ? "В обтяжку · По торсу"
+        : (isFitted ? "Плотно по торсу" : "По фигуре · База");
+    }
+    if ($("#adviceFitText")) {
+      $("#adviceFitText").textContent = fitMode === "close"
+        ? "Плотное спортивное облегание груди и плеч."
+        : (isFitted ? "Прилегающая посадка по груди и плечам. Подчёркивает форму." : "Классическая прямая посадка по твоим параметрам.");
+    }
+    [["Fit", fitMode], ["Oversize", "oversize"]].forEach(([id, fit]) => {
       const card = $("#advice" + id + "Card"); if (!card) return;
       const found = Core.recommendSize({height:combatSizer.height, weight:combatSizer.weight, fit}, product.sizes || []); const size = found?.size || "";
       card.disabled = !size; card.dataset.smartSize = size; card.classList.toggle("selected", Boolean(size && state.selectedSize === size)); card.setAttribute("aria-pressed", String(!!size && state.selectedSize === size));
@@ -2810,6 +3554,10 @@
       .filter(row => !seen.has(row.date) && seen.add(row.date))
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 7);
+    const remRaw = source.reminder_hour;
+    const reminderHour = remRaw !== null && remRaw !== undefined && remRaw !== "" && Number.isInteger(Number(remRaw)) && Number(remRaw) >= 0 && Number(remRaw) <= 23
+      ? Number(remRaw)
+      : null;
     return {
       joined: Boolean(source.joined || checkins.length),
       started_on: typeof source.started_on === "string" ? source.started_on : "",
@@ -2817,7 +3565,9 @@
       total: checkins.length,
       completed: checkins.length >= 7,
       early_access: checkins.length >= 7,
-      today: /^\d{4}-\d{2}-\d{2}$/.test(String(source.today || "")) ? String(source.today) : ""
+      today: /^\d{4}-\d{2}-\d{2}$/.test(String(source.today || "")) ? String(source.today) : "",
+      reminder_hour: reminderHour,
+      active_members: Math.max(0, Number(source.active_members) || 0)
     };
   }
 
@@ -2850,7 +3600,19 @@
     if ($("#clubProgressBar")) $("#clubProgressBar").style.width = `${Math.round((club.total / 7) * 100)}%`;
     if ($("#clubStreak")) $("#clubStreak").textContent = `Серия: ${streak}`;
     if ($("#clubTotal")) $("#clubTotal").textContent = `Выполнено: ${club.total} / 7`;
+    const membersEl = $("#clubMembersCount");
+    if (membersEl) {
+      const members = club.active_members || Number(state.data?.club_stats?.active_members) || 0;
+      membersEl.classList.toggle("hidden", members <= 0);
+      if (members > 0) membersEl.textContent = `Участников: ${members}`;
+    }
     if ($("#clubSource")) $("#clubSource").textContent = state.clubSource === "bot" ? "Прогресс сохранён в боте" : "Прогресс на этом устройстве";
+    const activeHourStr = club.reminder_hour === null || club.reminder_hour === undefined ? "" : String(club.reminder_hour);
+    $$("#clubReminders [data-club-hour]").forEach(btn => {
+      const isAct = (btn.dataset.clubHour || "") === activeHourStr;
+      btn.classList.toggle("active", isAct);
+      btn.setAttribute("aria-pressed", String(isAct));
+    });
     if ($("#clubTaskDay")) $("#clubTaskDay").textContent = club.completed ? "НЕДЕЛЯ ЗАКРЫТА" : `ДЕНЬ ${String(current + 1).padStart(2, "0")}`;
     if ($("#clubTaskText")) $("#clubTaskText").textContent = club.completed ? config.reward : config.tasks[current];
     if ($("#clubDays")) {
@@ -2879,17 +3641,38 @@
     if ($("#profileClubStreak")) $("#profileClubStreak").textContent = club.early_access ? "Ранний доступ открыт" : `Серия: ${streak}`;
   }
 
-  async function clubApi(action) {
+  async function clubApi(action, extra = {}) {
     const initData = tg && tg.initData;
     if (!initData) throw new Error("local");
     const response = await fetch("/api/club", action ? {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json", "X-Telegram-Init-Data": initData },
-      body: JSON.stringify({ action })
+      body: JSON.stringify({ action, ...extra })
     } : { headers: { Accept: "application/json", "X-Telegram-Init-Data": initData } });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.club) throw new Error(payload.error || "club unavailable");
     return payload.club;
+  }
+
+  async function setClubReminder(hourRaw) {
+    const initData = tg && tg.initData;
+    const hour = hourRaw === "" || hourRaw === null || hourRaw === undefined ? null : Number(hourRaw);
+    if (!initData) {
+      const next = normalizeClubState({ ...state.club, reminder_hour: hour });
+      persistClub(next, "local");
+      showToast(hour === null ? "Напоминания отключены." : "Открой мини-апп внутри @SilaIChestBot, чтобы бот присылал напоминания по МСК.");
+      haptic("selection");
+      return;
+    }
+    try {
+      const updated = await clubApi("reminder", { hour });
+      persistClub(updated, "bot");
+      haptic("success");
+      showToast(hour === null ? "Напоминания клуба отключены." : `Бот напомнит в ${String(hour).padStart(2, "0")}:00 МСК.`);
+    } catch (_) {
+      showToast("Не удалось обновить напоминание — проверь связь.");
+      haptic("error");
+    }
   }
 
   async function loadClubState() {
@@ -2976,6 +3759,16 @@
   }
 
   function submitCommunityPhoto() {
+    const botAccount = String(state.data?.bot_username || "SilaIChestBot").replace(/^@/, "").trim();
+    if (/^[A-Za-z0-9_]{5,32}$/.test(botAccount)) {
+      const deepLink = `https://t.me/${botAccount}?start=submit_look`;
+      trackEvent("community_submit_open");
+      if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(deepLink);
+      else window.open(deepLink, "_blank", "noopener,noreferrer");
+      showToast("Бот открыт — просто отправь фото одним сообщением.");
+      haptic("light");
+      return;
+    }
     const text = [
       "Здравствуйте! Хочу в раздел «СВОИ» бренда СИЛА И ЧЕСТЬ.",
       "Сейчас прикреплю своё фото в вещи бренда к этому сообщению.",
@@ -3058,6 +3851,19 @@
     ctx.fillText("КАРТА", 54, 206);
     ctx.fillStyle = "#b9b1a5";
     ctx.fillText("ВЛАДЕЛЬЦА.", 54, 280);
+    if (normalizeClubState(state.club).completed) {
+      ctx.save();
+      ctx.fillStyle = "rgba(184, 34, 24, 0.16)";
+      ctx.fillRect(590, 146, 254, 42);
+      ctx.strokeStyle = "#c93b2f";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(590, 146, 254, 42);
+      ctx.fillStyle = "#f4efe6";
+      ctx.font = "700 15px 'Manrope', -apple-system, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("РАНГ «СВОЙ» · 7/7", 717, 172);
+      ctx.restore();
+    }
     ctx.fillStyle = "#111114";
     ctx.fillRect(56, 314, 788, 354);
     if (product) {
@@ -3205,6 +4011,50 @@
     }
   }
 
+  async function checkSerialRegistry() {
+    const input = $("#registryInput");
+    const out = $("#registryResult");
+    const btn = $("#registryCheckBtn");
+    if (!input || !out) return;
+    const raw = String(input.value || "").trim();
+    if (!raw) {
+      out.className = "registry-result is-invalid";
+      out.textContent = "Введи номер жетона (00001–00100) или ID заказа.";
+      haptic("error");
+      return;
+    }
+    if (btn) btn.disabled = true;
+    out.className = "registry-result";
+    out.textContent = "Проверяем реестр выпуска 001…";
+    try {
+      const response = await fetch(`/api/verify-serial?code=${encodeURIComponent(raw)}`, {
+        headers: { Accept: "application/json" }
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (payload.valid) {
+        const isIssued = payload.issued !== false && payload.status !== "available";
+        out.className = `registry-result ${isIssued ? "is-valid" : "is-available"}`;
+        out.innerHTML = `
+          <strong>${escapeHTML(payload.serial_label ? `ЖЕТОН №${payload.serial_label}` : "ПОДТВЕРЖДЁННЫЙ ЭКЗЕМПЛЯР")}</strong>
+          <span>${escapeHTML(payload.edition || "ВЫПУСК 001")} · ${escapeHTML(payload.model_name || "СИЛА И ЧЕСТЬ")}</span>
+          <small>${escapeHTML(payload.status_label || payload.message || "Запись найдена в реестре.")}</small>
+        `;
+        trackEvent("serial_verify", { ok: 1 });
+        haptic("success");
+      } else {
+        out.className = "registry-result is-invalid";
+        out.textContent = payload.message || "Номер не найден в реестре выпуска 001.";
+        haptic("warning");
+      }
+    } catch (_) {
+      out.className = "registry-result is-invalid";
+      out.textContent = "Не удалось связаться с реестром — проверь сеть.";
+      haptic("error");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   function bindEvents() {
     $("#retryCatalog").addEventListener("click", loadCatalog);
     renderSkeletons();
@@ -3279,13 +4129,16 @@
     $$('[data-detail-product]').forEach(button => button.addEventListener('click', () => openProduct(button.dataset.detailProduct, Number(button.dataset.detailPhoto))));
     document.addEventListener("visibilitychange", () => {
       syncModalLayers();
-      if (document.hidden) pauseProductVideo();
+      if (document.hidden) {
+        pauseProductVideo();
+        if (state.soundEnabled) stopAtmosphereSound();
+      }
     });
     const enterBtn = $("#enterShop");
     if (enterBtn) {
       const ritual = $("#sealRitual"), progress = $("#sealProgressFill"), badge = $("#sealTimerBadge");
-      let started = 0, timer = 0, animation = 0, half = false, completed = false, pointer = null, entryPending = false;
-      const reset = () => { clearTimeout(timer); cancelAnimationFrame(animation); started = 0; pointer = null; half = false; ritual?.classList.remove("is-holding"); if (progress) progress.style.strokeDashoffset = "351.9"; if (badge) badge.textContent = ""; };
+      let started = 0, timer = 0, animation = 0, half = false, pulseStep = 0, completed = false, pointer = null, entryPending = false;
+      const reset = () => { clearTimeout(timer); cancelAnimationFrame(animation); started = 0; pointer = null; half = false; pulseStep = 0; ritual?.classList.remove("is-holding"); if (progress) progress.style.strokeDashoffset = "351.9"; if (badge) badge.textContent = ""; };
       const finishEntry = () => {
         if (entryPending || $("#welcome")?.classList.contains("is-leaving")) return;
         entryPending = true;
@@ -3302,7 +4155,18 @@
       enterBtn.addEventListener("pointerdown", event => {
         if (entryPending || event.button !== 0 || $("#welcome")?.classList.contains("is-leaving")) return;
         completed = false; reset(); pointer = event.pointerId; started = performance.now(); ritual?.classList.add("is-holding"); haptic("light");
-        const tick = now => { if (!started) return; const ratio = Math.min(1, (now - started) / 1200); if (progress) progress.style.strokeDashoffset = String(351.9 * (1 - ratio)); if (ratio >= .5 && !half) { half = true; haptic("medium"); } if (ratio < 1) animation = requestAnimationFrame(tick); };
+        const tick = now => {
+          if (!started) return;
+          const ratio = Math.min(1, (now - started) / 1200);
+          if (progress) progress.style.strokeDashoffset = String(351.9 * (1 - ratio));
+          const stepNow = Math.floor(ratio * 5);
+          if (stepNow > pulseStep && stepNow < 5) {
+            pulseStep = stepNow;
+            if (stepNow !== 2) haptic("selection");
+          }
+          if (ratio >= .5 && !half) { half = true; haptic("medium"); }
+          if (ratio < 1) animation = requestAnimationFrame(tick);
+        };
         animation = requestAnimationFrame(tick);
         timer = setTimeout(() => { if (pointer === null) return; completed = true; reset(); finishEntry(); }, 1200);
       });
@@ -3337,7 +4201,7 @@
         sizerRepeated = false;
         sizerHoldDelay = setTimeout(() => {
           sizerRepeated = true;
-          if (stepSizerField(step)) haptic("light");
+          if (stepSizerField(step)) haptic("selection");
           sizerHoldTick = setInterval(() => {
             if (!stepSizerField(step)) clearSizerHold();
           }, 65);
@@ -3346,15 +4210,32 @@
       ["pointerup", "pointercancel", "pointerleave"].forEach(evt => sizerRoot.addEventListener(evt, clearSizerHold));
       window.addEventListener("blur", clearSizerHold);
       sizerRoot.addEventListener("click", event => {
+        const fitBtn = event.target.closest("[data-fit-choice]");
+        if (fitBtn) {
+          setFitChoice(fitBtn.dataset.fitChoice);
+          saveJSON("vorozhbitov_fit", { height: String(combatSizer.height), weight: String(combatSizer.weight), fit: state.fitChoice });
+          updateCombatSizer();
+          const targetCard = state.fitChoice === "oversize" ? $("#adviceOversizeCard") : $("#adviceFitCard");
+          if (targetCard && targetCard.dataset.smartSize && (state.currentProduct?.sizes || []).includes(targetCard.dataset.smartSize)) {
+            selectSize(targetCard.dataset.smartSize);
+          }
+          haptic("selection");
+          return;
+        }
         const step = event.target.closest("[data-sizer]");
         if (step) {
           if (sizerRepeated && event.detail !== 0) { sizerRepeated = false; return; }
-          if (stepSizerField(step)) haptic("light");
+          if (stepSizerField(step)) haptic("selection");
           return;
         }
         const card = event.target.closest("[data-smart-size]"); if (!card || card.disabled) return;
         const size = card.dataset.smartSize; if (!((state.currentProduct?.sizes || []).includes(size))) return;
-        saveJSON("vorozhbitov_fit", { height: String(combatSizer.height), weight: String(combatSizer.weight), fit: card.id === "adviceOversizeCard" ? "oversize" : "regular" }); selectSize(size); haptic("medium"); $("#addToCartButton")?.focus({preventScroll:true});
+        const fitSaved = card.id === "adviceOversizeCard" ? "oversize" : (state.fitChoice === "close" ? "close" : "regular");
+        setFitChoice(fitSaved);
+        saveJSON("vorozhbitov_fit", { height: String(combatSizer.height), weight: String(combatSizer.weight), fit: fitSaved });
+        selectSize(size);
+        haptic("medium");
+        $("#addToCartButton")?.focus({preventScroll:true});
       });
     }
     $$("[data-stage]").forEach(button => button.addEventListener("click", () => {
@@ -3473,6 +4354,8 @@
       const gate = dropPurchaseGate();
       if (gate) { showToast(gate); return; }
       const lines = pairs.map(({item, product}, index) => `${index + 1}. ${product.name} · размер ${item.size} · ${item.qty} шт. · ${rubles(priceNumber(product.price) * item.qty)}${item.person ? ` · номер: ${String(item.person).slice(0, 32)}` : ""}${/предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`) ? " · предзаказ" : ""}`);
+      const bundleLabel = activeBundleLabel(pairs);
+      const giftWrapText = giftWrapSummaryText();
       const gift = state.data?.gift;
       const giftLine = gift && gift.available && Number(gift.remaining) > 0
         ? `• Подарок: ${gift.name || "ЖЕТОН"} · 0 ₽ (первые 100 к дропу 001)`
@@ -3490,19 +4373,37 @@
         const dest = [contactCity, contactAddress].filter(Boolean).join(", ");
         profileLines.push(`Доставка: ${contactDeliver || "СДЭК"} · ${dest}`);
       }
+      const totalValue = cartTotal();
       const message = [
         "Здравствуйте! Хочу оформить заказ в «СИЛА И ЧЕСТЬ»:",
+        ...(bundleLabel ? [`Комплект: ${bundleLabel}`] : []),
         ...lines,
         ...(giftLine ? [giftLine] : []),
-        `Итого за вещи: ${rubles(cartTotal())}`,
+        ...(giftWrapText ? [`• ${giftWrapText}`] : []),
+        `Итого за вещи: ${rubles(totalValue)}`,
         ...profileLines,
         "Прошу подтвердить наличие, подарок, доставку и оплату."
       ].join("\n");
       const url = message.length <= 3500 ? checkoutClient.managerUrl(state.data.order_manager_username, message) : "";
       if (!url) { showToast("Не удалось подготовить заказ. Корзина сохранена."); return; }
+      sendLeadBackup({
+        lines: pairs.map(({ item, product }) => ({
+          id: product.id,
+          name: product.name,
+          size: item.size,
+          qty: item.qty,
+          price_rub: priceNumber(product.price),
+          person: item.person || ""
+        })),
+        totalRub: totalValue,
+        customer: { name: contactName, phone: contactPhone, city: contactCity, address: contactAddress, deliver: contactDeliver || "СДЭК" },
+        giftWrap: giftWrapText,
+        bundleLabel
+      });
+      trackEvent("checkout_redirect", { source: "cart", count: pairs.length });
       if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
       else window.open(url, "_blank", "noopener,noreferrer");
-      haptic("light");
+      haptic("medium");
       showToast("Проверь текст и отправь сообщение в чат. До отправки заказ не создан.");
     });
     $("#backToCart").addEventListener("click", () => {
@@ -3615,18 +4516,34 @@
         if (name) extraLines.push(`Имя: ${name}`);
         extraLines.push(`Телефон: ${phone || "укажу в чате"}`);
         if (city || address) extraLines.push(`Доставка: ${deliver || "СДЭК"} · ${[city, address].filter(Boolean).join(", ")}`);
+        const giftWrapText = giftWrapSummaryText();
         const message = [
           `Здравствуйте! Хочу оформить ${verb}:`,
           `• ${product.name} · размер ${state.selectedSize} · ${qty} шт. · ${lineTotal}${person ? ` · номер: ${person}` : ""}${product.fit ? ` (${product.fit})` : ""}`,
           ...(hasGift ? [`• Подарок: ЖЕТОН · 0 ₽ (первые 100 жетонов к дропу 001)`] : []),
+          ...(giftWrapText ? [`• ${giftWrapText}`] : []),
           ...extraLines
         ].join("\n");
         const manager = state.data?.order_manager_username || "intellectual_sabotage";
         const url = checkoutClient.managerUrl(manager, message);
         if (url) {
+          sendLeadBackup({
+            lines: [{
+              id: product.id,
+              name: product.name,
+              size: state.selectedSize,
+              qty,
+              price_rub: priceNumber(product.price),
+              person
+            }],
+            totalRub: priceNumber(product.price) * qty,
+            customer: { name, phone, city, address, deliver: deliver || "СДЭК" },
+            giftWrap: giftWrapText
+          });
+          trackEvent("checkout_redirect", { source: "direct", id: product.id, size: state.selectedSize });
           if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
           else window.open(url, "_blank", "noopener,noreferrer");
-          haptic("light");
+          haptic("medium");
         }
       });
     }
@@ -3678,6 +4595,8 @@
       if (!button) return;
       state.profile.deliver = button.dataset.profileDeliver;
       $$("#profileDeliver .filter-chip").forEach(node => node.classList.toggle("active", node === button));
+      updateDeliveryAddressPlaceholder(state.profile.deliver, $("#profileAddress"));
+      haptic("selection");
     });
     $("#shareProductButton")?.addEventListener("click", shareCurrentProduct);
     $("#cartDeliveryProfile")?.addEventListener("click", event => {
@@ -3878,9 +4797,217 @@
       if (!button) return;
       state.deliver = button.dataset.deliver;
       $$("#deliverRow .filter-chip").forEach(node => { node.classList.toggle("active", node === button); node.setAttribute("aria-pressed", String(node === button)); });
+      updateDeliveryAddressPlaceholder(state.deliver, $("#checkoutAddress"));
       renderDeliverySummary();
+      haptic("selection");
     });
     $("#checkoutCity").addEventListener("change", renderDeliverySummary);
+
+    /* --- 20261112h: Все 22 улучшения витрины и ритуалов --- */
+    $("#welcomeSound")?.addEventListener("click", () => toggleAtmosphereSound());
+    $("#filmSoundBtn")?.addEventListener("click", () => toggleAtmosphereSound());
+    $("#openCompareBtn")?.addEventListener("click", openCompareModal);
+    $("#compareBody")?.addEventListener("click", event => {
+      const btn = event.target.closest("[data-compare-open]");
+      if (!btn) return;
+      const pid = btn.dataset.compareOpen;
+      closeModal("compareModal");
+      if (pid) openProduct(pid);
+    });
+    $("#bundleSizes")?.addEventListener("click", event => {
+      const btn = event.target.closest("[data-bundle-size]");
+      if (!btn) return;
+      state.bundleSize = btn.dataset.bundleSize;
+      syncBundleCard();
+      haptic("selection");
+    });
+    $("#bundleAddBtn")?.addEventListener("click", addBundleToCart);
+    $("#upcomingGrid")?.addEventListener("click", event => {
+      const sizeBtn = event.target.closest("[data-upcoming-size]");
+      if (sizeBtn) {
+        const card = sizeBtn.closest("[data-upcoming-id]");
+        const pid = sizeBtn.dataset.upcomingProduct || (card && card.dataset.upcomingId);
+        if (pid) {
+          upcomingSelectedSizes.set(pid, sizeBtn.dataset.upcomingSize);
+          renderUpcomingDrop();
+          haptic("selection");
+        }
+        return;
+      }
+      const waitBtn = event.target.closest("[data-upcoming-waitlist]");
+      if (waitBtn) submitUpcomingWaitlist(waitBtn.dataset.upcomingWaitlist, waitBtn);
+    });
+    const voiceAudio = $("#founderVoiceAudio");
+    if (voiceAudio) {
+      ["play", "pause", "ended"].forEach(evt => voiceAudio.addEventListener(evt, syncFounderAudioButton));
+    }
+    $("#founderAudioBtn")?.addEventListener("click", () => {
+      const voiceUrl = String(state.data?.media?.founder_voice || "").trim();
+      const card = $("#founderWordCard");
+      if (voiceUrl && voiceAudio) {
+        if (!sameMediaFile(voiceAudio.getAttribute("src") || "", voiceUrl)) voiceAudio.src = voiceUrl;
+        if (voiceAudio.paused) {
+          voiceAudio.play().catch(() => showToast("Не удалось запустить аудио — попробуй ещё раз."));
+          haptic("selection");
+        } else {
+          voiceAudio.pause();
+        }
+        syncFounderAudioButton();
+      } else if (card) {
+        const reading = card.classList.toggle("is-reading");
+        if (reading && !state.soundEnabled) toggleAtmosphereSound();
+        else if (!reading && state.soundEnabled) stopAtmosphereSound();
+        syncFounderAudioButton();
+      }
+    });
+    const craftRange = $("#craftRange");
+    if (craftRange) {
+      let lastMidCross = false;
+      craftRange.addEventListener("input", () => {
+        const val = Math.max(4, Math.min(96, Number(craftRange.value) || 50));
+        $("#craftStage")?.style.setProperty("--split", `${val}%`);
+        const nearMid = Math.abs(val - 50) <= 2;
+        if (nearMid && !lastMidCross) {
+          lastMidCross = true;
+          haptic("selection");
+        } else if (!nearMid) {
+          lastMidCross = false;
+        }
+        const hint = $("#craftCompareHint");
+        if (hint) {
+          hint.textContent = val < 35
+            ? "Готовое изделие: плотный хлопок 240–260 г/м² и вышивка в цеху"
+            : val > 65
+              ? "Конструкторский эскиз: осевая линия клинка и геометрия посадки"
+              : "Потяни ползунок: от технического чертежа до готовой вещи";
+        }
+      });
+    }
+    $("#flipTagBtn")?.addEventListener("click", event => {
+      event.stopPropagation();
+      const wrap = $("#tagFlipWrap");
+      const img = $("#mascotGiftImage");
+      if (!wrap || !img) return;
+      const flipped = wrap.classList.toggle("is-flipped");
+      const targetSrc = flipped ? (img.dataset.back || "assets/client/tag-back-20261111c.webp") : (img.dataset.front || "assets/client/tag-front-20261111c.webp");
+      window.setTimeout(() => { img.src = targetSrc; }, 120);
+      const btn = $("#flipTagBtn");
+      if (btn) btn.textContent = flipped ? "АВЕРС ↻" : "РЕВЕРС ↻";
+      haptic("selection");
+    });
+    $("#clubReminders")?.addEventListener("click", event => {
+      const btn = event.target.closest("[data-club-hour]");
+      if (!btn) return;
+      setClubReminder(btn.dataset.clubHour);
+    });
+    $("#storyProductButton")?.addEventListener("click", () => shareToTelegramStory("product"));
+    $("#ownerStoryShare")?.addEventListener("click", () => shareToTelegramStory("owner"));
+    $("#hotspotToggle")?.addEventListener("click", event => {
+      event.stopPropagation();
+      state.hotspotsVisible = !state.hotspotsVisible;
+      state.activeHotspot = -1;
+      syncHotspots();
+      haptic("selection");
+    });
+    $("#stageHotspots")?.addEventListener("click", event => {
+      const pin = event.target.closest("[data-hotspot-idx]");
+      if (!pin) return;
+      event.stopPropagation();
+      const idx = Number(pin.dataset.hotspotIdx);
+      state.activeHotspot = state.activeHotspot === idx ? -1 : idx;
+      syncHotspots();
+      haptic("selection");
+    });
+    $("#hotspotCard")?.addEventListener("click", event => {
+      event.stopPropagation();
+      if (event.target.closest("[data-hotspot-close]")) {
+        state.activeHotspot = -1;
+        syncHotspots();
+        return;
+      }
+      const jump = event.target.closest("[data-hotspot-jump]");
+      if (jump) {
+        const frame = Number(jump.dataset.hotspotJump);
+        state.activeHotspot = -1;
+        setGallery(frame);
+        haptic("light");
+      }
+    });
+    const prodScroll = $(".product-scroll");
+    if (prodScroll) {
+      prodScroll.addEventListener("scroll", () => {
+        const product = state.currentProduct;
+        const showCompact = Boolean(
+          product &&
+          Core.buyable(product) &&
+          prodScroll.scrollTop > 320
+        );
+        $("#productModal")?.classList.toggle("is-scrolled-deep", showCompact);
+        $("#sheetStickyCompact")?.classList.toggle("hidden", !showCompact);
+      }, { passive: true });
+    }
+    $("#stickyOrderBtn")?.addEventListener("click", () => {
+      if (!state.selectedSize) {
+        $(".size-block")?.scrollIntoView({ block: "center", behavior: reducedMotion() ? "instant" : "smooth" });
+        haptic("selection");
+        return;
+      }
+      $("#directOrderButton")?.click();
+    });
+    $("#giftWrapToggle")?.addEventListener("change", event => {
+      state.giftWrap = {
+        ...(state.giftWrap || {}),
+        enabled: Boolean(event.target.checked),
+        motto: (state.giftWrap && state.giftWrap.motto) || "Сила"
+      };
+      $("#giftWrapOptions")?.classList.toggle("hidden", !state.giftWrap.enabled);
+      saveJSON("vorozhbitov_gift_wrap", state.giftWrap);
+      haptic("selection");
+    });
+    $("#cartGiftWrapBox")?.addEventListener("click", event => {
+      const chip = event.target.closest("[data-gift-motto]");
+      if (!chip) return;
+      state.giftWrap = { ...(state.giftWrap || {}), enabled: true, motto: chip.dataset.giftMotto };
+      $$("#cartGiftWrapBox [data-gift-motto]").forEach(node => node.classList.toggle("active", node === chip));
+      saveJSON("vorozhbitov_gift_wrap", state.giftWrap);
+      haptic("selection");
+    });
+    $("#giftWrapRecipient")?.addEventListener("input", event => {
+      state.giftWrap = { ...(state.giftWrap || {}), recipient: String(event.target.value || "").slice(0, 80) };
+      saveJSON("vorozhbitov_gift_wrap", state.giftWrap);
+    });
+    document.addEventListener("click", event => {
+      const chip = event.target.closest("[data-city-pick]");
+      if (!chip) return;
+      const box = chip.closest(".city-quick-chips");
+      const targetId = box && (box.dataset.cityTarget || box.dataset.target);
+      const input = targetId ? document.getElementById(targetId) : null;
+      if (!input) return;
+      input.value = chip.dataset.cityPick || "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      haptic("selection");
+    });
+    $("#registryCheckBtn")?.addEventListener("click", checkSerialRegistry);
+    $("#registryInput")?.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        checkSerialRegistry();
+      }
+    });
+    $("#addHomeScreenBtn")?.addEventListener("click", () => {
+      if (tg && typeof tg.addToHomeScreen === "function") {
+        try {
+          tg.addToHomeScreen();
+          trackEvent("homescreen_prompt");
+          haptic("success");
+          window.setTimeout(syncHomeScreenStatus, 1800);
+          return;
+        } catch (_) {}
+      }
+      showToast("В Telegram нажми меню «⋮» вверху → «Добавить на экран «Домой»».");
+      haptic("light");
+    });
 
     document.addEventListener("click", event => {
       const shot = event.target.closest("[data-lightbox]");
@@ -3956,6 +5083,7 @@
   updateCounters();
   startExperience();
   loadCatalog();
+  trackEvent("open", { platform: (tg && tg.platform) || "web" });
   refreshReturnPayment();
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshReturnPayment(); });
   window.VorozhbitovShop = { state, openProduct, openCart };
