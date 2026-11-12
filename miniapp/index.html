@@ -175,7 +175,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
     <div class="welcome-shade"></div>
     <div class="welcome-top-controls">
       <button class="welcome-motion hidden" id="welcomeMotion" type="button" aria-label="Остановить видео"><span id="welcomeFrameCount" aria-hidden="true">ФИЛЬМ · 9 СЕК</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
-      <button class="welcome-sound" id="welcomeSound" type="button" aria-pressed="false" aria-label="Включить атмосферный звук зала">ЗВУК ВЫКЛ</button>
+      <button class="welcome-sound" id="welcomeSound" type="button" aria-pressed="false" aria-label="Включить фоновую музыку бренда">МУЗЫКА ВЫКЛ</button>
     </div>
     <div class="welcome-frame">
       <div class="welcome-kicker"><span class="pulse-dot"></span> ПЕРВЫЙ ДРОП · ДЛЯ СВОИХ</div>
@@ -221,6 +221,9 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
         <span class="brand-type"><strong class="brand-wordmark">СИЛА И ЧЕСТЬ</strong><small>ПЕРВЫЙ ДРОП 001</small></span>
       </a>
       <div class="top-actions">
+        <button class="icon-button sound-trigger" id="topbarSoundBtn" type="button" aria-pressed="false" aria-label="Включить фоновую музыку" title="Фоновая музыка">
+          <span class="sound-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        </button>
         <button class="icon-button" id="searchToggle" type="button" aria-label="Поиск" aria-expanded="false" aria-controls="searchOverlay"><span class="icon" data-icon="search"></span></button>
         <button class="icon-button" id="profileButton" type="button" aria-label="Профиль"><span class="icon" data-icon="user"></span></button>
         <button class="icon-button cart-trigger" id="cartButton" type="button" aria-label="Корзина">
@@ -418,7 +421,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
           <div class="founder-word-card" id="founderWordCard">
             <div class="founder-word-head">
               <span class="founder-word-kicker"><span class="pulse-dot"></span> ПРЯМАЯ РЕЧЬ ОСНОВАТЕЛЯ</span>
-              <button type="button" class="founder-audio-btn" id="founderAudioBtn" aria-pressed="false">▶ АТМОСФЕРА ЗАЛА</button>
+              <button type="button" class="founder-audio-btn" id="founderAudioBtn" aria-pressed="false">▶ ПОД МУЗЫКУ БРЕНДА</button>
             </div>
             <blockquote class="founder-word-quote" id="founderWordQuote">«Я не хотел делать мерч на один вечер. Каждая вещь этого выпуска сшита так, чтобы держать форму после зала, дороги и сотни стирок — за неё не стыдно отвечать своим именем».</blockquote>
             <audio id="founderVoiceAudio" class="hidden" preload="none"></audio>
@@ -946,7 +949,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
   <div class="modal-backdrop hidden film-backdrop" id="filmModal" role="dialog" aria-modal="true" aria-label="Фильм первого дропа">
     <div class="film-sheet">
       <div class="film-progress" id="filmProgress" aria-hidden="true"></div>
-      <button class="film-sound-btn" id="filmSoundBtn" type="button" aria-pressed="false">ЗВУК ВЫКЛ</button>
+      <button class="film-sound-btn" id="filmSoundBtn" type="button" aria-pressed="false">МУЗЫКА ВЫКЛ</button>
       <button class="sheet-close film-close" data-close="filmModal" type="button" aria-label="Закрыть фильм">×</button>
       <div class="film-media">
         <img id="filmImage" alt="">
@@ -1104,6 +1107,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
     <div><strong>ОПЛАТА.</strong><small>Статус появится в профиле, когда деньги пройдут.</small></div>
     <button type="button" id="closeToast" aria-label="Закрыть">×</button>
   </div>
+  <audio id="bgmFallbackAudio" src="assets/audio/sila-ambient-loop-20261112i.mp3" preload="none" loop class="hidden"></audio>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="shop-core.js"></script>

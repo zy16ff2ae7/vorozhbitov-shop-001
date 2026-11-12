@@ -2814,3 +2814,126 @@ main .section-heading .section-kicker::before,
 #ownerStoryShare {
   grid-column: 1 / -1;
 }
+
+/* ---------- 14. Persistent Storefront Background Music Toggle (20261112i) ---------- */
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sound-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, color 0.22s ease;
+}
+
+.sound-trigger::after {
+  content: "";
+  position: absolute;
+  width: 19px;
+  height: 1.5px;
+  background: rgba(233, 227, 217, 0.72);
+  border-radius: 2px;
+  transform: rotate(-38deg) scaleX(1);
+  box-shadow: 0 0 0 1.5px rgba(10, 10, 12, 0.85);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.22s ease;
+}
+
+.sound-trigger.is-active {
+  background: rgba(184, 34, 24, 0.18) !important;
+  border-color: rgba(216, 59, 47, 0.55) !important;
+  box-shadow: 0 0 14px rgba(184, 34, 24, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.sound-trigger.is-active::after {
+  opacity: 0;
+  transform: rotate(-38deg) scaleX(0.2);
+}
+
+.sound-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2.5px;
+  width: 18px;
+  height: 15px;
+}
+
+.sound-bars i {
+  display: block;
+  width: 2px;
+  border-radius: 1.5px;
+  background: #cfc8bc;
+  opacity: 0.62;
+  transform-origin: bottom center;
+  transition: height 0.24s ease, background 0.24s ease, opacity 0.24s ease;
+}
+
+.sound-bars i:nth-child(1) { height: 5px; }
+.sound-bars i:nth-child(2) { height: 10px; }
+.sound-bars i:nth-child(3) { height: 7px; }
+.sound-bars i:nth-child(4) { height: 4px; }
+
+.sound-trigger.is-active .sound-bars i {
+  opacity: 1;
+  background: #f4efe6;
+  animation: silaEqPulse 1.6s ease-in-out infinite alternate;
+}
+
+.sound-trigger.is-active .sound-bars i:nth-child(1) {
+  height: 7px;
+  animation-duration: 1.45s;
+  animation-delay: 0s;
+}
+
+.sound-trigger.is-active .sound-bars i:nth-child(2) {
+  height: 14px;
+  background: #e24a3d;
+  animation-duration: 1.15s;
+  animation-delay: -0.35s;
+}
+
+.sound-trigger.is-active .sound-bars i:nth-child(3) {
+  height: 10px;
+  animation-duration: 1.35s;
+  animation-delay: -0.7s;
+}
+
+.sound-trigger.is-active .sound-bars i:nth-child(4) {
+  height: 6px;
+  background: #e24a3d;
+  animation-duration: 1.55s;
+  animation-delay: -0.2s;
+}
+
+@keyframes silaEqPulse {
+  0% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1.05); }
+  100% { transform: scaleY(0.68); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sound-trigger.is-active .sound-bars i {
+    animation: none;
+  }
+}
+
+@media (max-width: 390px) {
+  .topbar {
+    padding-inline: 14px !important;
+  }
+  .brand-lockup {
+    gap: 9px;
+  }
+  .top-actions {
+    gap: 1px;
+  }
+  .top-actions .icon-button {
+    width: 37px;
+    height: 37px;
+  }
+}

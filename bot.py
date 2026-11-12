@@ -105,7 +105,7 @@ class RateLimiter:
 # заказов опрашивается витриной раз в 4 секунды, поэтому лимит выше.
 CHECKOUT_LIMITER = RateLimiter(limit=8, window_seconds=60)
 READ_LIMITER = RateLimiter(limit=60, window_seconds=60)
-VIDEO_SUFFIXES = {".mp4", ".m4v", ".webm", ".mov"}
+VIDEO_SUFFIXES = {".mp4", ".m4v", ".webm", ".mov", ".mp3", ".m4a", ".ogg", ".wav"}
 PHONE_RE = re.compile(r"^\+?[0-9]{10,15}$")
 REF_RE = re.compile(r"^ref(\d{3,15})$")
 # Telegram отказывается принимать файлы крупнее 50 МБ загрузкой по HTTP.
