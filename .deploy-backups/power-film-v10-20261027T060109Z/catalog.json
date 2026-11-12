@@ -1,0 +1,710 @@
+{
+  "brand": {
+    "name": "СИЛА И ЧЕСТЬ",
+    "descriptor": "сила и честь / городская форма",
+    "drop": "ПЕРВЫЙ ДРОП",
+    "welcome_image": "assets/welcome-sword-logo.jpg",
+    "store_image": "assets/store.jpg"
+  },
+  "categories": [
+    {
+      "id": "drop",
+      "name": "Выпуск"
+    },
+    {
+      "id": "hoodie",
+      "name": "Худи"
+    },
+    {
+      "id": "tee",
+      "name": "Футболки"
+    },
+    {
+      "id": "bottom",
+      "name": "Низ"
+    }
+  ],
+  "products": [
+    {
+      "id": "tee-sila-i-chest",
+      "category": "drop",
+      "name": "СИЛА И ЧЕСТЬ",
+      "price": "4 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL",
+        "XXL"
+      ],
+      "description": "Чёрная футболка первого тиража. Надпись «СИЛА И ЧЕСТЬ» на груди, фирменная чёрная нашивка слева у подола. На спине — постоянная деталь с монограммой у горловины и длинный узкий клинок с потёртой фактурой.",
+      "signature": "Первый тираж. Один раз и без повторов.",
+      "photo_url": "",
+      "image": "assets/product-studio-v1/sila-000.webp",
+      "images": [
+        "assets/product-studio-v1/sila-000.webp",
+        "assets/product-studio-v1/sila-180.webp",
+        "assets/product-studio-v1/sila-045.webp",
+        "assets/product-studio-v1/sila-225.webp"
+      ],
+      "badge": "ВЫПУСК 001",
+      "material": "100% хлопок · 240 г/м²",
+      "fit": "Прямой крой",
+      "details": [
+        "🎖 Фирменный жетон с монограммой — в подарок к первому дропу",
+        "Принт на груди: «СИЛА И ЧЕСТЬ», фирменный узкий шрифт с засечками",
+        "Чёрная нашивка с белым знаком слева у переднего подола",
+        "Постоянная чёрная деталь с монограммой у задней горловины",
+        "Узкий клинок с потёртой фактурой почти до подола",
+        "Плотная шелкография — не трескается",
+        "Усиленная горловина",
+        "Фирменный зип-пакет «ПУТЬ, ДОСТОЙНЫЙ ВОИНА»"
+      ],
+      "stock_label": "Первый тираж",
+      "active": true,
+      "spin": [
+        "assets/product-studio-v1/sila-000.webp",
+        "assets/product-studio-v1/sila-045.webp",
+        "assets/product-studio-v1/sila-090.webp",
+        "assets/product-studio-v1/sila-135.webp",
+        "assets/product-studio-v1/sila-180.webp",
+        "assets/product-studio-v1/sila-225.webp",
+        "assets/product-studio-v1/sila-270.webp",
+        "assets/product-studio-v1/sila-315.webp"
+      ],
+      "image_labels": [
+        "Спереди · 0°",
+        "Сзади · 180°",
+        "Спереди сбоку · 45°",
+        "Сзади сбоку · 225°"
+      ],
+      "featured": true,
+      "media_note": "360° и предметные ракурсы — визуализация по материалам бренда. Посадка и мелкие детали могут отличаться.",
+      "video": "assets/video/tee-sila-original-front-to-back-v1.mp4",
+      "card_image": "assets/product-studio-v1/sila-000.webp",
+      "spin_labels": [
+        "Спереди · 0°",
+        "Спереди сбоку · 45°",
+        "Сбоку · 90°",
+        "Сзади сбоку · 135°",
+        "Сзади · 180°",
+        "Сзади сбоку · 225°",
+        "Сбоку · 270°",
+        "Спереди сбоку · 315°"
+      ],
+      "spin_kind": "visualization",
+      "source_images": [
+        "assets/product-originals-v1/sila-front.jpg",
+        "assets/product-originals-v1/sila-front-video.png",
+        "assets/product-originals-v1/sila-back.png"
+      ],
+      "source_labels": [
+        "Фото изделия · перед",
+        "Кадр исходного видео · перед",
+        "Кадр исходного видео · спина"
+      ]
+    },
+    {
+      "id": "tee-vzglyad",
+      "category": "drop",
+      "name": "ВЗГЛЯД",
+      "price": "4 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL",
+        "XXL"
+      ],
+      "description": "Футболка «ВЗГЛЯД» из первого дропа бренда «СИЛА И ЧЕСТЬ». Символ стойкости и характера. Доступна по предзаказу.",
+      "signature": "Первый дроп. По предзаказу.",
+      "photo_url": "",
+      "image": "assets/product-studio-v1/vzglyad-000.webp",
+      "images": [
+        "assets/product-studio-v1/vzglyad-000.webp",
+        "assets/product-studio-volya-v2/vzglyad-180.webp",
+        "assets/product-studio-v1/vzglyad-045.webp",
+        "assets/product-studio-volya-v2/vzglyad-225.webp"
+      ],
+      "badge": "ПРЕДЗАКАЗ",
+      "material": "100% хлопок · 240-260 г/м²",
+      "fit": "Прямой крой",
+      "details": [
+        "🎖 Фирменный жетон — в подарок к первому дропу",
+        "Принт: «СИЛА И ЧЕСТЬ»; на спине — СИЛА / ЧЕСТЬ / ДОМ / СЕМЬЯ / ВОЛЯ / ХАРАКТЕР / ВЕРНОСТЬ / ДИСЦИПЛИНА / ДУХ / МУЖЕСТВО",
+        "Плотный премиальный хлопок (240–260 г/м²)",
+        "Уставной прямой крой"
+      ],
+      "stock_label": "Предзаказ",
+      "active": true,
+      "spin": [
+        "assets/product-studio-v1/vzglyad-000.webp",
+        "assets/product-studio-v1/vzglyad-045.webp",
+        "assets/product-studio-v1/vzglyad-090.webp",
+        "assets/product-studio-volya-v2/vzglyad-135.webp",
+        "assets/product-studio-volya-v2/vzglyad-180.webp",
+        "assets/product-studio-volya-v2/vzglyad-225.webp",
+        "assets/product-studio-v1/vzglyad-270.webp",
+        "assets/product-studio-v1/vzglyad-315.webp"
+      ],
+      "image_labels": [
+        "Спереди · 0°",
+        "Сзади · 180°",
+        "Спереди сбоку · 45°",
+        "Сзади сбоку · 225°"
+      ],
+      "featured": false,
+      "media_note": "360° и предметные ракурсы — визуализация по материалам бренда. Посадка и мелкие детали могут отличаться.",
+      "card_image": "assets/product-studio-v1/vzglyad-000.webp",
+      "video": "",
+      "spin_labels": [
+        "Спереди · 0°",
+        "Спереди сбоку · 45°",
+        "Сбоку · 90°",
+        "Сзади сбоку · 135°",
+        "Сзади · 180°",
+        "Сзади сбоку · 225°",
+        "Сбоку · 270°",
+        "Спереди сбоку · 315°"
+      ],
+      "spin_kind": "visualization",
+      "source_images": [
+        "assets/product-originals-v2/vzglyad-volya-v2.png"
+      ],
+      "source_labels": [
+        "Исходный макет · принты и детали"
+      ]
+    },
+    {
+      "id": "tee-odin-v-pole-voin",
+      "category": "drop",
+      "name": "ОДИН В ПОЛЕ ВОИН",
+      "price": "4 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL",
+        "XXL"
+      ],
+      "description": "Белая футболка «ОДИН В ПОЛЕ ВОИН». Тёмная фактурная монограмма на груди, фирменная надпись на спине и нашивки на рукаве и у подола. Предзаказ первого выпуска.",
+      "signature": "Белый вариант. По предзаказу.",
+      "photo_url": "",
+      "image": "assets/product-studio-v1/white-000.webp",
+      "images": [
+        "assets/product-studio-v1/white-000.webp",
+        "assets/product-studio-v1/white-180.webp",
+        "assets/product-studio-v1/white-045.webp",
+        "assets/product-studio-v1/white-225.webp"
+      ],
+      "badge": "ПРЕДЗАКАЗ",
+      "material": "100% хлопок · 240–260 г/м²",
+      "fit": "Прямой крой",
+      "details": [
+        "🎖 Фирменный жетон с монограммой — в подарок к первому дропу",
+        "Фактурный тёмный знак с мечом на груди",
+        "Надпись «ОДИН В ПОЛЕ ВОИН» на спине",
+        "Фирменные нашивки на рукаве и у подола",
+        "Белый цвет · плотный хлопок (240–260 г/м²)",
+        "Плотная шелкография — не трескается",
+        "Усиленная горловина",
+        "Фирменный зип-пакет «ПУТЬ, ДОСТОЙНЫЙ ВОИНА»"
+      ],
+      "stock_label": "Предзаказ",
+      "active": false,
+      "spin": [
+        "assets/product-studio-v1/white-000.webp",
+        "assets/product-studio-v1/white-045.webp",
+        "assets/product-studio-v1/white-090.webp",
+        "assets/product-studio-v1/white-135.webp",
+        "assets/product-studio-v1/white-180.webp",
+        "assets/product-studio-v1/white-225.webp",
+        "assets/product-studio-v1/white-270.webp",
+        "assets/product-studio-v1/white-315.webp"
+      ],
+      "image_labels": [
+        "Спереди · 0°",
+        "Сзади · 180°",
+        "Спереди сбоку · 45°",
+        "Сзади сбоку · 225°"
+      ],
+      "featured": false,
+      "media_note": "360° и предметные ракурсы — визуализация по материалам бренда. Посадка и мелкие детали могут отличаться.",
+      "video": "assets/video/tee-odin-v-pole-voin-rotation-concrete-v1.mp4",
+      "card_image": "assets/product-studio-v1/white-000.webp",
+      "spin_labels": [
+        "Спереди · 0°",
+        "Спереди сбоку · 45°",
+        "Сбоку · 90°",
+        "Сзади сбоку · 135°",
+        "Сзади · 180°",
+        "Сзади сбоку · 225°",
+        "Сбоку · 270°",
+        "Спереди сбоку · 315°"
+      ],
+      "spin_kind": "visualization",
+      "source_images": [
+        "assets/product-originals-v1/white.jpg"
+      ],
+      "source_labels": [
+        "Исходный макет · принты и детали"
+      ]
+    },
+    {
+      "id": "tag-sila-i-chest",
+      "category": "drop",
+      "name": "ЖЕТОН",
+      "price": "0 ₽",
+      "sizes": [
+        "ONE SIZE"
+      ],
+      "description": "Армейский жетон из нержавеющей стали с монограммой и мечом. Идёт в подарок к каждому заказу первого дропа.",
+      "signature": "В подарок к первому дропу",
+      "photo_url": "",
+      "image": "assets/spin/tag-sich-01-v3.jpg",
+      "images": [
+        "assets/spin/tag-sich-01-v3.jpg",
+        "assets/spin/tag-sich-02-v3.jpg",
+        "assets/spin/tag-sich-03-v3.jpg",
+        "assets/spin/tag-sich-04-v3.jpg"
+      ],
+      "badge": "В ПОДАРОК",
+      "material": "Нержавеющая сталь · лазерная гравировка",
+      "fit": "Нумерованный",
+      "details": [
+        "Сталь AISI 304 · 50×29 мм · 2 мм",
+        "Лазерная гравировка с двух сторон",
+        "Личный номер № 00001–00100",
+        "Шариковая цепочка 60 см в комплекте",
+        "Фирменный зип-пакет"
+      ],
+      "stock_label": "Тираж 100 шт.",
+      "active": true,
+      "spin": [
+        "assets/spin/tag-sich-01-v3.jpg",
+        "assets/spin/tag-sich-02-v3.jpg",
+        "assets/spin/tag-sich-03-v3.jpg",
+        "assets/spin/tag-sich-04-v3.jpg"
+      ],
+      "featured": true,
+      "gift": true,
+      "gift_stock": 100
+    },
+    {
+      "id": "honor-hoodie",
+      "category": "drop",
+      "name": "СИЛА И ЧЕСТЬ",
+      "price": "11 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "Главный сигнал выпуска. Тяжёлый футер, принт «Сила и честь» на груди, красная V на кромке. Кто понял — носит. Кто нет — проходит мимо.",
+      "signature": "Сила и честь. Это не слоган на витрине — это то, с чем выходишь из дома.",
+      "print": "СИЛА И\nЧЕСТЬ",
+      "shape": "hoodie",
+      "photo_url": "",
+      "image": "assets/honor-hoodie.jpg",
+      "images": [
+        "assets/honor-hoodie.jpg",
+        "assets/look-ring.jpg"
+      ],
+      "badge": "ВЫПУСК",
+      "material": "100% хлопок · 400 г/м²",
+      "fit": "Объёмный крой",
+      "details": [
+        "Принт СИЛА И ЧЕСТЬ",
+        "Красная V на кромке",
+        "Капюшон с двойной строчкой"
+      ],
+      "stock_label": "Осталось мало",
+      "active": false,
+      "spin": [
+        "assets/honor-hoodie.jpg",
+        "assets/spin/honor-01.jpg",
+        "assets/spin/honor-02.jpg",
+        "assets/spin/honor-03.jpg",
+        "assets/spin/honor-04.jpg",
+        "assets/spin/honor-05.jpg",
+        "assets/spin/honor-06.jpg",
+        "assets/spin/honor-07.jpg"
+      ]
+    },
+    {
+      "id": "year-tee-1993",
+      "category": "drop",
+      "name": "1993",
+      "price": "4 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "Год, с которого всё началось. Плотный свободный крой, цифра 1993 на груди. Не юбилей — метка.",
+      "signature": "1993. Носи как дату, не как принт.",
+      "print": "1993",
+      "shape": "tee",
+      "photo_url": "",
+      "image": "assets/year-tee.jpg",
+      "images": [
+        "assets/year-tee.jpg"
+      ],
+      "badge": "ЛИМИТ",
+      "material": "100% хлопок · 240 г/м²",
+      "fit": "Свободный крой",
+      "details": [
+        "Крупный 1993",
+        "Красная бирка",
+        "Усиленная горловина"
+      ],
+      "stock_label": "Последний тираж",
+      "active": false,
+      "spin": [
+        "assets/year-tee.jpg",
+        "assets/spin/year-01.jpg",
+        "assets/spin/year-02.jpg",
+        "assets/spin/year-04.jpg"
+      ]
+    },
+    {
+      "id": "drop-hoodie-001",
+      "category": "drop",
+      "name": "ХУДИ",
+      "price": "9 900 ₽",
+      "sizes": [
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "Тяжёлое полотно, объёмный силуэт, двойная строчка. Увидел — забирай: партия ограничена.",
+      "signature": "Тяжёлая. Как надо. Партия маленькая — потом не будет.",
+      "print": "V",
+      "shape": "hoodie",
+      "photo_url": "",
+      "image": "assets/hero-drop.jpg",
+      "images": [
+        "assets/hero-drop.jpg",
+        "assets/look-ring.jpg",
+        "assets/heavy-hoodie.jpg"
+      ],
+      "badge": "ЛИМИТ",
+      "material": "100% хлопок · 400 г/м²",
+      "fit": "Объёмный крой",
+      "details": [
+        "Футер 3-нитка",
+        "Капюшон с двойной строчкой",
+        "Металлические наконечники"
+      ],
+      "stock_label": "Последний тираж",
+      "active": false,
+      "spin": [
+        "assets/hero-drop.jpg",
+        "assets/spin/honor-02.jpg",
+        "assets/spin/honor-04.jpg",
+        "assets/spin/honor-06.jpg"
+      ]
+    },
+    {
+      "id": "drop-tee-001",
+      "category": "drop",
+      "name": "ФУТБОЛКА",
+      "price": "4 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "Плотный хлопок, свободный крой, минимальный сигнал на груди. Первый тираж — один раз и без повторов.",
+      "signature": "База. Без крика. Свой считывает.",
+      "print": "V",
+      "shape": "tee",
+      "photo_url": "",
+      "image": "assets/base-tee.jpg",
+      "images": [
+        "assets/base-tee.jpg"
+      ],
+      "badge": "ВЫПУСК",
+      "material": "100% хлопок · 240 г/м²",
+      "fit": "Свободный крой",
+      "details": [
+        "Плотный хлопок",
+        "Усиленная горловина",
+        "Бирка-сигнал внутри"
+      ],
+      "stock_label": "Осталось мало",
+      "active": false,
+      "spin": [
+        "assets/base-tee.jpg",
+        "assets/spin/year-02.jpg",
+        "assets/spin/year-04.jpg"
+      ]
+    },
+    {
+      "id": "field-tee-001",
+      "category": "tee",
+      "name": "ОДИН В ПОЛЕ",
+      "price": "4 400 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "Один в поле. Даже если все разошлись. Плотная футболка, прямой принт, без лишнего.",
+      "signature": "Один в поле. Даже если все разошлись.",
+      "print": "ОДИН\nВ ПОЛЕ",
+      "shape": "tee",
+      "photo_url": "",
+      "image": "assets/field-tee.jpg",
+      "images": [
+        "assets/field-tee.jpg"
+      ],
+      "badge": "СИГНАЛ",
+      "material": "100% хлопок · 240 г/м²",
+      "fit": "Свободный крой",
+      "details": [
+        "Принт ОДИН В ПОЛЕ",
+        "Плотная горловина",
+        "Красный кант по свету"
+      ],
+      "stock_label": "В наличии",
+      "active": false,
+      "spin": [
+        "assets/field-tee.jpg",
+        "assets/spin/year-02.jpg",
+        "assets/spin/year-04.jpg"
+      ]
+    },
+    {
+      "id": "hoodie-heavy-002",
+      "category": "hoodie",
+      "name": "ТЯЖЁЛОЕ ХУДИ",
+      "price": "10 500 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "400 г/м². Держит форму и темп города. Никакой лишней графики — только посадка и вес.",
+      "signature": "400 грамм. Держит форму, когда город не держит.",
+      "print": "V",
+      "shape": "hoodie",
+      "photo_url": "",
+      "image": "assets/heavy-hoodie.jpg",
+      "images": [
+        "assets/heavy-hoodie.jpg",
+        "assets/look-ring.jpg"
+      ],
+      "badge": "БАЗА",
+      "material": "100% хлопок · 400 г/м²",
+      "fit": "Свободный крой",
+      "details": [
+        "Мягкий начес",
+        "Плотные манжеты",
+        "Карман-кенгуру"
+      ],
+      "stock_label": "В наличии",
+      "active": false,
+      "spin": [
+        "assets/heavy-hoodie.jpg",
+        "assets/spin/honor-02.jpg",
+        "assets/spin/honor-04.jpg",
+        "assets/spin/honor-06.jpg"
+      ]
+    },
+    {
+      "id": "tee-basic-002",
+      "category": "tee",
+      "name": "НА КАЖДЫЙ ДЕНЬ",
+      "price": "3 900 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "description": "База на каждый день: плотная ткань, спокойная форма, вещь, которую не хочется снимать.",
+      "signature": "На каждый день. Снимать не хочется.",
+      "print": "V",
+      "shape": "tee",
+      "photo_url": "",
+      "image": "assets/base-tee.jpg",
+      "images": [
+        "assets/base-tee.jpg"
+      ],
+      "badge": "ДЕНЬ",
+      "material": "100% хлопок · 240 г/м²",
+      "fit": "Свободный крой",
+      "details": [
+        "Гладкая фактура",
+        "Плотная горловина",
+        "Стирается без сюрпризов"
+      ],
+      "stock_label": "В наличии",
+      "active": false,
+      "spin": [
+        "assets/base-tee.jpg",
+        "assets/spin/year-02.jpg",
+        "assets/spin/year-04.jpg"
+      ]
+    },
+    {
+      "id": "cargo-city-001",
+      "category": "bottom",
+      "name": "КАРГО",
+      "price": "8 500 ₽",
+      "sizes": [
+        "S",
+        "M",
+        "L"
+      ],
+      "description": "Свободные карго с регулируемой посадкой и усиленными карманами. Город не бережёт — эти выдержат.",
+      "signature": "Карманы не для красоты. Город не бережёт.",
+      "print": "V",
+      "shape": "cargo",
+      "photo_url": "",
+      "image": "assets/city-cargo.jpg",
+      "images": [
+        "assets/city-cargo.jpg",
+        "assets/look-street.jpg"
+      ],
+      "badge": "ГОРОД",
+      "material": "Плотный хлопок",
+      "fit": "Свободная посадка",
+      "details": [
+        "6 функциональных карманов",
+        "Регулировка низа",
+        "Усиленные швы"
+      ],
+      "stock_label": "Мало размеров",
+      "active": false,
+      "spin": [
+        "assets/city-cargo.jpg",
+        "assets/look-street.jpg"
+      ]
+    },
+    {
+      "id": "cap-logo-001",
+      "category": "drop",
+      "name": "КЕПКА V",
+      "price": "3 200 ₽",
+      "sizes": [
+        "ONE SIZE"
+      ],
+      "description": "Чёрная шестиклинка, красная V. Никаких громких логотипов — свой узнает.",
+      "signature": "V на лбу. Свой узнает. Чужой не обязан.",
+      "print": "V",
+      "shape": "cap",
+      "photo_url": "",
+      "image": "assets/v-cap.jpg",
+      "images": [
+        "assets/v-cap.jpg",
+        "assets/logo-cap.jpg"
+      ],
+      "badge": "СИГНАЛ",
+      "material": "100% хлопок",
+      "fit": "Регулируемый размер",
+      "details": [
+        "Вышитая красная V",
+        "Металлическая застежка",
+        "Плотный козырёк"
+      ],
+      "stock_label": "В наличии",
+      "active": false,
+      "spin": [
+        "assets/v-cap.jpg",
+        "assets/logo-cap.jpg"
+      ]
+    }
+  ],
+  "lookbook": [
+    {
+      "image": "assets/product-proof/tee-sila-front-photo-v1.jpg",
+      "caption": "СИЛА И ЧЕСТЬ · ПЕРЕД"
+    },
+    {
+      "image": "assets/product-proof/tee-vzglyad-front-source-v2.jpg",
+      "caption": "ВЗГЛЯД · ПЕРЕД"
+    }
+  ],
+  "media": {
+    "welcome_loop": "assets/video/power-drop-001-22s-silent-v9.mp4",
+    "welcome_poster": "assets/video/power-drop-poster-v9.jpg",
+    "teaser": "assets/video/power-drop-001-22s-silent-v9.mp4",
+    "teaser_poster": "assets/video/power-drop-poster-v9.jpg",
+    "teaser_title": "СИЛА И ЧЕСТЬ",
+    "teaser_caption": "Первый дроп 001 · СИЛА И ЧЕСТЬ",
+    "teaser_story_url": "",
+    "teaser_thumbnail": "assets/video/power-drop-poster-v9.jpg",
+    "hero_image": "assets/drop/hero-founder-retouch-v4.webp",
+    "hero_background": "assets/drop/hero-founder-retouch-v4.webp",
+    "hero_subject": "assets/drop/hero-founder-retouch-v4.webp",
+    "welcome_motion": true,
+    "welcome_image": "assets/welcome-sword-logo.jpg"
+  },
+  "drop_event": {
+    "id": "drop-001",
+    "title": "ПЕРВЫЙ ДРОП",
+    "early_starts_at": "",
+    "starts_at": "",
+    "ends_at": "",
+    "note": "Статус и размеры ниже берутся из живого каталога — без придуманных остатков."
+  },
+  "film": [
+    {
+      "image": "assets/drop/hero-founder-retouch-v4.webp",
+      "kicker": "01 / ОСНОВАТЕЛЬ",
+      "title": "НИКИТА ВОРОЖБИТОВ",
+      "text": "Основатель бренда «СИЛА И ЧЕСТЬ». Форма для тех, кто выбирает характер и дисциплину каждый день."
+    },
+    {
+      "image": "assets/product-studio-v1/sila-000.webp",
+      "kicker": "02 / ПЕРЕД",
+      "title": "СИЛА И ЧЕСТЬ",
+      "text": "Прямой крой и фирменная узкая надпись. Визуализация; фото изделия — в карточке.",
+      "product_id": "tee-sila-i-chest"
+    },
+    {
+      "image": "assets/product-studio-v1/sila-180.webp",
+      "kicker": "03 / СПИНА",
+      "title": "КЛИНОК НА СПИНЕ",
+      "text": "Фирменная деталь дропа — состаренный стальной клинок вдоль спины и монограмма у горловины.",
+      "product_id": "tee-sila-i-chest"
+    },
+    {
+      "image": "assets/product-studio-v1/vzglyad-000.webp",
+      "kicker": "04 / ВЗГЛЯД",
+      "title": "ВЗГЛЯД",
+      "text": "Символ внутренней силы. Десять принципов братства на спине.",
+      "product_id": "tee-vzglyad"
+    },
+    {
+      "image": "assets/product-studio-v1/sila-000.webp",
+      "kicker": "05 / ПЕРВЫЙ ДРОП",
+      "title": "ВЫБИРАЙ СВОЮ",
+      "text": "Две футболки первого выпуска. Размер подберём по росту и весу прямо в карточке.",
+      "cta": "catalog"
+    }
+  ],
+  "club": {
+    "title": "7 ДНЕЙ СЛОВА",
+    "subtitle": "Клуб дисциплины СИЛА И ЧЕСТЬ",
+    "reward": "Ранний доступ к следующим выпускам для тех, кто закрыл все 7 дней.",
+    "tasks": [
+      "Тренировка или 30 минут движения. Без отговорок.",
+      "Подъём точно в запланированное время.",
+      "Закрой дело, которое давно откладывал.",
+      "Час полной тишины: без ленты, новостей и лишнего шума.",
+      "Помоги своему человеку делом, а не словами.",
+      "Порядок в форме и вещах: всё на своих местах.",
+      "Подведи итог недели письменно. Что сдержал — то твоё."
+    ]
+  },
+  "community": [],
+  "channel_url": "https://t.me/nokayt_popmma"
+}

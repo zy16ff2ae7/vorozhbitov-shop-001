@@ -1053,16 +1053,16 @@
 
   const PRODUCT_HOTSPOTS = {
     "tee-sila-i-chest": [
-      { x: 50, y: 19, code: "01", title: "Усиленная горловина НВ", text: "Плотная рибана держит форму ворота после тренировок и стирок; сзади — фирменная планка с монограммой.", targetIndex: 2 },
-      { x: 50, y: 38, code: "02", title: "Уставной принт на груди", text: "Стойкая шелкография «СИЛА И ЧЕСТЬ» — чёткий контур букв без плёночного блеска.", targetIndex: 0 },
-      { x: 30, y: 50, code: "03", title: "Хлопок 240–260 г/м² + клинок", text: "Тяжёлое полотно 95% хлопок / 5% лайкра. Вдоль спины — узкий клинок на фактурной тесьме.", targetIndex: 3 },
-      { x: 35, y: 80, code: "04", title: "Жаккардовая бирка 001", text: "Тканый шеврон с белой монограммой НВ на нижнем срезе каждого экземпляра.", targetIndex: 4 }
+      { x: 50, y: 19, code: "01", title: "Усиленная горловина НВ", text: "Плотная рибана держит форму ворота после тренировок и стирок, не растягиваясь со временем.", targetIndex: 2 },
+      { x: 50, y: 36, code: "02", title: "Уставной принт «СИЛА И ЧЕСТЬ»", text: "Стойкая шелкография «СИЛА И ЧЕСТЬ» на груди — чёткий контур букв без плёночного блеска.", targetIndex: 3 },
+      { x: 30, y: 52, code: "03", title: "Хлопок 240–260 г/м² + клинок", text: "Тяжёлое полотно 95% хлопок / 5% лайкра. На спине — планка НВ и узкий клинок на фактурной тесьме.", targetIndex: 4 },
+      { x: 71, y: 86, code: "04", title: "Жаккардовая бирка НВ", text: "Тканый шеврон с белой монограммой НВ на нижнем срезе каждого экземпляра.", targetIndex: 5 }
     ],
     "tee-vzglyad": [
-      { x: 33, y: 24, code: "01", title: "Атлетическая линия плеча", text: "Выверенный рукав и пройма подчёркивают дельты и грудь без сковывания движений.", targetIndex: 2 },
-      { x: 50, y: 39, code: "02", title: "Графика «ВЗГЛЯД»", text: "Контрастный принт взгляда, девиз бренда и монограмма НВ с мечом по центру груди.", targetIndex: 4 },
-      { x: 67, y: 51, code: "03", title: "Круг из 10 принципов", text: "На спине — монограмма с мечом в кольце принципов: Сила, Честь, Дом, Семья, Воля, Дисциплина.", targetIndex: 5 },
-      { x: 35, y: 80, code: "04", title: "Шеврон подлинности НВ", text: "Фирменная жаккардовая нашивка первого выпуска на подоле изделия.", targetIndex: 6 }
+      { x: 50, y: 19, code: "01", title: "Усиленная горловина и плечо", text: "Плотная рибана ворота и выверенный плечевой шов держат атлетическую посадку по фигуре.", targetIndex: 4 },
+      { x: 50, y: 39, code: "02", title: "Графика «ВЗГЛЯД»", text: "Детализированный принт взгляда, девиз «СИЛА И ЧЕСТЬ» и монограмма НВ с мечом по центру груди.", targetIndex: 5 },
+      { x: 67, y: 54, code: "03", title: "Круг из 10 принципов", text: "На спине — меч НВ и кольцо из 10 принципов: Сила, Честь, Дом, Семья, Воля, Характер, Верность, Дисциплина, Дух, Мужество.", targetIndex: 6 },
+      { x: 71, y: 86, code: "04", title: "Шеврон подлинности НВ", text: "Фирменная жаккардовая нашивка первого выпуска на подоле изделия.", targetIndex: 7 }
     ]
   };
 
@@ -2335,11 +2335,11 @@
 
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
-    const staleLoop = !media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") || media.welcome_loop.includes("welcome-seal-20261029.mp4") || media.welcome_loop.includes("welcome-loop-20261112a.mp4") || media.welcome_loop === "assets/video/welcome-seal-20261112b.mp4";
-    const stalePoster = !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") || media.welcome_poster.includes("welcome-seal-20261029.jpg") || media.welcome_poster.includes("welcome-poster-20261112a.jpg") || media.welcome_poster === "assets/video/welcome-poster-20261112b.jpg";
+    const staleLoop = !media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") || media.welcome_loop.includes("welcome-seal-20261029.mp4") || media.welcome_loop.includes("welcome-loop-20261112a.mp4") || media.welcome_loop === "assets/video/welcome-seal-20261112b.mp4" || media.welcome_loop.includes("v=20261112k");
+    const stalePoster = !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") || media.welcome_poster.includes("welcome-seal-20261029.jpg") || media.welcome_poster.includes("welcome-poster-20261112a.jpg") || media.welcome_poster === "assets/video/welcome-poster-20261112b.jpg" || media.welcome_poster.includes("v=20261112k");
     return {
-      welcomeLoop: media.welcome_motion === false ? "" : (staleLoop ? "assets/video/welcome-seal-20261112b.mp4?v=20261112k" : media.welcome_loop),
-      welcomePoster: stalePoster ? "assets/video/welcome-poster-20261112b.jpg?v=20261112k" : media.welcome_poster
+      welcomeLoop: media.welcome_motion === false ? "" : (staleLoop ? "assets/video/welcome-seal-20261112b.mp4?v=20261112l" : media.welcome_loop),
+      welcomePoster: stalePoster ? "assets/video/welcome-poster-20261112b.jpg?v=20261112l" : media.welcome_poster
     };
   }
 
@@ -2787,13 +2787,13 @@
     control.setAttribute("aria-pressed", String(waiting));
     $("#welcomeMotionIcon").textContent = waiting ? "▷" : "Ⅱ";
     const canPlay = welcomeCanPlay();
-    // Если нативный autoplay из HTML уже запустил декодирование до привязки JS-событий — сразу показываем кадр.
-    if (canPlay && !video.paused && video.readyState >= 2 && !welcomePlayback.failed) {
+    // Показываем видео сразу с первого декодированного кадра без долгой задержки на постере.
+    if (canPlay && !video.paused && video.readyState >= 1 && !welcomePlayback.failed) {
       video.classList.add("is-playing");
     }
     const fallback = $("#welcomeFallback");
-    const isPlaying = video.classList.contains("is-playing") || (welcomePlayback.finished && !welcomePlayback.failed);
-    if (fallback) fallback.classList.toggle("hidden", isPlaying && !welcomePlayback.failed);
+    const showFallback = Boolean(welcomePlayback.failed || welcomePlayback.blocked || saverMode());
+    if (fallback) fallback.classList.toggle("hidden", !showFallback);
     const currentAttr = video.getAttribute("src") || "";
     if (welcomePlayback.source && !sameMediaFile(currentAttr, welcomePlayback.source)) {
       video.src = welcomePlayback.source;

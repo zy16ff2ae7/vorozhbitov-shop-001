@@ -45,8 +45,9 @@
       "images": [
         "assets/client/sila-front-studio-20261111c.webp",
         "assets/client/sila-back-studio-20261111c.webp",
-        "assets/client/sila-detail-collar-20261111c.webp",
-        "assets/client/sila-detail-blade-20261111c.webp",
+        "assets/client/sila-detail-neck-20261112l.webp",
+        "assets/client/sila-detail-chest-20261112l.webp",
+        "assets/client/sila-detail-collar-20261112l.webp",
         "assets/client/sila-detail-hemtag-20261111c.webp"
       ],
       "badge": "ВЫПУСК 001",
@@ -67,8 +68,9 @@
       "image_labels": [
         "Спереди · студия",
         "Сзади · клинок и планка НВ",
-        "Макро · планка НВ у горловины",
-        "Макро · клинок на тесьме",
+        "Макро · усиленная горловина",
+        "Макро · принт СИЛА И ЧЕСТЬ",
+        "Макро · планка НВ и клинок",
         "Макро · жаккардовая бирка НВ"
       ],
       "featured": true,
@@ -175,8 +177,9 @@
         "assets/client/vzglyad-back-studio-20261111c.webp",
         "assets/client/vzglyad-front-angle-studio-20261111c.webp",
         "assets/client/vzglyad-back-angle-studio-20261111c.webp",
-        "assets/client/vzglyad-detail-front-20261111c.webp",
-        "assets/client/vzglyad-detail-back-20261111c.webp",
+        "assets/client/vzglyad-detail-collar-20261112l.webp",
+        "assets/client/vzglyad-detail-front-20261112l.webp",
+        "assets/client/vzglyad-detail-back-20261112l.webp",
         "assets/client/sila-detail-hemtag-20261111c.webp"
       ],
       "badge": "ПРЕДЗАКАЗ",
@@ -201,6 +204,7 @@
         "Сзади · 10 принципов",
         "Спереди · ракурс",
         "Сзади · ракурс",
+        "Макро · усиленная горловина",
         "Макро · принт ВЗГЛЯД",
         "Макро · монограмма НВ и принципы",
         "Макро · жаккардовая бирка НВ"
@@ -758,8 +762,8 @@
     }
   ],
   "media": {
-    "welcome_loop": "assets/video/welcome-seal-20261112b.mp4?v=20261112k",
-    "welcome_poster": "assets/video/welcome-poster-20261112b.jpg?v=20261112k",
+    "welcome_loop": "assets/video/welcome-seal-20261112b.mp4?v=20261112l",
+    "welcome_poster": "assets/video/welcome-poster-20261112b.jpg?v=20261112l",
     "teaser": "assets/video/power-drop-001-20261111f.mp4",
     "teaser_poster": "assets/video/power-drop-poster-20261111e.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",

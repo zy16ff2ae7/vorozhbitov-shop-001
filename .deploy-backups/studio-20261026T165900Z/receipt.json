@@ -1,0 +1,13 @@
+{
+  "deployed_at": "20261026T165900Z",
+  "backup": "/opt/vorozhbitov-shop-001/.deploy-backups/studio-20261026T165900Z",
+  "service": "vorozhbitov-shop.service",
+  "files": {
+    "/opt/vorozhbitov-shop-001/miniapp/app.js": "6194366f796ec7b40cb75c4bffdbaa6b4185b860a98ff4119fd0af8646f7ce72",
+    "/opt/vorozhbitov-shop-001/miniapp/styles.css": "5d8f67d2752aeaf0b3684056b7e316d8eb600e7393d073041f365eef95bf8680",
+    "/opt/vorozhbitov-shop-001/miniapp/index.html": "ad737c6b542cf45eaf691c1eeb612e057cff4c3703ecc940d653cdb3effe8d2c",
+    "/opt/vorozhbitov-shop-001/catalog.json": "597e5304bc7f7436baab4163542ba553c31dde0c556503be1534c99dbefd5f38",
+    "/var/lib/vorozhbitov-shop/catalog.json": "597e5304bc7f7436baab4163542ba553c31dde0c556503be1534c99dbefd5f38"
+  },
+  "note": "Media/UI only; original references retained; 360 is labeled visualization."
+}
