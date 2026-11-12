@@ -202,6 +202,31 @@ main .section-heading .section-kicker::before,
 #welcomeVideo {
   display: block !important;
   object-position: 50% 32% !important;
+  pointer-events: none !important;
+}
+
+#welcomeVideo::-webkit-media-controls,
+#welcomeVideo::-webkit-media-controls-panel,
+#welcomeVideo::-webkit-media-controls-play-button,
+#welcomeVideo::-webkit-media-controls-start-playback-button,
+#welcomeVideo::-webkit-media-controls-overlay-play-button,
+#welcomeVideo::-webkit-media-controls-enclosure,
+video.welcome-media::-webkit-media-controls,
+video.welcome-media::-webkit-media-controls-start-playback-button,
+video.welcome-media::-webkit-media-controls-overlay-play-button,
+#filmVideo::-webkit-media-controls,
+#filmVideo::-webkit-media-controls-start-playback-button,
+#filmVideo::-webkit-media-controls-overlay-play-button,
+.mascot-visual::-webkit-media-controls,
+.mascot-visual::-webkit-media-controls-start-playback-button,
+.mascot-visual::-webkit-media-controls-overlay-play-button {
+  display: none !important;
+  -webkit-appearance: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .welcome .welcome-kicker,

@@ -170,11 +170,11 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
   </div>
 
   <section class="welcome" id="welcome" aria-label="Приветствие">
-    <video class="welcome-media is-playing" id="welcomeVideo" src="assets/video/welcome-seal-20261112b.mp4?v=20261112l" poster="assets/video/welcome-poster-20261112b.jpg?v=20261112l" muted autoplay playsinline webkit-playsinline preload="auto" aria-hidden="true"></video>
-    <img class="welcome-media hidden" id="welcomeFallback" src="assets/video/welcome-poster-20261112b.jpg?v=20261112l" alt="Никита Ворожбитов в фирменной футболке">
+    <video class="welcome-media" id="welcomeVideo" src="assets/video/welcome-seal-20261112b.mp4?v=20261112m" muted autoplay loop playsinline webkit-playsinline preload="auto" disablepictureinpicture disableremoteplayback aria-hidden="true"></video>
+    <img class="welcome-media" id="welcomeFallback" src="assets/video/welcome-poster-20261112b.jpg?v=20261112m" alt="Никита Ворожбитов в фирменной футболке">
     <div class="welcome-shade"></div>
     <div class="welcome-top-controls">
-      <button class="welcome-motion hidden" id="welcomeMotion" type="button" aria-label="Остановить видео"><span id="welcomeFrameCount" aria-hidden="true">ФИЛЬМ · 9 СЕК</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
+      <button class="welcome-motion is-active" id="welcomeMotion" type="button" aria-pressed="true" aria-label="Выключить приветственное видео"><span id="welcomeFrameCount" aria-hidden="true">ВИДЕО ВКЛ</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
       <button class="welcome-sound" id="welcomeSound" type="button" aria-pressed="false" aria-label="Включить фоновую музыку бренда">МУЗЫКА ВЫКЛ</button>
     </div>
     <div class="welcome-frame">
