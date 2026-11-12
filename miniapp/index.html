@@ -452,7 +452,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
 
       <section class="mascot-gift section-pad hidden" id="mascotGift" aria-labelledby="mascotGiftTitle">
         <div class="mascot-gift-art" id="mascotGiftVisual">
-          <video class="mascot-visual" src="assets/mascot/steel-greeter-anthracite-20261112a.mp4" poster="assets/mascot/steel-greeter-anthracite-20261112a.jpg" autoplay loop muted playsinline webkit-playsinline preload="metadata" aria-label="Стальной персонаж бренда в фирменной футболке"></video>
+          <video class="mascot-visual" src="assets/mascot/steel-greeter-anthracite-20261112a.mp4" poster="assets/mascot/steel-greeter-anthracite-20261112a.jpg" loop muted playsinline webkit-playsinline preload="none" aria-label="Стальной персонаж бренда в фирменной футболке"></video>
           <span class="mascot-art-caption" aria-hidden="true">СИЛА И ЧЕСТЬ / 001</span>
           <div class="mascot-gift-intro">
             <span class="section-kicker">ПЕРВЫЙ ДРОП / ДЛЯ СВОИХ</span>
@@ -1107,7 +1107,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
     <div><strong>ОПЛАТА.</strong><small>Статус появится в профиле, когда деньги пройдут.</small></div>
     <button type="button" id="closeToast" aria-label="Закрыть">×</button>
   </div>
-  <audio id="bgmFallbackAudio" src="assets/audio/sila-ambient-loop-20261112i.mp3" preload="none" loop class="hidden"></audio>
+  <audio id="bgmFallbackAudio" class="sr-audio" src="assets/audio/sila-ambient-loop-20261112j.mp3" preload="none" loop playsinline webkit-playsinline></audio>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="shop-core.js"></script>

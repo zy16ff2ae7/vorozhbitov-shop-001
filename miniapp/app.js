@@ -85,6 +85,7 @@
   const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
   const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   let syncClubLifterMotion = () => {};
+  let syncMascotVideoMotion = () => {};
 
   const CLOUD_SYNC_KEYS = new Set([
     "vorozhbitov_cart",
@@ -571,6 +572,7 @@
     else if (state.viewer) state.viewer.start();
     syncWelcomeVideo();
     syncClubLifterMotion();
+    syncMascotVideoMotion();
   }
 
   function focusableElements(modal) {
@@ -660,6 +662,8 @@
   function playProductVideo() {
     const video = $("#sheetVideo");
     if (!video || !state.currentProduct || !state.currentProduct.video) return;
+    video.muted = true;
+    video.defaultMuted = true;
     const playback = video.play();
     if (playback && typeof playback.catch === "function") playback.catch(() => { /* Controls remain available after an autoplay block. */ });
   }
@@ -1330,8 +1334,10 @@
   }
 
   let real3dPrefetched = false;
-  function prefetchReal3dAssets() {
+  function prefetchReal3dAssets(force) {
     if (real3dPrefetched || saverMode()) return;
+    // На мобильных сетях не качаем заранее 4.1 МБ 3D-сцены (.glb + Three.js), пока пользователь сам не нажал 3D.
+    if (!force && window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return;
     real3dPrefetched = true;
     const warm = () => {
       for (const href of [
@@ -2086,7 +2092,6 @@
     if (!welcome || welcome.classList.contains("is-leaving")) return;
     welcome.classList.add("is-leaving");
     stopWelcomeVideo();
-    scheduleBgmPrefetch();
     document.body.classList.remove("welcoming", "booting");
     trackEvent("welcome_done");
     haptic("medium");
@@ -2108,7 +2113,6 @@
     document.body.classList.remove("booting");
     document.body.classList.add("welcoming");
     setupWelcomeVideo(mediaConfig());
-    scheduleBgmPrefetch();
     syncModalLayers();
     syncMainButton();
   }
@@ -2430,56 +2434,132 @@
     sync();
   }
 
-  /* --- Цикличная фоновая музыка бренда (бесшовный Web Audio loop + fallback, выключена по умолчанию) --- */
-  const BGM_DEFAULT_SRC = "assets/audio/sila-ambient-loop-20261112i.mp3";
-  const BGM_GAIN = 0.42;
-  const BGM_DUCK_GAIN = 0.08;
+  function setupMascotVideo() {
+    const video = $(".mascot-visual");
+    if (!video) return;
+    let visible = false;
+    const sync = () => {
+      video.muted = true;
+      video.defaultMuted = true;
+      const section = $("#mascotGift");
+      const activeSection = section && !section.classList.contains("hidden");
+      const shouldPlay = visible && activeSection && !document.hidden
+        && !document.body.classList.contains("welcoming")
+        && !state.modalStack.length && !saverMode() && !reducedMotion();
+      if (shouldPlay) {
+        if (video.paused) {
+          const p = video.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        }
+      } else if (!video.paused) {
+        video.pause();
+      }
+    };
+    syncMascotVideoMotion = sync;
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(entries => {
+        visible = Boolean(entries[0] && entries[0].isIntersecting);
+        sync();
+      }, { rootMargin: "160px 0px", threshold: 0.05 }).observe(video);
+    } else {
+      visible = true;
+    }
+    document.addEventListener("visibilitychange", sync);
+    sync();
+  }
+
+  /* --- Цикличная фоновая музыка бренда (синхронный HTML5 <audio> Playback под iOS/Android + плавная громкость) --- */
+  const BGM_DEFAULT_SRC = "assets/audio/sila-ambient-loop-20261112j.mp3";
+  const BGM_GAIN = 0.85;
+  const BGM_DUCK_GAIN = 0.16;
   const atmosphereAudio = {
-    ctx: null,
-    master: null,
-    buffer: null,
-    source: null,
-    rawBytesPromise: null,
-    decodePromise: null,
-    suspendTimer: 0,
-    usingFallback: false,
+    fadeTimer: 0,
     pausedByVisibility: false,
+    pausedByVoice: false,
     ducked: false,
+    volumeWritable: null,
     announcedOnce: false,
-    anvilPlayed: false
+    anvilPlayed: false,
+    bound: false
   };
 
-  function getBgmUrl() {
+  function getBgmElement() {
     const el = $("#bgmFallbackAudio");
-    return (el && el.getAttribute("src")) || BGM_DEFAULT_SRC;
+    if (!el) return null;
+    if (!el.getAttribute("src")) el.src = BGM_DEFAULT_SRC;
+    el.loop = true;
+    el.playsInline = true;
+    el.muted = false;
+    el.defaultMuted = false;
+    if (!atmosphereAudio.bound) {
+      atmosphereAudio.bound = true;
+      // Дополнительная страховка бесшовного цикла на случай WebView, где атрибут loop сбрасывается на EOF
+      el.addEventListener("ended", () => {
+        if (state.soundEnabled && !atmosphereAudio.pausedByVisibility && !atmosphereAudio.pausedByVoice) {
+          el.currentTime = 0;
+          const p = el.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        }
+      });
+    }
+    return el;
+  }
+
+  function canControlMediaVolume(el) {
+    if (atmosphereAudio.volumeWritable !== null) return atmosphereAudio.volumeWritable;
+    if (!el) return false;
+    try {
+      const prev = el.volume;
+      el.volume = 0.5;
+      const writable = Math.abs(el.volume - 0.5) < 0.05;
+      el.volume = prev;
+      atmosphereAudio.volumeWritable = writable;
+      return writable;
+    } catch (_) {
+      atmosphereAudio.volumeWritable = false;
+      return false;
+    }
   }
 
   function targetBgmGain() {
     return atmosphereAudio.ducked ? BGM_DUCK_GAIN : BGM_GAIN;
   }
 
-  function prefetchBgmBytes() {
-    if (atmosphereAudio.rawBytesPromise) return atmosphereAudio.rawBytesPromise;
-    if (typeof window.fetch !== "function") return Promise.resolve(null);
-    atmosphereAudio.rawBytesPromise = window.fetch(getBgmUrl(), { credentials: "same-origin" })
-      .then(res => (res.ok ? res.arrayBuffer() : null))
-      .catch(() => {
-        atmosphereAudio.rawBytesPromise = null;
-        return null;
-      });
-    return atmosphereAudio.rawBytesPromise;
+  function rampBgmVolume(el, toVolume, durationMs, onComplete) {
+    window.clearInterval(atmosphereAudio.fadeTimer);
+    if (!el) {
+      if (onComplete) onComplete();
+      return;
+    }
+    if (!canControlMediaVolume(el) || durationMs <= 0) {
+      try { el.volume = Math.max(0, Math.min(1, toVolume)); } catch (_) {}
+      if (onComplete) onComplete();
+      return;
+    }
+    const startVol = el.volume;
+    const steps = Math.max(4, Math.round(durationMs / 40));
+    let step = 0;
+    atmosphereAudio.fadeTimer = window.setInterval(() => {
+      step += 1;
+      const ratio = Math.min(1, step / steps);
+      try {
+        el.volume = Math.max(0, Math.min(1, startVol + (toVolume - startVol) * ratio));
+      } catch (_) {}
+      if (ratio >= 1) {
+        window.clearInterval(atmosphereAudio.fadeTimer);
+        atmosphereAudio.fadeTimer = 0;
+        if (onComplete) onComplete();
+      }
+    }, 40);
   }
 
-  function scheduleBgmPrefetch() {
-    if (saverMode() || atmosphereAudio.rawBytesPromise) return;
-    const run = () => {
-      if (!document.hidden && !saverMode()) prefetchBgmBytes();
-    };
-    if (typeof window.requestIdleCallback === "function") {
-      window.setTimeout(() => window.requestIdleCallback(run, { timeout: 3000 }), 1400);
-    } else {
-      window.setTimeout(run, 1800);
-    }
+  function unlockIosPlaybackSession() {
+    // На iOS 17+ переводит аудиосессию из "ambient" (глушится рычажком беззвучного режима) в "playback".
+    try {
+      if (navigator.audioSession && navigator.audioSession.type !== "playback") {
+        navigator.audioSession.type = "playback";
+      }
+    } catch (_) {}
   }
 
   function syncSoundButtons() {
@@ -2504,128 +2584,68 @@
     }
   }
 
-  function ensureAtmosphereNodes() {
-    if (atmosphereAudio.ctx) return atmosphereAudio.ctx;
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return null;
-    try {
-      const ctx = new AudioCtx();
-      const master = ctx.createGain();
-      master.gain.value = 0.0001;
-      master.connect(ctx.destination);
-      atmosphereAudio.ctx = ctx;
-      atmosphereAudio.master = master;
-      return ctx;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function ensureDecodedBgmBuffer(ctx) {
-    if (atmosphereAudio.buffer) return Promise.resolve(atmosphereAudio.buffer);
-    if (atmosphereAudio.decodePromise) return atmosphereAudio.decodePromise;
-    atmosphereAudio.decodePromise = prefetchBgmBytes().then(bytes => {
-      if (!bytes) return null;
-      return ctx.decodeAudioData(bytes.slice(0));
-    }).then(buf => {
-      if (buf) atmosphereAudio.buffer = buf;
-      return buf;
-    }).catch(() => {
-      atmosphereAudio.decodePromise = null;
-      return null;
-    });
-    return atmosphereAudio.decodePromise;
-  }
-
-  function startLoopingBufferSource(ctx, buffer) {
-    if (atmosphereAudio.source) return;
-    try {
-      const src = ctx.createBufferSource();
-      src.buffer = buffer;
-      src.loop = true;
-      src.loopStart = 0;
-      src.loopEnd = buffer.duration;
-      src.connect(atmosphereAudio.master);
-      src.onended = () => {
-        if (atmosphereAudio.source === src) atmosphereAudio.source = null;
-      };
-      src.start(0);
-      atmosphereAudio.source = src;
-    } catch (_) {}
-  }
-
-  function startFallbackAudioElement() {
-    const el = $("#bgmFallbackAudio");
-    if (!el) return false;
-    try {
-      el.loop = true;
-      el.volume = targetBgmGain();
-      atmosphereAudio.usingFallback = true;
-      const p = el.play();
-      if (p && typeof p.catch === "function") {
-        p.catch(() => {
-          state.soundEnabled = false;
-          syncSoundButtons();
-        });
-      }
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   function triggerAnvilStrike() {
-    if (!state.soundEnabled) return;
-    const ctx = ensureAtmosphereNodes();
-    if (!ctx || ctx.state !== "running") return;
-    try {
-      const now = ctx.currentTime;
-      for (const [freq, amp, decay] of [[146.83, 0.055, 1.8], [293.66, 0.028, 1.2], [440.0, 0.014, 0.75]]) {
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(freq, now);
-        g.gain.setValueAtTime(0.0001, now);
-        g.gain.linearRampToValueAtTime(amp, now + 0.035);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + decay);
-        osc.connect(g);
-        g.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + decay + 0.05);
-      }
-    } catch (_) { /* ignore audio glitch */ }
+    // Мягкий акцент печати больше не требует отдельного AudioContext, чтобы не перехватывать аудиосессию телефона.
   }
 
   function setAtmosphereDucked(ducked) {
     atmosphereAudio.ducked = Boolean(ducked);
     if (!state.soundEnabled) return;
-    const target = targetBgmGain();
-    const el = $("#bgmFallbackAudio");
-    if (atmosphereAudio.usingFallback && el) {
-      el.volume = target;
-      return;
-    }
-    const ctx = atmosphereAudio.ctx;
-    if (ctx && atmosphereAudio.master && ctx.state === "running") {
-      try {
-        const now = ctx.currentTime;
-        atmosphereAudio.master.gain.cancelScheduledValues(now);
-        atmosphereAudio.master.gain.setValueAtTime(Math.max(0.0001, atmosphereAudio.master.gain.value), now);
-        atmosphereAudio.master.gain.linearRampToValueAtTime(target, now + 0.45);
-      } catch (_) {}
+    const el = getBgmElement();
+    if (!el) return;
+    if (canControlMediaVolume(el)) {
+      rampBgmVolume(el, targetBgmGain(), 320);
+    } else if (atmosphereAudio.ducked) {
+      // На iPhone громкость HTMLMediaElement фиксирована системой и одновременно играет один <audio>:
+      // аккуратно ставим фон на паузу на время голоса основателя и возвращаем после.
+      if (!el.paused) {
+        atmosphereAudio.pausedByVoice = true;
+        el.pause();
+      }
+    } else if (atmosphereAudio.pausedByVoice && !atmosphereAudio.pausedByVisibility && !document.hidden) {
+      atmosphereAudio.pausedByVoice = false;
+      const p = el.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
     }
   }
 
   function toggleAtmosphereSound(opts) {
     const announce = Boolean(opts && opts.announce);
-    window.clearTimeout(atmosphereAudio.suspendTimer);
+    window.clearInterval(atmosphereAudio.fadeTimer);
     atmosphereAudio.pausedByVisibility = false;
-    state.soundEnabled = !state.soundEnabled;
+    atmosphereAudio.pausedByVoice = false;
+
+    if (state.soundEnabled) {
+      stopAtmosphereSound();
+      haptic("selection");
+      return;
+    }
+
+    const el = getBgmElement();
+    if (!el) {
+      showToast("Аудио недоступно в этом браузере.");
+      return;
+    }
+
+    // КРИТИЧНО ДЛЯ ТЕЛЕФОНОВ (iOS Telegram WKWebView / Safari / Android WebView):
+    // вызываем el.play() строго синхронно внутри обработчика нажатия (без async fetch перед play),
+    // чтобы не потерять user gesture и активировать системный канал Playback поверх рычажка Mute на iPhone.
+    unlockIosPlaybackSession();
+    state.soundEnabled = true;
     syncSoundButtons();
     haptic("selection");
 
-    if (!state.soundEnabled) {
-      stopAtmosphereSound();
+    if (canControlMediaVolume(el)) {
+      try { el.volume = 0.08; } catch (_) {}
+    }
+
+    let playPromise;
+    try {
+      playPromise = el.play();
+    } catch (_) {
+      state.soundEnabled = false;
+      syncSoundButtons();
+      showToast("Не удалось включить музыку в этом окне.");
       return;
     }
 
@@ -2634,101 +2654,66 @@
       showToast("♫ Фоновая музыка включена");
     }
 
-    const ctx = ensureAtmosphereNodes();
-    if (!ctx) {
-      if (!startFallbackAudioElement()) {
+    if (playPromise && typeof playPromise.then === "function") {
+      playPromise.then(() => {
+        if (!state.soundEnabled) {
+          el.pause();
+          return;
+        }
+        rampBgmVolume(el, targetBgmGain(), 520);
+      }).catch(() => {
         state.soundEnabled = false;
         syncSoundButtons();
-        showToast("Аудио недоступно в этом браузере.");
-      }
-      return;
+        showToast("Браузер заблокировал звук — нажми на кнопку музыки ещё раз.");
+      });
+    } else {
+      rampBgmVolume(el, targetBgmGain(), 520);
     }
-
-    // Resume AudioContext synchronously inside user gesture for iOS / Telegram WebView.
-    const resumePromise = ctx.state === "running" ? Promise.resolve() : ctx.resume();
-    Promise.all([resumePromise, ensureDecodedBgmBuffer(ctx)]).then(([, buffer]) => {
-      if (!state.soundEnabled || atmosphereAudio.pausedByVisibility) return;
-      if (!buffer) {
-        startFallbackAudioElement();
-        return;
-      }
-      atmosphereAudio.usingFallback = false;
-      const fallbackEl = $("#bgmFallbackAudio");
-      if (fallbackEl && !fallbackEl.paused) fallbackEl.pause();
-      startLoopingBufferSource(ctx, buffer);
-      const now = ctx.currentTime;
-      atmosphereAudio.master.gain.cancelScheduledValues(now);
-      atmosphereAudio.master.gain.setValueAtTime(Math.max(0.0001, atmosphereAudio.master.gain.value), now);
-      atmosphereAudio.master.gain.linearRampToValueAtTime(targetBgmGain(), now + 0.85);
-    }).catch(() => {
-      if (state.soundEnabled && !startFallbackAudioElement()) {
-        state.soundEnabled = false;
-        syncSoundButtons();
-      }
-    });
   }
 
   function stopAtmosphereSound() {
-    window.clearTimeout(atmosphereAudio.suspendTimer);
+    window.clearInterval(atmosphereAudio.fadeTimer);
     state.soundEnabled = false;
     atmosphereAudio.pausedByVisibility = false;
+    atmosphereAudio.pausedByVoice = false;
     syncSoundButtons();
     $("#founderWordCard")?.classList.remove("is-reading");
-    const fallbackEl = $("#bgmFallbackAudio");
-    if (fallbackEl && !fallbackEl.paused) fallbackEl.pause();
     syncFounderAudioButton();
-    const ctx = atmosphereAudio.ctx;
-    if (!ctx || !atmosphereAudio.master) return;
-    try {
-      const now = ctx.currentTime;
-      atmosphereAudio.master.gain.cancelScheduledValues(now);
-      atmosphereAudio.master.gain.setValueAtTime(Math.max(0.0001, atmosphereAudio.master.gain.value), now);
-      atmosphereAudio.master.gain.linearRampToValueAtTime(0.0001, now + 0.32);
-      atmosphereAudio.suspendTimer = window.setTimeout(() => {
-        if (!state.soundEnabled && ctx.state === "running") {
-          if (atmosphereAudio.source) {
-            try { atmosphereAudio.source.stop(); } catch (_) {}
-            atmosphereAudio.source = null;
-          }
-          ctx.suspend().catch(() => {});
-        }
-      }, 350);
-    } catch (_) {}
+    const el = $("#bgmFallbackAudio");
+    if (!el || el.paused) return;
+    if (canControlMediaVolume(el)) {
+      rampBgmVolume(el, 0.02, 240, () => {
+        if (!state.soundEnabled) el.pause();
+      });
+    } else {
+      el.pause();
+    }
   }
 
   function pauseAtmosphereForVisibility() {
     if (!state.soundEnabled) return;
     atmosphereAudio.pausedByVisibility = true;
-    window.clearTimeout(atmosphereAudio.suspendTimer);
-    const fallbackEl = $("#bgmFallbackAudio");
-    if (fallbackEl && !fallbackEl.paused) fallbackEl.pause();
-    const ctx = atmosphereAudio.ctx;
-    if (ctx && ctx.state === "running") {
-      ctx.suspend().catch(() => {});
-    }
+    window.clearInterval(atmosphereAudio.fadeTimer);
+    const el = $("#bgmFallbackAudio");
+    if (el && !el.paused) el.pause();
   }
 
   function resumeAtmosphereFromVisibility() {
     if (!state.soundEnabled || !atmosphereAudio.pausedByVisibility || document.hidden) return;
     atmosphereAudio.pausedByVisibility = false;
-    if (atmosphereAudio.usingFallback) {
-      startFallbackAudioElement();
-      return;
+    if (atmosphereAudio.pausedByVoice) return;
+    const el = getBgmElement();
+    if (!el) return;
+    unlockIosPlaybackSession();
+    if (canControlMediaVolume(el)) {
+      try { el.volume = 0.08; } catch (_) {}
     }
-    const ctx = atmosphereAudio.ctx;
-    if (!ctx) return;
-    ctx.resume().then(() => {
-      if (!state.soundEnabled || document.hidden) return;
-      if (atmosphereAudio.buffer && !atmosphereAudio.source) {
-        startLoopingBufferSource(ctx, atmosphereAudio.buffer);
-      }
-      if (atmosphereAudio.master) {
-        const now = ctx.currentTime;
-        atmosphereAudio.master.gain.cancelScheduledValues(now);
-        atmosphereAudio.master.gain.setValueAtTime(0.0001, now);
-        atmosphereAudio.master.gain.linearRampToValueAtTime(targetBgmGain(), now + 0.55);
-      }
-    }).catch(() => {});
+    const p = el.play();
+    if (p && typeof p.then === "function") {
+      p.then(() => {
+        if (state.soundEnabled && !document.hidden) rampBgmVolume(el, targetBgmGain(), 450);
+      }).catch(() => {});
+    }
   }
 
   function syncFounderAudioButton() {
@@ -3629,6 +3614,8 @@
     if (useVideo) {
       image.classList.add("hidden");
       video.classList.remove("hidden");
+      video.muted = true;
+      video.defaultMuted = true;
       if (video.getAttribute("src") !== scene.video) video.src = scene.video;
       video.poster = scene.poster || scene.image || "";
       const playback = video.play();
@@ -4329,7 +4316,6 @@
         haptic("heavy");
         window.setTimeout(() => {
           enterShop();
-          prefetchReal3dAssets();
           ritual?.classList.remove("is-activated");
           entryPending = false;
         }, reducedMotion() ? 0 : 240);
@@ -5263,6 +5249,7 @@
   setupHeroCarousel();
   setupOwnerTilt();
   setupClubLifter();
+  setupMascotVideo();
   renderDropEvent();
   renderCommunity();
   renderClub();

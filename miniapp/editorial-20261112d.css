@@ -2937,3 +2937,30 @@ main .section-heading .section-kicker::before,
     height: 37px;
   }
 }
+
+/* Не скрываем <audio> через display:none, чтобы мобильные WebView (iOS/Android) не замораживали декодер */
+.sr-audio {
+  position: fixed;
+  left: -9999px;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Оптимизация GPU при скролле на телефонах: лёгкий композитный слой и умеренный радиус blur */
+@media (max-width: 768px) {
+  .topbar {
+    background: rgba(8, 8, 10, 0.9) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    transform: translateZ(0);
+  }
+  .bottom-nav {
+    background: rgba(8, 8, 10, 0.92) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    transform: translateZ(0);
+  }
+}
