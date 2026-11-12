@@ -27,12 +27,12 @@ class InlineMenuTests(unittest.TestCase):
         buttons=self.buttons();self.assertIn('web_app',buttons[0])
         self.assertEqual(
             {b['callback_data'] for b in buttons if 'callback_data' in b},
-            {'product:tee-sila-i-chest','product:tee-vzglyad','product:tag-sila-i-chest','size_guide','cat:drop','teaser','my_orders','account','about','support'},
+            {'cat:drop','account','about','support'},
         )
     def test_brand_icon_is_not_duplicated_in_text(self):
-        self.bot.settings=make_settings(self.db.path,brand_name='СИЛА И ЧЕСТЬ',inline_emoji_enabled=True,custom_emoji_ids={'orders':'5409075992901756978'})
-        buttons=self.buttons();orders=next(b for b in buttons if b.get('callback_data')=='my_orders')
-        self.assertEqual(orders.get('icon_custom_emoji_id'),'5409075992901756978');self.assertEqual(orders['text'],'Мои покупки')
+        self.bot.settings=make_settings(self.db.path,brand_name='СИЛА И ЧЕСТЬ',inline_emoji_enabled=True,custom_emoji_ids={'account':'5409075992901756978'})
+        buttons=self.buttons();acc=next(b for b in buttons if b.get('callback_data')=='account')
+        self.assertEqual(acc.get('icon_custom_emoji_id'),'5409075992901756978');self.assertEqual(acc['text'],'Личный кабинет')
     def test_pending_payment_preserved(self):
         import bot as bot_module
         prev=bot_module.ONLINE_PAYMENTS_ENABLED

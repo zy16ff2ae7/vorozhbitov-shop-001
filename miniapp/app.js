@@ -923,7 +923,8 @@
     const section = $("#upcomingSection");
     const grid = $("#upcomingGrid");
     if (!section || !grid) return;
-    const items = Array.isArray(state.upcomingProducts) ? state.upcomingProducts : [];
+    const enabled = Boolean(state.data && state.data.show_upcoming_drop === true);
+    const items = enabled && Array.isArray(state.upcomingProducts) ? state.upcomingProducts : [];
     section.classList.toggle("hidden", !items.length);
     if (!items.length) {
       grid.innerHTML = "";
@@ -2334,11 +2335,11 @@
 
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
-    const staleLoop = !media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") || media.welcome_loop.includes("welcome-seal-20261029.mp4") || media.welcome_loop.includes("welcome-loop-20261112a.mp4");
-    const stalePoster = !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") || media.welcome_poster.includes("welcome-seal-20261029.jpg") || media.welcome_poster.includes("welcome-poster-20261112a.jpg");
+    const staleLoop = !media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") || media.welcome_loop.includes("welcome-seal-20261029.mp4") || media.welcome_loop.includes("welcome-loop-20261112a.mp4") || media.welcome_loop === "assets/video/welcome-seal-20261112b.mp4";
+    const stalePoster = !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") || media.welcome_poster.includes("welcome-seal-20261029.jpg") || media.welcome_poster.includes("welcome-poster-20261112a.jpg") || media.welcome_poster === "assets/video/welcome-poster-20261112b.jpg";
     return {
-      welcomeLoop: media.welcome_motion === false ? "" : (staleLoop ? "assets/video/welcome-seal-20261112b.mp4" : media.welcome_loop),
-      welcomePoster: stalePoster ? "assets/video/welcome-poster-20261112b.jpg" : media.welcome_poster
+      welcomeLoop: media.welcome_motion === false ? "" : (staleLoop ? "assets/video/welcome-seal-20261112b.mp4?v=20261112k" : media.welcome_loop),
+      welcomePoster: stalePoster ? "assets/video/welcome-poster-20261112b.jpg?v=20261112k" : media.welcome_poster
     };
   }
 

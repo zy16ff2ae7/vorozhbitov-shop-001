@@ -4177,7 +4177,7 @@ class BrandBot:
         )
 
     def main_menu(self, chat_id: int | None = None) -> dict[str, Any]:
-        """Главное меню: магазин, дроп, покупки, кабинет и контакты.
+        """Главное меню: витрина, первый дроп, личный кабинет, канал, о бренде и поддержка.
 
         ``chat_id`` в личке совпадает с ``user_id``, поэтому по нему же
         поднимаем незавершённую оплату — отдельный параметр не нужен.
@@ -4186,11 +4186,12 @@ class BrandBot:
         """
         rows: list[list[Any]] = []
         if self.settings.webapp_url.startswith("https://"):
-            shop_button: dict[str, Any] = {"text": "ОТКРЫТЬ ВИТРИНУ · 3D ↗", "web_app": {"url": self.settings.webapp_url}, "style": "primary"}
+            shop_button: dict[str, Any] = {"text": "Открыть витрину", "web_app": {"url": self.settings.webapp_url}, "style": "primary"}
             cart_emoji = str(self.settings.custom_emoji_ids.get("cart") or "")
             if self.settings.inline_emoji_enabled and cart_emoji.isdigit():
-                shop_button["text"] = "ОТКРЫТЬ ВИТРИНУ · 3D"
                 shop_button["icon_custom_emoji_id"] = cart_emoji
+            else:
+                shop_button["text"] = f"{ICON['cart']} Открыть витрину"
             rows.append([shop_button])
         draft = self.db.pending_payment(chat_id) if chat_id and ONLINE_PAYMENTS_ENABLED else None
         if draft:
@@ -4198,35 +4199,20 @@ class BrandBot:
             label = f"Продолжить оплату · {format_rub(amount)}" if amount else "Продолжить оплату"
             rows.append([(f"{ICON['pay']} {label} →", f"draft:{payment_id}")])
         ce = self.settings.custom_emoji_ids if self.settings.inline_emoji_enabled else {}
-        sila = self.catalog.get("tee-sila-i-chest")
-        vzglyad = self.catalog.get("tee-vzglyad")
-        dog_tag = self.catalog.get("tag-sila-i-chest")
-        quick_products: list[tuple[str, str, str]] = []
-        if sila:
-            quick_products.append((f"▪ Сила и честь · {sila.get('price', '4 200 ₽')}", "product:tee-sila-i-chest", ce.get("product_sila") or ce.get("sword", "")))
-        if vzglyad:
-            quick_products.append((f"▪ Взгляд · {vzglyad.get('price', '3 900 ₽')}", "product:tee-vzglyad", ce.get("product_vzglyad") or ce.get("sword", "")))
-        if quick_products:
-            rows.append(quick_products)
-        second_row: list[tuple[str, str, str]] = []
-        if dog_tag:
-            second_row.append(("🎖 Жетон · подарок", "product:tag-sila-i-chest", ce.get("product_tag") or ce.get("tag", "")))
-        second_row.append((icon("size", "Размеры S–3XL"), "size_guide", ce.get("size", "")))
-        rows.append(second_row)
-        rows.extend(
+        rows.append(
             [
-                [(icon("catalog", "Первый дроп"), "cat:drop", ce.get("catalog") or ce.get("sword", "")),
-                 ("▶ Тизер выпуска", "teaser", ce.get("looks", ""))],
-                [(icon("orders", "Мои покупки"), "my_orders", ce.get("orders", "")),
-                 (icon("account", "Кабинет"), "account", ce.get("account", ""))],
-                [(icon("seal", "О бренде"), "about", ce.get("seal", ""))],
+                (icon("drop", "Первый дроп"), "cat:drop", ce.get("drop") or ce.get("catalog") or ce.get("sword", "")),
+                (icon("account", "Личный кабинет"), "account", ce.get("account", "")),
             ]
         )
         channel_link = self.channel_link()
-        contacts = [(icon("support", "Поддержка"), "support", ce.get("support", ""))]
+        brand_row: list[tuple[str, str, str]] = [
+            (icon("looks", "О бренде"), "about", ce.get("looks") or ce.get("seal", "")),
+        ]
         if channel_link:
-            contacts.insert(0, (icon("channel", "Канал ↗"), channel_link, ce.get("channel", "")))
-        rows.append(contacts)
+            brand_row.insert(0, (icon("channel", "Канал"), channel_link, ce.get("channel", "")))
+        rows.append(brand_row)
+        rows.append([(icon("support", "Поддержка"), "support", ce.get("support", ""))])
         if chat_id and self.is_admin(int(chat_id)):
             # Владелец и админы видят вход в пульт прямо из /start:
             # управление магазином — такое же главное окно, как каталог.
@@ -4297,7 +4283,7 @@ class BrandBot:
             "Обе футболки можно покрутить в интерактивном <b>3D 360°</b> прямо в витрине."
             + (f"\n\n{ICON['support']} Связь с менеджером: @{esc(self.settings.support_username)}" if self.settings.support_username else "")
             + self.cta("channel"),
-            inline_keyboard(self.channel_rows() + nav_rows(("Главное меню", "menu"))),
+            inline_keyboard([[("▶ Тизер выпуска", "teaser")]] + self.channel_rows() + nav_rows(("Главное меню", "menu"))),
         )
 
     def account_menu(self, user_id: int) -> dict[str, Any]:
@@ -4512,9 +4498,8 @@ class BrandBot:
             )
             return
         rows = [[(f"{p['name']} · {'подарок' if p.get('gift') else p['price']}", f"product:{p['id']}")] for p in products]
-        if category_id == "drop":
-            rows.append([("▶ Тизер выпуска 001", "teaser")])
-        rows.extend(nav_rows(("Витрина", "catalog")))
+        back_target = ("Главное меню", "menu") if category_id == "drop" else ("Витрина", "catalog")
+        rows.extend(nav_rows(back_target))
         paid_count = sum(1 for p in products if not p.get("gift"))
         gift_count = sum(1 for p in products if p.get("gift"))
         count_label = (
@@ -6031,10 +6016,65 @@ class BrandBot:
                     [(icon("orders", "Покупки"), "adm:orders"), (icon("wait", "Лист ожидания"), "adm:waitlist")],
                     [(icon("catalog", "Добавить вещь"), "adm:add"), (icon("trophy", "Топ рефералов"), "adm:top")],
                     [(icon("account", "Доступ команды"), "adm:access"), (icon("trophy", "Розыгрыши"), "adm:draws")],
+                    [(icon("channel", "Пост-витрина в канал"), "adm:channel_post")],
                     [(icon("account", "Режим покупателя"), "menu")],
                 ]
             ),
         )
+
+    def publish_channel_showcase(self, chat_id: int) -> None:
+        """Опубликовать в канал бренда пост-витрину с кнопкой перехода в каталог бота."""
+        link = self.channel_link()
+        parsed = urllib.parse.urlparse(link) if link else None
+        slug = (parsed.path or "").strip("/") if parsed else ""
+        if not slug or "/" in slug or slug.startswith("+"):
+            self.api.send_message(
+                chat_id,
+                "Канал не настроен или ссылка ведёт на приватное приглашение.",
+                inline_keyboard(staff_nav_rows()),
+            )
+            return
+        channel_target_id = f"@{slug}"
+        bot_name = self.bot_username or "SilaIChestBot"
+        deep_link = f"https://t.me/{bot_name}?start=shop"
+        caption = (
+            "⚔ <b>СИЛА И ЧЕСТЬ · ВЫПУСК 001</b>\n\n"
+            "Первая коллекция бренда Никиты Ворожбитова открыта.\n\n"
+            "▪ <b>«СИЛА И ЧЕСТЬ»</b> — 4 200 ₽ · плотный хлопок 240–260 г/м², шеврон НВ и стальной клинок вдоль спины\n"
+            "▪ <b>«ВЗГЛЯД»</b> — 3 900 ₽ · 10 принципов братства вокруг монограммы НВ (предзаказ)\n"
+            "🎖 <b>Стальной жетон № 00002–00100</b> — с индивидуальным номером в подарок первым 100 покупателям\n\n"
+            "Смотри вещи в 3D 360°, подбирай размер S–3XL и оформляй заказ прямо в каталоге:"
+        )
+        markup = inline_keyboard([[("🛍 КАТАЛОГ В БОТЕ · ЗАКАЗАТЬ ↗", deep_link)]])
+        photo = self.local_asset_path("assets/client/bot-welcome-drop001-20261112c.jpg")
+        try:
+            if photo and photo.is_file():
+                res = self.api.send_photo_file(channel_target_id, photo, caption, markup)
+            else:
+                res = self.api.send_message(channel_target_id, caption, markup)
+            msg_id = int(res.get("message_id") or 0) if isinstance(res, dict) else 0
+            pinned = False
+            if msg_id > 0:
+                try:
+                    self.api.call("pinChatMessage", {"chat_id": channel_target_id, "message_id": msg_id, "disable_notification": True})
+                    pinned = True
+                except Exception:
+                    LOG.info("Could not auto-pin channel post %s in %s", msg_id, channel_target_id)
+            status_note = " и закреплён в шапке канала" if pinned else " (закрепи его в канале вручную при необходимости)"
+            self.api.send_message(
+                chat_id,
+                f"{ICON['ok']} Пост-витрина с кнопкой «КАТАЛОГ В БОТЕ · ЗАКАЗАТЬ ↗» опубликован в {esc(channel_target_id)}{status_note}.",
+                inline_keyboard(staff_nav_rows()),
+            )
+        except Exception as exc:
+            LOG.warning("Could not publish channel showcase to %s: %s", channel_target_id, exc)
+            self.api.send_message(
+                chat_id,
+                f"Не удалось опубликовать пост в {esc(channel_target_id)}.\n"
+                f"Убедись, что бот @{esc(bot_name)} добавлен в администраторы канала с правом публикации сообщений.\n"
+                f"Причина: <code>{esc(str(exc)[:180])}</code>",
+                inline_keyboard(staff_nav_rows()),
+            )
 
     def admin_summary(self, chat_id: int) -> None:
         """Сводка без смешения показателей: деньги, работа и база отдельно."""
@@ -6711,6 +6751,8 @@ class BrandBot:
                                       inline_keyboard([[(icon("tools", "Управление"), "adm:panel")]]))
         elif command in ("/admin", "/panel"):
             self.admin_panel(chat_id)
+        elif command == "/channelpost":
+            self.publish_channel_showcase(chat_id)
         else:
             return False
         return True
@@ -7822,6 +7864,8 @@ class BrandBot:
                 self.admin_access(chat_id)
             elif action == "draws":
                 self.admin_draws(chat_id)
+            elif action == "channel_post":
+                self.publish_channel_showcase(chat_id)
             elif action in {"panel", "orders", "waitlist", "top", "export", "reload"}:
                 self.admin_command(chat_id, user_id, f"/{action}")
             else:

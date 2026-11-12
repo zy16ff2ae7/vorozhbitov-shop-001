@@ -758,8 +758,8 @@
     }
   ],
   "media": {
-    "welcome_loop": "assets/video/welcome-seal-20261112b.mp4",
-    "welcome_poster": "assets/video/welcome-poster-20261112b.jpg",
+    "welcome_loop": "assets/video/welcome-seal-20261112b.mp4?v=20261112k",
+    "welcome_poster": "assets/video/welcome-poster-20261112b.jpg?v=20261112k",
     "teaser": "assets/video/power-drop-001-20261111f.mp4",
     "teaser_poster": "assets/video/power-drop-poster-20261111e.jpg",
     "teaser_title": "СИЛА И ЧЕСТЬ",
