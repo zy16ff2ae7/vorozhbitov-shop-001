@@ -173,6 +173,7 @@ main .section-heading .section-kicker::before,
 }
 
 .bottom-link {
+  padding-inline: 2px !important;
   color: #8f8980;
   transition: color 0.18s ease;
 }
@@ -189,7 +190,8 @@ main .section-heading .section-kicker::before,
 
 .bottom-link small {
   font-size: 9.5px !important;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.01em !important;
+  white-space: nowrap !important;
 }
 
 /* ---------- 3. Welcome Screen Refinement ---------- */
@@ -726,13 +728,22 @@ main .section-heading .section-kicker::before,
   border-bottom: 1px solid var(--line) !important;
 }
 
+.product-scroll,
 .gallery-thumbnails {
-  padding: 8px 20px !important;
   scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
+.gallery-thumbnails {
+  padding: 8px 20px !important;
+}
+
+.product-scroll::-webkit-scrollbar,
 .gallery-thumbnails::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
   display: none !important;
+  background: transparent !important;
 }
 
 @media (max-width: 430px) {
