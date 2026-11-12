@@ -1,0 +1,848 @@
+/* ==========================================================================
+   СИЛА И ЧЕСТЬ · EDITORIAL MONOLITH SYSTEM (20261112d)
+   Unified dark architectural luxury: pure "Sila Chest" display typography,
+   cold forged-anthracite surfaces, platinum hairlines, restrained crimson.
+   ========================================================================== */
+
+:root {
+  --bg: #08080a;
+  --surface: #0e0f12;
+  --surface-1: #111216;
+  --surface-2: #15171c;
+  --surface-3: #1c1e25;
+  --ink: #f4efe6;
+  --bone: #f4efe6;
+  --soft-ink: #c6bfb5;
+  --readable-secondary: #bdb6ac;
+  --readable-label: #dcd5ca;
+  --muted: #9c968c;
+  --line: rgba(244, 239, 230, 0.11);
+  --line-soft: rgba(244, 239, 230, 0.07);
+  --field-line: rgba(244, 239, 230, 0.16);
+  --red: #be2419;
+  --red-control: #a91d14;
+  --red-control-hover: #c1251b;
+  --accent-line: #b62118;
+  --radius-arch: 4px;
+}
+
+html, body {
+  background: #08080a !important;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.app-shell {
+  background: #08080a !important;
+}
+
+/* ---------- 1. Unified Display Typography (No Serif/Sans Clash) ---------- */
+h1, h2,
+.hero h1,
+.section-heading h2,
+.manifesto h2,
+.mascot-gift h2,
+.community-entry h2,
+.club-section h2,
+.join-banner h2,
+.faq-section h2,
+.sheet-header h2,
+.sheet-content h2,
+.cart-empty-brand h3,
+.welcome .welcome-title {
+  font-family: var(--font-display) !important;
+  font-weight: 700 !important;
+  font-style: normal !important;
+  letter-spacing: -0.015em !important;
+  line-height: 0.98 !important;
+  color: var(--ink);
+}
+
+.hero h1 em,
+.section-heading h2 em,
+.manifesto h2 em,
+.join-banner h2 em,
+.store-head h2 em,
+.club-section h2 em,
+.faq-section h2 em,
+.community-section h2 em {
+  font-family: var(--font-display) !important;
+  font-weight: 500 !important;
+  font-style: normal !important;
+  letter-spacing: -0.015em !important;
+  color: #b9b1a5 !important;
+}
+
+.hero h1 span,
+.mascot-gift h2 span {
+  color: var(--red) !important;
+}
+
+/* Editorial section kickers with subtle crimson rule */
+.section-kicker,
+.eyebrow,
+.sheet-kicker {
+  font-family: var(--font-ui);
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.18em !important;
+  color: #9e978d !important;
+  text-transform: uppercase;
+}
+
+main .section-heading .section-kicker,
+.manifesto .section-kicker,
+.community-entry .section-kicker,
+.join-banner .section-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+main .section-heading .section-kicker::before,
+.manifesto .section-kicker::before,
+.community-entry .section-kicker::before,
+.join-banner .section-kicker::before {
+  content: "";
+  width: 16px;
+  height: 1px;
+  background: var(--red);
+  flex-shrink: 0;
+}
+
+/* Generous editorial vertical rhythm */
+.section-pad {
+  padding-top: 44px;
+  padding-bottom: 44px;
+  padding-inline: clamp(20px, 5vw, 72px);
+}
+
+/* ---------- 2. Glassmorphic Topbar & Bottom Navigation ---------- */
+.topbar {
+  height: calc(64px + var(--safe-top));
+  background: rgba(8, 8, 10, 0.82) !important;
+  backdrop-filter: blur(22px) saturate(1.25) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.25) !important;
+  border-bottom: 1px solid rgba(244, 239, 230, 0.08) !important;
+}
+
+.brand-lockup {
+  gap: 12px;
+}
+
+.brand-mark {
+  width: 35px;
+  height: 35px;
+  background-color: #0e0f12;
+  border: 1px solid rgba(244, 239, 230, 0.22) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.brand-type strong.brand-wordmark {
+  width: 102px !important;
+  height: 19px !important;
+  opacity: 0.94;
+}
+
+.brand-type small {
+  font-size: 8.5px !important;
+  letter-spacing: 0.2em !important;
+  color: #969086 !important;
+  margin-top: 2px;
+}
+
+.icon-button {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-arch);
+  border: 1px solid transparent;
+  color: #e9e3d9;
+}
+
+.icon-button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--line);
+}
+
+.bottom-nav {
+  background: rgba(8, 8, 10, 0.88) !important;
+  backdrop-filter: blur(22px) saturate(1.25) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.25) !important;
+  border-top: 1px solid rgba(244, 239, 230, 0.09) !important;
+}
+
+.bottom-link {
+  color: #8f8980;
+  transition: color 0.18s ease;
+}
+
+.bottom-link.active {
+  color: var(--ink);
+}
+
+.bottom-link.active::before {
+  width: 20px;
+  height: 2px;
+  background: var(--red);
+}
+
+.bottom-link small {
+  font-size: 9.5px !important;
+  letter-spacing: 0.03em;
+}
+
+/* ---------- 3. Welcome Screen Refinement ---------- */
+.welcome-motion {
+  border-radius: 99px !important;
+  background: rgba(8, 8, 10, 0.58) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(244, 239, 230, 0.16) !important;
+  font-size: 9.5px !important;
+  letter-spacing: 0.14em !important;
+}
+
+.seal-ritual {
+  border-radius: 6px !important;
+  background: rgba(11, 11, 14, 0.84) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(244, 239, 230, 0.18) !important;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.welcome-meta {
+  color: #8b857c !important;
+  letter-spacing: 0.16em;
+}
+
+.welcome-meta b {
+  color: #dcd5ca !important;
+  font-weight: 700;
+}
+
+/* ---------- 4. Cinema Hero Composition ---------- */
+.hero {
+  background: #08080a !important;
+  border-bottom: 1px solid var(--line);
+}
+
+.hero-living-poster::after {
+  display: none !important;
+}
+
+@media (max-width: 959px) {
+  .hero-media {
+    position: relative;
+    aspect-ratio: 4 / 4.55 !important;
+    height: auto !important;
+    overflow: hidden;
+    background: #08080a;
+  }
+
+  .hero-media .hero-layer {
+    object-fit: cover !important;
+    object-position: 50% 10% !important;
+  }
+
+  .hero-media .hero-shade {
+    inset: 0 !important;
+    height: auto !important;
+    background:
+      linear-gradient(180deg, rgba(8, 8, 10, 0.28) 0%, transparent 18%, transparent 58%, rgba(8, 8, 10, 0.84) 86%, #08080a 100%) !important;
+  }
+
+  .hero-media .hero-live {
+    inset: auto auto 14px 20px !important;
+    width: auto !important;
+    max-width: calc(100% - 40px) !important;
+    min-height: 0 !important;
+    padding: 7px 12px !important;
+    border-radius: 3px;
+    background: rgba(9, 9, 12, 0.68) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(244, 239, 230, 0.14) !important;
+    gap: 9px !important;
+  }
+
+  #heroLiveText {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  #heroLiveText small {
+    display: inline !important;
+    margin: 0 !important;
+    font-size: 8.5px !important;
+    letter-spacing: 0.16em !important;
+    color: #a8a196 !important;
+  }
+
+  #heroLiveText small::after {
+    content: "·";
+    margin-left: 8px;
+    color: var(--red);
+  }
+
+  #heroLiveText strong {
+    display: inline !important;
+    font-family: var(--font-ui) !important;
+    font-size: 10.5px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.12em !important;
+    color: #f4efe6 !important;
+  }
+
+  .hero-copy {
+    padding: 8px 20px 30px !important;
+    background: #08080a !important;
+  }
+
+  .hero-copy .eyebrow {
+    display: flex !important;
+    justify-content: flex-start !important;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 10px !important;
+    letter-spacing: 0.18em !important;
+    color: #9e978d !important;
+  }
+
+  .hero-copy .eyebrow span + span::before {
+    content: "/";
+    margin-right: 10px;
+    color: var(--red);
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(38px, 10.5vw, 50px) !important;
+    margin: 0 0 10px !important;
+    line-height: 0.96 !important;
+  }
+
+  .hero-copy .hero-lead {
+    max-width: 34ch !important;
+    font-size: 14.5px !important;
+    line-height: 1.55 !important;
+    color: #bdb6ac !important;
+    margin-bottom: 4px !important;
+  }
+
+  .hero-copy .hero-actions {
+    margin-top: 18px !important;
+  }
+
+  .hero-copy .brand-principles {
+    display: flex !important;
+    align-items: center;
+    gap: 12px;
+    margin-top: 18px !important;
+    padding-top: 14px !important;
+    border-top: 1px solid var(--line-soft) !important;
+    font-size: 9.5px !important;
+    font-weight: 700;
+    letter-spacing: 0.2em !important;
+    color: #8f8980 !important;
+  }
+
+  .hero-copy .brand-principles i {
+    color: rgba(190, 36, 25, 0.7);
+    font-style: normal;
+  }
+}
+
+/* ---------- 5. Luxury Button Hierarchy ---------- */
+.button {
+  min-height: 52px;
+  border-radius: var(--radius-arch) !important;
+  font-family: var(--font-ui);
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+/* Hero & Empty-State Editorial Ivory CTA */
+#heroProductButton,
+.cart-empty-brand .button-primary {
+  background: #f3ede3 !important;
+  color: #09090b !important;
+  border: 1px solid #f3ede3 !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45) !important;
+}
+
+#heroProductButton:hover,
+.cart-empty-brand .button-primary:hover {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+/* Secondary Storefront Section CTAs: Brushed Obsidian Plaque (ends red-banner fatigue) */
+#mascotGiftShop,
+#clubAction,
+#channelButton,
+#openCommunityFromHome,
+#communitySubmit {
+  background: linear-gradient(180deg, #171920 0%, #111217 100%) !important;
+  color: #f3ede3 !important;
+  border: 1px solid rgba(244, 239, 230, 0.22) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+}
+
+#mascotGiftShop:hover,
+#clubAction:hover,
+#channelButton:hover,
+#openCommunityFromHome:hover,
+#communitySubmit:hover {
+  background: #1d2029 !important;
+  border-color: rgba(244, 239, 230, 0.42) !important;
+}
+
+#channelButton .arrow-icon,
+#mascotGiftShop span {
+  color: var(--red);
+}
+
+/* True Purchase / Checkout CTAs: Deep Anodized Forged Crimson */
+.purchase-bar .button-primary,
+#directOrderButton,
+#beginCheckout,
+#submitOrder {
+  background: linear-gradient(180deg, #b82218 0%, #8c150e 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 130, 115, 0.28) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 26px rgba(0, 0, 0, 0.48) !important;
+}
+
+.purchase-bar .button-primary:hover:not(:disabled),
+#directOrderButton:hover:not(:disabled),
+#beginCheckout:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ca271c 0%, #9b1810 100%) !important;
+}
+
+/* ---------- 6. Gallery-Grade Product Cards ---------- */
+.catalog-section .section-heading {
+  border-bottom: 1px solid var(--line) !important;
+  padding-bottom: 18px !important;
+}
+
+.product-grid {
+  gap: 22px 14px !important;
+}
+
+.product-grid .product-card {
+  background: #0d0e12 !important;
+  border: 1px solid rgba(244, 239, 230, 0.10) !important;
+  border-radius: var(--radius-arch) !important;
+  overflow: hidden;
+  transition: border-color 0.22s ease, transform 0.22s ease;
+}
+
+.product-grid .product-card:hover {
+  border-color: rgba(244, 239, 230, 0.26) !important;
+}
+
+.product-grid .product-image {
+  border-bottom: 1px solid rgba(244, 239, 230, 0.08) !important;
+  background: radial-gradient(ellipse at 50% 34%, #22242b 0%, #111216 66%, #090a0c 100%) !important;
+}
+
+.product-badge,
+.badge-3d {
+  background: rgba(9, 9, 12, 0.68) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(244, 239, 230, 0.14) !important;
+  border-radius: 3px !important;
+  padding: 5px 8px !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
+  color: #ece6dc !important;
+}
+
+.product-grid .badge-side,
+.product-grid .is-branded-spin .badge-side {
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 11px !important;
+  right: 10px !important;
+  bottom: 10px !important;
+  border-radius: 99px !important;
+  background: rgba(9, 9, 12, 0.72) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(244, 239, 230, 0.18) !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  color: #efe9df !important;
+}
+
+.product-grid .product-info {
+  padding: 16px 18px 18px !important;
+}
+
+#catalog .product-topline {
+  font-size: 11px !important;
+  font-weight: 600;
+  letter-spacing: 0.04em !important;
+  color: #9e978d !important;
+  margin-bottom: 8px !important;
+}
+
+#catalog .product-topline .product-stock {
+  color: #cbc4b9;
+}
+
+.product-grid .product-info h3 {
+  min-height: 0 !important;
+  margin: 4px 0 8px !important;
+}
+
+.product-grid .product-open {
+  min-height: 0 !important;
+  font-family: var(--font-display) !important;
+  font-size: clamp(22px, 5.6vw, 26px) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  line-height: 1.06 !important;
+  color: var(--ink);
+}
+
+#catalog .product-sizes {
+  font-size: 11.5px !important;
+  letter-spacing: 0.06em !important;
+  color: #8f8980 !important;
+}
+
+.product-grid .product-bottom {
+  margin-top: 14px !important;
+  padding-top: 13px !important;
+  border-top: 1px solid rgba(244, 239, 230, 0.08) !important;
+}
+
+.product-grid .product-price {
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em;
+  color: #f6f1e8 !important;
+}
+
+.product-grid .product-card-link {
+  font-size: 10px !important;
+  letter-spacing: 0.12em !important;
+  color: #c8c0b4 !important;
+}
+
+/* ---------- 7. Manifesto, Mascot Gift & Club Architecture ---------- */
+.manifesto {
+  border-top: 1px solid var(--line) !important;
+  border-bottom: 1px solid var(--line) !important;
+  background: linear-gradient(180deg, #0a0b0e 0%, #08080a 100%);
+}
+
+.manifesto-lines {
+  border-top: 1px solid var(--line) !important;
+}
+
+.manifesto-lines > div {
+  border-bottom-color: var(--line) !important;
+}
+
+/* Mascot Gift ("ЗНАК СВОИХ") — full-bleed seamless vignette, zero side bars */
+.mascot-gift {
+  border-top: 1px solid var(--line) !important;
+  border-bottom: 1px solid var(--line) !important;
+  background: #08080a !important;
+}
+
+.mascot-gift-art {
+  position: relative;
+  aspect-ratio: 4 / 4.4;
+  max-height: 430px !important;
+  background: #0b0c0f !important;
+  overflow: hidden;
+  border-radius: var(--radius-arch);
+}
+
+@media (max-width: 700px) {
+  .mascot-gift-art {
+    border-radius: 0;
+  }
+}
+
+.mascot-gift-art .mascot-visual {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  object-position: center 2% !important;
+}
+
+.mascot-gift-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(8, 8, 10, 0.55) 0%, transparent 22%, transparent 56%, rgba(8, 8, 10, 0.88) 90%, #08080a 100%),
+    radial-gradient(ellipse at 50% 45%, transparent 52%, rgba(8, 8, 10, 0.55) 100%);
+}
+
+.mascot-art-caption {
+  z-index: 2;
+  top: 16px !important;
+  left: 20px !important;
+  padding: 5px 9px;
+  border-radius: 3px;
+  background: rgba(8, 8, 10, 0.62);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(244, 239, 230, 0.12);
+  font-size: 9.5px !important;
+  letter-spacing: 0.16em !important;
+}
+
+.mascot-gift-intro {
+  z-index: 2;
+}
+
+.mascot-real-gift {
+  padding: 14px !important;
+  background: #0e1014 !important;
+  border: 1px solid rgba(244, 239, 230, 0.12) !important;
+  border-radius: var(--radius-arch) !important;
+  align-items: center;
+}
+
+.mascot-real-gift img {
+  width: 68px !important;
+  height: 84px !important;
+  object-fit: cover !important;
+  border-radius: 3px;
+  border: 1px solid rgba(244, 239, 230, 0.12);
+  background: #141519;
+}
+
+.community-entry {
+  background: #0c0d10 !important;
+  border-block: 1px solid var(--line) !important;
+}
+
+/* Club 7 Days — architectural obsidian card instead of bubbly rounded box */
+.club-task {
+  border-radius: var(--radius-arch) !important;
+  background: linear-gradient(135deg, #12141a 0%, #0c0d11 100%) !important;
+  border: 1px solid rgba(244, 239, 230, 0.12) !important;
+  border-left: 2px solid var(--red) !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36);
+}
+
+.club-lifter-toggle {
+  border-radius: var(--radius-arch) !important;
+  background: rgba(8, 8, 10, 0.65) !important;
+  border: 1px solid rgba(244, 239, 230, 0.16) !important;
+}
+
+.club-day {
+  border-radius: var(--radius-arch) !important;
+  background: #0e1014 !important;
+  border-color: rgba(244, 239, 230, 0.11) !important;
+}
+
+.club-day.is-today {
+  border-color: rgba(244, 239, 230, 0.42) !important;
+  background: #161820 !important;
+}
+
+.join-banner {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: radial-gradient(ellipse at 85% 15%, rgba(184, 34, 24, 0.08), transparent 60%), #0a0b0e;
+}
+
+.faq-list details {
+  border-color: var(--line) !important;
+}
+
+.footer {
+  border-top: 1px solid var(--line);
+  background: #070709;
+}
+
+/* ---------- 8. Product Sheet, Smart Sizer & Modals ---------- */
+.product-sheet,
+.cart-sheet,
+.info-sheet,
+.profile-sheet,
+.pay-sheet {
+  background: #0b0c0f !important;
+  border: 1px solid rgba(244, 239, 230, 0.11);
+  border-radius: 18px 18px 0 0 !important;
+}
+
+.product-controls,
+.sheet-header {
+  background: rgba(12, 13, 17, 0.94) !important;
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.product-controls .stage-switch {
+  gap: 6px !important;
+}
+
+.product-controls .stage-btn {
+  min-height: 36px !important;
+  padding: 0 13px !important;
+  border-radius: 3px !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  color: #a69f95 !important;
+  border: 1px solid rgba(244, 239, 230, 0.10);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.product-controls .stage-btn.active {
+  color: #09090b !important;
+  background: #f3ede3 !important;
+  border-color: #f3ede3 !important;
+}
+
+.sheet-close {
+  border-radius: var(--radius-arch) !important;
+  border-color: rgba(244, 239, 230, 0.16) !important;
+}
+
+.media-toolbar {
+  min-height: 40px !important;
+  background: #0e1014 !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.gallery-thumbnails {
+  padding: 8px 20px !important;
+  scrollbar-width: none !important;
+}
+
+.gallery-thumbnails::-webkit-scrollbar {
+  display: none !important;
+}
+
+@media (max-width: 430px) {
+  .product-scroll .sheet-image:has(.sheet-photo:not(.hidden)) {
+    height: clamp(268px, 38svh, 350px) !important;
+  }
+}
+
+.gallery-thumbnails button,
+.gallery-thumbnails button.active {
+  border-radius: 3px !important;
+}
+
+.sheet-heading-line h2 {
+  font-size: clamp(28px, 7.5vw, 36px) !important;
+}
+
+.sheet-facts,
+.sheet-facts .fact-row {
+  border-color: var(--line) !important;
+}
+
+/* Unified Architectural Smart Sizer + Size Grid */
+.smart-sizer {
+  background: #0f1116 !important;
+  border: 1px solid rgba(244, 239, 230, 0.13) !important;
+  border-radius: 6px !important;
+  padding: 15px !important;
+}
+
+.smart-param-card {
+  background: #0a0b0e !important;
+  border: 1px solid rgba(244, 239, 230, 0.10) !important;
+  border-radius: var(--radius-arch) !important;
+}
+
+.stepper-btn {
+  border-radius: 3px !important;
+  background: #161820 !important;
+  border-color: rgba(244, 239, 230, 0.14) !important;
+}
+
+.advice-card {
+  background: #12141a !important;
+  border: 1px solid rgba(244, 239, 230, 0.11) !important;
+  border-radius: var(--radius-arch) !important;
+}
+
+.advice-card.is-recommended {
+  background: linear-gradient(155deg, rgba(184, 34, 24, 0.11) 0%, #12141a 72%) !important;
+  border-color: rgba(210, 58, 46, 0.42) !important;
+}
+
+.advice-card.selected {
+  background: linear-gradient(155deg, rgba(184, 34, 24, 0.20) 0%, #15171e 80%) !important;
+  border-color: #d4382c !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+.advice-rec-pill {
+  border-radius: 2px !important;
+  background: #a91d14 !important;
+  padding: 2px 6px !important;
+  letter-spacing: 0.1em !important;
+}
+
+.size-button {
+  border-radius: var(--radius-arch) !important;
+  background: #0f1116 !important;
+  border: 1px solid rgba(244, 239, 230, 0.13) !important;
+  font-weight: 700;
+}
+
+.size-button.selected {
+  background: #f3ede3 !important;
+  color: #09090b !important;
+  border-color: #f3ede3 !important;
+}
+
+.product-sheet > .purchase-bar {
+  background: rgba(11, 12, 16, 0.96) !important;
+  backdrop-filter: blur(16px) !important;
+  border-top: 1px solid rgba(244, 239, 230, 0.11) !important;
+}
+
+/* ---------- 9. Empty Cart Stage Vignette ---------- */
+.cart-empty-brand {
+  padding: 16px 20px 36px !important;
+}
+
+.cart-empty-art {
+  height: clamp(225px, 34vh, 275px) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+.cart-empty-brand .cart-empty-mascot {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  object-position: center top !important;
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 100%) !important;
+  mask-image: linear-gradient(180deg, #000 72%, transparent 100%) !important;
+}
+
+.cart-empty-art > span {
+  display: none !important;
+}
+
+.cart-empty-kicker {
+  color: #a89f94 !important;
+}

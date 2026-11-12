@@ -8597,6 +8597,7 @@ class StorefrontHandler(BaseHTTPRequestHandler):
             "styles.css",
             "polish.css",
             "readability-20261108.css",
+            "editorial-20261112d.css",
             "hero-founder-20261107.webp",
             "hero-founder.webp",
         ):

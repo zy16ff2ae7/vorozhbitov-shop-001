@@ -81,7 +81,7 @@
       ],
       "spin_kind": "visualization",
       "source_images": [
-        "assets/drop/hero-founder-retouch-v4.webp",
+        "assets/drop/hero-founder-editorial-20261112d.webp",
         "assets/client/sila-nikita-back-20261111c.webp",
         "assets/client/sila-production-back-20261111c.webp",
         "assets/client/sila-collage-20261111c.jpg"
@@ -731,7 +731,7 @@
   ],
   "lookbook": [
     {
-      "image": "assets/drop/hero-founder-retouch-v4.webp",
+      "image": "assets/drop/hero-founder-editorial-20261112d.webp",
       "caption": "СИЛА И ЧЕСТЬ · НА ОСНОВАТЕЛЕ"
     },
     {
@@ -756,9 +756,9 @@
     "teaser_caption": "Выпуск 001 · СИЛА И ЧЕСТЬ / ВЗГЛЯД · Первые 100 — жетон в подарок",
     "teaser_story_url": "",
     "teaser_thumbnail": "assets/video/power-drop-poster-20261111e.jpg",
-    "hero_image": "assets/drop/hero-founder-retouch-v4.webp",
-    "hero_background": "assets/drop/hero-founder-retouch-v4.webp",
-    "hero_subject": "assets/drop/hero-founder-retouch-v4.webp",
+    "hero_image": "assets/drop/hero-founder-editorial-20261112d.webp",
+    "hero_background": "assets/drop/hero-founder-editorial-20261112d.webp",
+    "hero_subject": "assets/drop/hero-founder-editorial-20261112d.webp",
     "welcome_motion": true,
     "welcome_image": "assets/welcome-sword-logo.jpg"
   },
@@ -781,7 +781,7 @@
       "cta": "catalog"
     },
     {
-      "image": "assets/drop/hero-founder-retouch-v4.webp",
+      "image": "assets/drop/hero-founder-editorial-20261112d.webp",
       "kicker": "02 / ОСНОВАТЕЛЬ",
       "title": "НИКИТА ВОРОЖБИТОВ",
       "text": "Основатель бренда «СИЛА И ЧЕСТЬ». Форма для тех, кто выбирает характер и дисциплину каждый день."
@@ -831,7 +831,7 @@
   },
   "community": [
     {
-      "image": "assets/drop/hero-founder-retouch-v4.webp",
+      "image": "assets/drop/hero-founder-editorial-20261112d.webp",
       "name": "Никита Ворожбитов",
       "caption": "СИЛА И ЧЕСТЬ · перед",
       "city": "НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ",

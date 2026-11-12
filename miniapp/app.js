@@ -575,7 +575,7 @@
         <span class="product-hover">ОТКРЫТЬ КАРТОЧКУ <b>↗</b></span>
       </div>
       <div class="product-info">
-        <div class="product-topline"><span>${escapeHTML(categoryName(product.category))}</span><span class="product-stock">${escapeHTML(product.stock_label || "В наличии")}</span></div>
+        <div class="product-topline"><span>${escapeHTML(product.fit || categoryName(product.category))}</span><span class="product-stock">${escapeHTML(product.stock_label || "В наличии")}</span></div>
         <h3><button type="button" class="product-open" aria-label="Открыть ${escapeHTML(product.name)}">${escapeHTML(product.name)}</button></h3>
         <div class="product-sizes">${(product.sizes || []).map(escapeHTML).join(" · ") || "Ждём пополнение"}</div>
         <div class="product-bottom"><strong class="product-price">${escapeHTML(product.price)}</strong><span class="product-card-link" aria-hidden="true">О ВЕЩИ ↗</span></div>
@@ -819,6 +819,23 @@
     saveJSON("vorozhbitov_viewed", state.viewed);
   }
 
+  let real3dPrefetched = false;
+  function prefetchReal3dAssets() {
+    if (real3dPrefetched || saverMode()) return;
+    real3dPrefetched = true;
+    const warm = () => {
+      for (const href of [
+        "assets/vzglyad-3d/viewer-20261112c.bundle.js",
+        "assets/vzglyad-3d/studio-concrete-20261112c.jpg",
+        "assets/vzglyad-3d/shirt-mobile-20261107.glb"
+      ]) {
+        fetch(href, { credentials: "same-origin" }).catch(() => {});
+      }
+    };
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(warm, { timeout: 3500 });
+    else window.setTimeout(warm, 1800);
+  }
+
   function openProduct(id, photoIndex) {
     const product = productById(id);
     if (!product) return;
@@ -826,10 +843,9 @@
     renderSheet(product);
     openModal("productModal");
     $(".product-scroll").scrollTop = 0;
-    if (Number.isInteger(photoIndex)) {
-      setStage("photo");
-      setGallery(photoIndex);
-    } else setStage(Array.isArray(product.spin) && product.spin.length > 1 ? "3d" : "photo");
+    setStage("photo");
+    setGallery(Number.isInteger(photoIndex) ? photoIndex : 0);
+    prefetchReal3dAssets();
     haptic("light");
   }
 
@@ -2755,7 +2771,7 @@
     const entries = (Array.isArray(state.data.community) ? state.data.community : [])
       .filter(item => item && typeof item.image === "string" && item.image);
     if (!entries.length) {
-      for (const [id, image] of [["tee-sila-i-chest", "assets/drop/hero-founder-retouch-v4.webp"], ["tee-vzglyad", "assets/client/vzglyad-nikita-front-20261111c.webp"]]) {
+      for (const [id, image] of [["tee-sila-i-chest", "assets/drop/hero-founder-editorial-20261112d.webp"], ["tee-vzglyad", "assets/client/vzglyad-nikita-front-20261111c.webp"]]) {
         const product = productById(id);
         if (product) entries.push({image, name:"Никита Ворожбитов", caption:product.name, city:"НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ", product_id:id});
       }
@@ -3059,6 +3075,7 @@
         haptic("heavy");
         window.setTimeout(() => {
           enterShop();
+          prefetchReal3dAssets();
           ritual?.classList.remove("is-activated");
           entryPending = false;
         }, reducedMotion() ? 0 : 240);
