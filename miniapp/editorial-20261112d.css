@@ -196,10 +196,21 @@ main .section-heading .section-kicker::before,
 
 /* ---------- 3. Welcome Screen Refinement ---------- */
 #welcomeFallback {
+  z-index: 1 !important;
   object-position: 50% 14% !important;
+  pointer-events: none !important;
+}
+
+#welcomeVideo.is-playing + #welcomeFallback,
+#welcomeFallback.hidden {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  display: none !important;
 }
 
 #welcomeVideo {
+  z-index: 0 !important;
+  opacity: 1 !important;
   display: block !important;
   object-position: 50% 32% !important;
   pointer-events: none !important;

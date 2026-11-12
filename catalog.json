@@ -760,19 +760,19 @@
     }
   ],
   "media": {
-    "welcome_loop": "assets/video/welcome-seal-20261112b.mp4?v=20261112n",
-    "welcome_poster": "assets/video/welcome-poster-20261112b.jpg?v=20261112n",
-    "teaser": "assets/video/power-drop-001-20261111f.mp4?v=20261112n",
-    "teaser_poster": "assets/video/power-drop-poster-20261111e.jpg?v=20261112n",
+    "welcome_loop": "assets/video/welcome-seal-20261112b.mp4?v=20261112o",
+    "welcome_poster": "assets/video/welcome-poster-20261112b.jpg?v=20261112o",
+    "teaser": "assets/video/power-drop-001-20261111f.mp4?v=20261112o",
+    "teaser_poster": "assets/video/power-drop-poster-20261111e.jpg?v=20261112o",
     "teaser_title": "СИЛА И ЧЕСТЬ",
     "teaser_caption": "Выпуск 001 · СИЛА И ЧЕСТЬ / ВЗГЛЯД · Первые 100 — жетон в подарок",
     "teaser_story_url": "",
-    "teaser_thumbnail": "assets/video/power-drop-poster-20261111e.jpg?v=20261112n",
+    "teaser_thumbnail": "assets/video/power-drop-poster-20261111e.jpg?v=20261112o",
     "hero_image": "assets/drop/hero-founder-editorial-20261112d.webp",
     "hero_background": "assets/drop/hero-founder-editorial-20261112d.webp",
     "hero_subject": "assets/drop/hero-founder-editorial-20261112d.webp",
     "welcome_motion": true,
-    "welcome_image": "assets/video/welcome-poster-20261112b.jpg?v=20261112n"
+    "welcome_image": "assets/video/welcome-poster-20261112b.jpg?v=20261112o"
   },
   "drop_event": {
     "id": "drop-001",
@@ -784,9 +784,9 @@
   },
   "film": [
     {
-      "video": "assets/video/power-drop-001-20261111f.mp4?v=20261112n",
-      "poster": "assets/video/power-drop-poster-20261111e.jpg?v=20261112n",
-      "image": "assets/video/power-drop-poster-20261111e.jpg?v=20261112n",
+      "video": "assets/video/power-drop-001-20261111f.mp4?v=20261112o",
+      "poster": "assets/video/power-drop-poster-20261111e.jpg?v=20261112o",
+      "image": "assets/video/power-drop-poster-20261111e.jpg?v=20261112o",
       "kicker": "01 / ТИЗЕР ВЫПУСКА 001",
       "title": "СИЛА И ЧЕСТЬ",
       "text": "Две футболки первого дропа из плотного хлопка 240–260 г/м² и нумерованный стальной жетон в подарок первой сотне.",

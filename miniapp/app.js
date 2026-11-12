@@ -2335,11 +2335,11 @@
 
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
-    const staleLoop = !media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") || media.welcome_loop.includes("welcome-seal-20261029.mp4") || media.welcome_loop.includes("welcome-loop-20261112a.mp4") || media.welcome_loop === "assets/video/welcome-seal-20261112b.mp4" || media.welcome_loop.includes("v=20261112k") || media.welcome_loop.includes("v=20261112l") || media.welcome_loop.includes("v=20261112m");
-    const stalePoster = !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") || media.welcome_poster.includes("welcome-seal-20261029.jpg") || media.welcome_poster.includes("welcome-poster-20261112a.jpg") || media.welcome_poster === "assets/video/welcome-poster-20261112b.jpg" || media.welcome_poster.includes("v=20261112k") || media.welcome_poster.includes("v=20261112l") || media.welcome_poster.includes("v=20261112m");
+    const staleLoop = !media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") || media.welcome_loop.includes("welcome-seal-20261029.mp4") || media.welcome_loop.includes("welcome-loop-20261112a.mp4") || media.welcome_loop === "assets/video/welcome-seal-20261112b.mp4" || media.welcome_loop.includes("v=20261112k") || media.welcome_loop.includes("v=20261112l") || media.welcome_loop.includes("v=20261112m") || media.welcome_loop.includes("v=20261112n");
+    const stalePoster = !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") || media.welcome_poster.includes("welcome-seal-20261029.jpg") || media.welcome_poster.includes("welcome-poster-20261112a.jpg") || media.welcome_poster === "assets/video/welcome-poster-20261112b.jpg" || media.welcome_poster.includes("v=20261112k") || media.welcome_poster.includes("v=20261112l") || media.welcome_poster.includes("v=20261112m") || media.welcome_poster.includes("v=20261112n");
     return {
-      welcomeLoop: media.welcome_motion === false ? "" : (staleLoop ? "assets/video/welcome-seal-20261112b.mp4?v=20261112n" : media.welcome_loop),
-      welcomePoster: stalePoster ? "assets/video/welcome-poster-20261112b.jpg?v=20261112n" : media.welcome_poster
+      welcomeLoop: media.welcome_motion === false ? "" : (staleLoop ? "assets/video/welcome-seal-20261112b.mp4?v=20261112o" : media.welcome_loop),
+      welcomePoster: stalePoster ? "assets/video/welcome-poster-20261112b.jpg?v=20261112o" : media.welcome_poster
     };
   }
 
@@ -2767,9 +2767,9 @@
 
   function welcomeCanPlay() {
     const welcome = $("#welcome");
-    return welcomePlayback.ready && !welcomePlayback.paused && !welcomePlayback.blocked && !welcomePlayback.failed
+    return welcomePlayback.ready && !welcomePlayback.paused && !welcomePlayback.failed
       && !saverMode() && !document.hidden && !state.modalStack.length
-      && !welcome.classList.contains("hidden") && !welcome.classList.contains("is-leaving");
+      && Boolean(welcome) && !welcome.classList.contains("hidden") && !welcome.classList.contains("is-leaving");
   }
 
   function syncWelcomeVideo() {
@@ -2778,9 +2778,11 @@
     // Беззвучие — и атрибутом, и свойством: часть WebView для автоплея смотрит только на свойство.
     video.muted = true;
     video.defaultMuted = true;
+    video.playsInline = true;
+    video.autoplay = true;
     video.loop = true;
     const control = $("#welcomeMotion");
-    const isOff = Boolean(welcomePlayback.paused || welcomePlayback.blocked || welcomePlayback.failed || saverMode());
+    const isOff = Boolean(welcomePlayback.paused || welcomePlayback.failed || saverMode());
     if (control) {
       control.classList.toggle("hidden", !welcomePlayback.ready);
       control.classList.toggle("is-active", !isOff);
@@ -2795,6 +2797,7 @@
     const fallback = $("#welcomeFallback");
     // Показываем видео сразу с первого декодированного кадра, а до старта или на паузе держим только чистый постер <img> без системной кнопки Play.
     if (canPlay && !video.paused && video.readyState >= 1 && !welcomePlayback.failed) {
+      welcomePlayback.blocked = false;
       video.classList.add("is-playing");
       if (fallback) fallback.classList.add("hidden");
     } else if (!canPlay) {
@@ -2814,12 +2817,13 @@
     if (!video.paused || welcomePlayback.pending) return;
     welcomePlayback.pending = true;
     const attempt = video.play();
-    Promise.resolve(attempt).catch(error => {
-      // Запрет автоплея (строгая политика WebView, энергосбережение iOS) — это не пользовательская пауза:
-      // помечаем отдельно, первый же жест снимет запрет и запустит фильм.
+    Promise.resolve(attempt).then(() => {
+      welcomePlayback.blocked = false;
+    }).catch(error => {
+      // В Telegram WebView первый вызов play() во время анимации открытия шторки может вернуть NotAllowedError/AbortError.
+      // Не ставим видео на паузу и не блокируем автоплей навсегда — повторим попытку через 180 мс и по готовности буфера.
       if (error && error.name === "NotAllowedError") {
         welcomePlayback.blocked = true;
-        syncWelcomeVideo();
       }
     }).finally(() => {
       welcomePlayback.pending = false;
@@ -2828,6 +2832,7 @@
         video.classList.remove("is-playing");
         $("#welcomeFallback")?.classList.remove("hidden");
       } else if (!video.paused && video.readyState >= 1) {
+        welcomePlayback.blocked = false;
         video.classList.add("is-playing");
         $("#welcomeFallback")?.classList.add("hidden");
       }
@@ -2942,6 +2947,9 @@
       });
       video.addEventListener("pause", syncWelcomeFinale);
       video.addEventListener("emptied", syncWelcomeFinale);
+      video.addEventListener("loadedmetadata", () => {
+        if (!video.classList.contains("is-playing") && !welcomePlayback.paused) syncWelcomeVideo();
+      });
       video.addEventListener("loadeddata", markPlaying);
       video.addEventListener("playing", () => {
         if (welcomeCanPlay()) markPlaying();
@@ -2949,7 +2957,12 @@
       });
       video.addEventListener("canplay", () => {
         // Первая попытка play() могла уйти до полной готовности буфера — повторяем по готовности.
-        if (!video.classList.contains("is-playing") && !welcomePlayback.blocked && !welcomePlayback.paused) syncWelcomeVideo();
+        if (!video.classList.contains("is-playing") && !welcomePlayback.paused) syncWelcomeVideo();
+        markPlaying();
+      });
+      video.addEventListener("canplaythrough", () => {
+        if (!video.classList.contains("is-playing") && !welcomePlayback.paused) syncWelcomeVideo();
+        markPlaying();
       });
       video.addEventListener("error", () => {
         // Removing a source when leaving is cleanup, not a failed media request.
@@ -2960,23 +2973,42 @@
         syncWelcomeVideo();
       });
       navigator.connection?.addEventListener?.("change", syncWelcomeVideo);
-      // WebView может резать автоплей: первый жест снимает запрет, возврат во вкладку — повод повторить.
-      window.addEventListener("pointerdown", event => {
-        if (video.classList.contains("is-playing") || welcomePlayback.paused) return;
-        if (event.target.closest && (event.target.closest("#welcomeMotion") || event.target.closest("#enterShop"))) return;
+      // WebView может задержать автоплей во время открытия мини-приложения: любое касание или фокус запускает видео мгновенно.
+      const unlockAutoplay = event => {
+        if (video.classList.contains("is-playing") && !video.paused) return;
+        if (welcomePlayback.paused) return;
+        if (event && event.target && event.target.closest && (event.target.closest("#welcomeMotion") || event.target.closest("#enterShop"))) return;
         welcomePlayback.blocked = false;
+        welcomePlayback.pending = false;
         syncWelcomeVideo();
-      }, { passive: true });
+      };
+      window.addEventListener("pointerdown", unlockAutoplay, { passive: true });
+      window.addEventListener("touchstart", unlockAutoplay, { passive: true });
+      window.addEventListener("focus", syncWelcomeVideo);
       document.addEventListener("visibilitychange", syncWelcomeVideo);
-      if (tg && typeof tg.onEvent === "function") tg.onEvent("activated", syncWelcomeVideo);
+      if (tg && typeof tg.onEvent === "function") {
+        tg.onEvent("activated", syncWelcomeVideo);
+        tg.onEvent("viewportChanged", syncWelcomeVideo);
+      }
     }
-    // Сторожевой таймер: не заиграло за 2.5 секунды — повторяем попытку без сброса буфера.
-    window.clearTimeout(welcomePlayback.watchdog);
-    welcomePlayback.watchdog = window.setTimeout(() => {
-      if (video.classList.contains("is-playing") || !welcomeCanPlay()) return;
+    // Серия быстрых сторожевых попыток (каждые 180 мс в первые 4.5 секунды): гарантирует старт сразу после открытия WebView.
+    window.clearInterval(welcomePlayback.watchdog);
+    let watchdogTicks = 0;
+    welcomePlayback.watchdog = window.setInterval(() => {
+      watchdogTicks += 1;
+      if (watchdogTicks > 25 || !welcomeCanPlay()) {
+        if (watchdogTicks > 25) window.clearInterval(welcomePlayback.watchdog);
+        return;
+      }
+      if (!video.paused && video.readyState >= 1) {
+        video.classList.add("is-playing");
+        $("#welcomeFallback")?.classList.add("hidden");
+        window.clearInterval(welcomePlayback.watchdog);
+        return;
+      }
       welcomePlayback.pending = false;
       syncWelcomeVideo();
-    }, 2500);
+    }, 180);
     syncWelcomeVideo();
   }
 
@@ -2993,7 +3025,7 @@
     $("#welcome")?.classList.remove("is-logo-finale", "welcome-emblem-phase");
     welcomePlayback.blocked = false;
     welcomePlayback.pending = false;
-    window.clearTimeout(welcomePlayback.watchdog);
+    window.clearInterval(welcomePlayback.watchdog);
     if (video.hasAttribute("src")) {
       video.removeAttribute("src");
       video.load();

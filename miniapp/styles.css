@@ -171,8 +171,8 @@ img { display: block; max-width: 100%; }
   filter: none;
   animation: ken 18s ease-in-out infinite alternate;
 }
-/* Видео лежит поверх фотографии: пока оно не готово, виден постер. */
-video.welcome-media { z-index: 1; animation: none; opacity: 0; transition: opacity .6s ease; object-fit: cover; object-position: 50% 24%; filter: none; }
+/* Видео всегда имеет opacity: 1 (иначе WebKit блокирует автоплей невидимого <video>), а до первого кадра или на паузе сверху лежит чистый постер #welcomeFallback. */
+video.welcome-media { z-index: 0; animation: none; opacity: 1; object-fit: cover; object-position: 50% 24%; filter: none; }
 video.welcome-media.is-playing { opacity: 1; }
 .welcome-shade {
   position: absolute; inset: 0;
@@ -2127,8 +2127,8 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 /* ---------- Приветствие остаётся тёмным ---------- */
 .welcome { background: #070708; }
 .welcome-shade { z-index: 2; pointer-events: none; background: linear-gradient(180deg, rgba(0,0,0,.10), rgba(0,0,0,.25) 25%, rgba(0,0,0,.95) 90%); }
-#welcomeFallback { z-index: 0; opacity: 1; }
-#welcomeVideo { z-index: 1; object-position: 50% 35%; }
+#welcomeFallback { z-index: 1; opacity: 1; pointer-events: none; }
+#welcomeVideo { z-index: 0; opacity: 1; object-position: 50% 35%; }
 .welcome-frame { z-index: 3; justify-content: flex-end; padding: 34px 22px calc(25px + var(--safe-bottom)); }
 .welcome .welcome-title { font-size: clamp(45px, 14vw, 84px); }
 .welcome-copy { max-width: 340px; font-size: 13px; }
@@ -2256,7 +2256,7 @@ button:disabled { opacity: .48; cursor: default; transform: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  #welcomeVideo { display: none; }
+  #welcomeVideo { display: block; }
   .sk-media::after, .sk-line::after { animation: none; }
 }
 
