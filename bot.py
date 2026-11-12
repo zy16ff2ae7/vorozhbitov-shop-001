@@ -8627,6 +8627,35 @@ class StorefrontHandler(BaseHTTPRequestHandler):
                 return m.group(0)
 
         text = re.sub(r"""(src|href|poster)=(["'])(assets/[^"'?]+|hero-founder[^"'?]*)(["'])""", _stamp_match, text)
+
+        # Динамический OpenGraph / Twitter превью под текущий публичный домен (sila.theatralka.ru или .nip.io)
+        raw_host = ""
+        if hasattr(self, "headers") and self.headers is not None:
+            raw_host = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "").split(",")[0].strip().lower()
+        host_only = raw_host.split(":")[0]
+        origin = ""
+        if re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,120}[a-z0-9])?", host_only) and host_only not in {"127.0.0.1", "localhost"}:
+            origin = f"https://{host_only}"
+        elif getattr(self, "settings", None) and str(self.settings.webapp_url).startswith("https://"):
+            parsed_webapp = urllib.parse.urlsplit(self.settings.webapp_url)
+            if parsed_webapp.netloc:
+                origin = f"https://{parsed_webapp.netloc}"
+        if origin:
+            og_asset = self.static_root / "assets/client/og-preview-20261112c.jpg"
+            try:
+                og_ver = f"?v={int(og_asset.stat().st_mtime)}"
+            except OSError:
+                og_ver = ""
+            text = re.sub(
+                r'(<meta\s+property="og:url"\s+content=")https://[^"]+(")',
+                rf"\g<1>{origin}/\g<2>",
+                text,
+            )
+            text = re.sub(
+                r'(<meta\s+(?:property="og:image"|name="twitter:image")\s+content=")https://[^"/]+/(assets/[^"?]+)(?:\?[^"]*)?(")',
+                rf"\g<1>{origin}/\g<2>{og_ver}\g<3>",
+                text,
+            )
         return text.encode("utf-8")
 
     def _asset_version(self, asset: Path) -> str:

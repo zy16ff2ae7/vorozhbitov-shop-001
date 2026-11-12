@@ -1269,3 +1269,298 @@ main .section-heading .section-kicker::before,
   backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(244, 239, 230, 0.18) !important;
 }
+
+/* ---------- 10. Filled Cart, Owner Card, Share, Search & Lightbox (20261112g) ---------- */
+.product-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sheet-share {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: var(--radius-arch);
+  background: rgba(18, 18, 22, 0.82);
+  border: 1px solid rgba(244, 239, 230, 0.15);
+  color: #e8e1d5;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.sheet-share:hover,
+.sheet-share:focus-visible {
+  background: rgba(34, 34, 40, 0.94);
+  border-color: rgba(244, 239, 230, 0.34);
+  color: #ffffff;
+}
+
+/* Filled Cart (#cartModal) */
+.cart-content {
+  display: grid;
+  gap: 12px;
+}
+
+.cart-line {
+  display: grid !important;
+  grid-template-columns: 74px minmax(0, 1fr) auto !important;
+  gap: 14px !important;
+  align-items: center !important;
+  padding: 12px !important;
+  border-radius: var(--radius-card) !important;
+  background: linear-gradient(180deg, rgba(20, 20, 24, 0.92) 0%, rgba(12, 12, 15, 0.96) 100%) !important;
+  border: 1px solid rgba(244, 239, 230, 0.12) !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42) !important;
+}
+
+.cart-line-image {
+  width: 74px !important;
+  height: 92px !important;
+  object-fit: cover !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(244, 239, 230, 0.12) !important;
+  background: #0b0b0e !important;
+  cursor: pointer;
+}
+
+.cart-line-name strong {
+  display: block;
+  font-family: var(--font-display) !important;
+  font-size: 19px !important;
+  letter-spacing: -0.01em !important;
+  line-height: 1.05 !important;
+  color: #f4efe6 !important;
+  cursor: pointer;
+}
+
+.cart-line-name small {
+  display: block;
+  margin-top: 4px !important;
+  font-size: 11.5px !important;
+  color: var(--ed-muted) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.cart-line .qty-control {
+  margin-top: 10px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(244, 239, 230, 0.16) !important;
+  background: rgba(9, 9, 12, 0.85) !important;
+  overflow: hidden;
+}
+
+.cart-line .qty-control button {
+  width: 32px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #f4efe6 !important;
+  font-size: 15px !important;
+}
+
+.cart-line .qty-control span {
+  min-width: 28px !important;
+  text-align: center !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums;
+  color: #f4efe6 !important;
+}
+
+.cart-line-end {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  justify-content: space-between !important;
+  align-self: stretch !important;
+  gap: 10px !important;
+}
+
+.cart-line-end strong {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: #f4efe6 !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cart-line .remove-line {
+  padding: 5px 8px !important;
+  min-height: 0 !important;
+  font-size: 9.5px !important;
+  letter-spacing: 0.12em !important;
+  color: rgba(244, 239, 230, 0.56) !important;
+  border: 1px solid rgba(244, 239, 230, 0.1) !important;
+  border-radius: 3px !important;
+  background: transparent !important;
+}
+
+.cart-line .remove-line:hover {
+  color: #f4efe6 !important;
+  border-color: rgba(244, 239, 230, 0.28) !important;
+}
+
+.checkout-gift {
+  display: grid !important;
+  grid-template-columns: 52px minmax(0, 1fr) auto !important;
+  gap: 12px !important;
+  align-items: center !important;
+  padding: 12px 14px !important;
+  border-radius: var(--radius-card) !important;
+  background: linear-gradient(135deg, rgba(26, 23, 22, 0.92) 0%, rgba(13, 13, 16, 0.96) 100%) !important;
+  border: 1px solid rgba(244, 239, 230, 0.16) !important;
+}
+
+.checkout-gift img {
+  width: 52px !important;
+  height: 64px !important;
+  object-fit: cover !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(244, 239, 230, 0.14) !important;
+}
+
+.checkout-gift b {
+  font-size: 13px !important;
+  letter-spacing: 0.06em !important;
+  color: #f3ede3 !important;
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: rgba(184, 34, 24, 0.22);
+  border: 1px solid rgba(184, 34, 24, 0.48);
+}
+
+.cart-delivery-profile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-card);
+  background: rgba(16, 16, 20, 0.88);
+  border: 1px solid rgba(244, 239, 230, 0.12);
+}
+
+.cart-delivery-meta {
+  min-width: 0;
+}
+
+.cart-delivery-meta .section-kicker {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 9.5px !important;
+}
+
+.cart-delivery-meta strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f4efe6;
+  line-height: 1.35;
+}
+
+.cart-delivery-meta small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ed-muted);
+  line-height: 1.4;
+}
+
+.cart-delivery-edit {
+  flex-shrink: 0;
+  padding: 7px 11px;
+  border-radius: 4px;
+  border: 1px solid rgba(244, 239, 230, 0.18);
+  background: rgba(244, 239, 230, 0.05);
+  color: #f3ede3;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.cart-next-total {
+  margin-top: 14px !important;
+  padding: 14px 0 10px !important;
+  border-top: 1px solid rgba(244, 239, 230, 0.12) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.cart-next-total strong {
+  font-family: var(--font-display) !important;
+  font-size: 26px !important;
+  letter-spacing: -0.01em !important;
+  color: #f4efe6 !important;
+}
+
+#beginCheckout {
+  background: linear-gradient(180deg, #be241a 0%, #8f160f 100%) !important;
+  border: 1px solid rgba(255, 130, 115, 0.34) !important;
+  color: #faf6f0 !important;
+  box-shadow: 0 14px 32px rgba(169, 29, 21, 0.34) !important;
+}
+
+/* Owner Card (#ownerCardModal) */
+.owner-sheet {
+  background: #09090c !important;
+  border: 1px solid rgba(244, 239, 230, 0.14) !important;
+  border-radius: 14px 14px 0 0 !important;
+}
+
+.owner-canvas-wrap {
+  border-radius: 6px !important;
+  border: 1px solid rgba(244, 239, 230, 0.16) !important;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.72) !important;
+  overflow: hidden;
+}
+
+#ownerDownload {
+  background: #f3ede3 !important;
+  color: #09090b !important;
+  border-color: #f3ede3 !important;
+}
+
+/* Search Overlay & Lightbox */
+.search-overlay {
+  background: rgba(8, 8, 11, 0.92) !important;
+  backdrop-filter: blur(22px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.2) !important;
+  border-bottom: 1px solid rgba(244, 239, 230, 0.14) !important;
+}
+
+.search-big {
+  border-radius: var(--radius-arch) !important;
+  background: rgba(18, 18, 22, 0.92) !important;
+  border: 1px solid rgba(244, 239, 230, 0.18) !important;
+}
+
+.search-hints button {
+  border-radius: 99px !important;
+  background: rgba(244, 239, 230, 0.06) !important;
+  border: 1px solid rgba(244, 239, 230, 0.14) !important;
+  color: #e9e2d6 !important;
+  font-size: 10.5px !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase;
+}
+
+.lightbox-sheet {
+  background: rgba(6, 6, 8, 0.96) !important;
+}
+
+.lightbox-zoom {
+  border-radius: 99px !important;
+  background: rgba(16, 16, 20, 0.84) !important;
+  backdrop-filter: blur(14px) !important;
+  border: 1px solid rgba(244, 239, 230, 0.2) !important;
+  color: #f3ede3 !important;
+}

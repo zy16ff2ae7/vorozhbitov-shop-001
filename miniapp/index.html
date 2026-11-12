@@ -529,7 +529,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
           <button class="stage-btn active" id="stagePhoto" data-stage="photo" role="tab" aria-selected="true" aria-controls="sheetImage" type="button">ФОТО</button>
           <button class="stage-btn" id="stage3d" data-stage="3d" role="tab" aria-selected="false" aria-controls="view3d" type="button">3D</button>
           <button class="stage-btn hidden" id="stageVideo" data-stage="video" role="tab" aria-selected="false" aria-controls="sheetVideo" type="button">360° ВИДЕО</button>
-        </div><button class="sheet-close" data-close="productModal" type="button" aria-label="Закрыть">×</button></div><div class="product-scroll">
+        </div><div class="product-head-actions"><button class="sheet-share" id="shareProductButton" type="button" aria-label="Поделиться вещью" title="Поделиться"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h3v3"/><path d="M16 4 9.5 10.5"/><path d="M15 11.5V15a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3.5"/></svg></button><button class="sheet-close" data-close="productModal" type="button" aria-label="Закрыть">×</button></div></div><div class="product-scroll">
       <div class="sheet-handle" aria-hidden="true"></div>
 
       <div class="sheet-image image-frame">
@@ -736,6 +736,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
       <div class="cart-content" id="cartContent"></div>
       <div class="cart-next hidden" id="cartNext">
         <div class="checkout-gift hidden" id="checkoutGift"></div>
+        <div class="cart-delivery-profile" id="cartDeliveryProfile"></div>
         <div class="cart-next-total"><span>Итого за вещи</span><strong id="cartPreviewTotal"></strong></div>
         <p>Доставка рассчитывается отдельно. Её стоимость подтверждается до оплаты.</p>
         <p id="cartPreorderNote" class="cart-preorder-note hidden" role="status">В корзине есть предзаказ. Дату готовности и отправки нужно подтвердить до оплаты.</p>

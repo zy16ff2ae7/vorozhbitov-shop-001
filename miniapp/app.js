@@ -356,10 +356,24 @@
     if (element) element.scrollIntoView({ behavior: reducedMotion() ? "instant" : "smooth", block: "start" });
   }
 
+  function isSearchOpen() {
+    const search = $("#searchOverlay");
+    return Boolean(search && !search.classList.contains("hidden"));
+  }
+
+  function closeSearchOverlay() {
+    const search = $("#searchOverlay");
+    if (!search || search.classList.contains("hidden")) return false;
+    search.classList.add("hidden");
+    $("#searchToggle")?.setAttribute("aria-expanded", "false");
+    syncBackButton();
+    return true;
+  }
+
   function syncBackButton() {
     if (!tg || !tg.BackButton) return;
     try {
-      if (state.modalStack.length) tg.BackButton.show();
+      if (state.modalStack.length || isSearchOpen()) tg.BackButton.show();
       else tg.BackButton.hide();
     } catch (_) { /* old clients */ }
   }
@@ -524,6 +538,26 @@
   function closeTopModal() {
     const id = state.modalStack[state.modalStack.length - 1];
     if (id) closeModal(id);
+  }
+
+  function handleBackNavigation() {
+    const top = state.modalStack[state.modalStack.length - 1];
+    if (top === "cartModal" && state.cartStep === "details") {
+      state.cartStep = "items";
+      renderCart();
+      const sheet = $(".cart-sheet");
+      if (sheet) sheet.scrollTop = 0;
+      return true;
+    }
+    if (top) {
+      closeModal(top);
+      return true;
+    }
+    if (closeSearchOverlay()) {
+      $("#searchToggle")?.focus({ preventScroll: true });
+      return true;
+    }
+    return false;
   }
 
   function categoryName(id) {
@@ -999,6 +1033,24 @@
       <small>Стоимость и условия доставки уточняются до оплаты.</small>`;
   }
 
+  function renderCartDeliveryProfile() {
+    const box = $("#cartDeliveryProfile");
+    if (!box) return;
+    const p = state.profile || {};
+    const city = String(p.city || "").trim();
+    const address = String(p.address || "").trim();
+    const name = String(p.name || "").trim();
+    const phone = String(p.phone || "").trim();
+    const deliver = String(p.deliver || "СДЭК").trim();
+    const hasDetails = Boolean(city || address || phone);
+    const summaryParts = [];
+    if (city || address) summaryParts.push(`${deliver} · ${[city, address].filter(Boolean).join(", ")}`);
+    if (name || phone) summaryParts.push([name, phone].filter(Boolean).join(" · "));
+    box.innerHTML = hasDetails
+      ? `<div class="cart-delivery-meta"><span class="section-kicker">ДАННЫЕ ДОСТАВКИ</span><strong>${escapeHTML(summaryParts[0] || deliver)}</strong>${summaryParts[1] ? `<small>${escapeHTML(summaryParts[1])}</small>` : ""}</div><button type="button" class="cart-delivery-edit" data-cart-edit-profile>ИЗМЕНИТЬ ↗</button>`
+      : `<div class="cart-delivery-meta"><span class="section-kicker">ДАННЫЕ ДОСТАВКИ</span><strong>Город и контакт для СДЭК / Яндекс</strong><small>Необязательно — можно указать заранее для автоподстановки в заказ</small></div><button type="button" class="cart-delivery-edit" data-cart-edit-profile>ЗАПОЛНИТЬ ↗</button>`;
+  }
+
   function renderCart() {
     const content = $("#cartContent");
     $("#cartNext").classList.add("hidden");
@@ -1021,8 +1073,9 @@
       if (unknown) stockUnknown = true;
       const ready = product && !unknown && Core.available(product) && product.sizes.includes(item.size);
       if (!ready) unavailable = true;
-      const image = product ? `<img class="cart-line-image" src="${escapeHTML(imageFor(product))}" alt="">` : '<span class="cart-line-image unavailable-mark" aria-hidden="true">—</span>';
-      return `<div class="cart-line ${ready ? "" : "is-unavailable"}" data-cart-key="${escapeHTML(item.key)}">${image}<div class="cart-line-name"><strong>${escapeHTML(product ? product.name : "Вещь недоступна")}</strong><small>Размер: ${escapeHTML(item.size)}${item.person ? ` · Номер: ${escapeHTML(item.person)}` : ""}</small>${ready ? `<div class="qty-control"><button data-qty="minus" type="button" aria-label="Уменьшить">−</button><span>${item.qty}</span><button data-qty="plus" type="button" aria-label="Увеличить" ${item.qty >= Core.MAX_QUANTITY ? "disabled" : ""}>+</button></div>` : unknown ? '<small class="unavailable-note">Не удалось проверить наличие. Попробуй обновить каталог.</small>' : '<small class="unavailable-note">Удали эту позицию или выбери доступный размер.</small>'}</div><div class="cart-line-end"><strong>${ready ? rubles(priceNumber(product.price) * item.qty) : unknown ? "Наличие уточняется" : "Недоступно"}</strong><button class="remove-line" data-remove-key="${escapeHTML(item.key)}" type="button">УДАЛИТЬ</button></div></div>`;
+      const openAttr = product ? `data-cart-open="${escapeHTML(product.id)}" role="button" tabindex="0"` : "";
+      const image = product ? `<img class="cart-line-image" src="${escapeHTML(imageFor(product))}" alt="" ${openAttr}>` : '<span class="cart-line-image unavailable-mark" aria-hidden="true">—</span>';
+      return `<div class="cart-line ${ready ? "" : "is-unavailable"}" data-cart-key="${escapeHTML(item.key)}">${image}<div class="cart-line-name"><strong ${openAttr}>${escapeHTML(product ? product.name : "Вещь недоступна")}</strong><small>Размер: ${escapeHTML(item.size)}${item.person ? ` · Номер: ${escapeHTML(item.person)}` : ""}</small>${ready ? `<div class="qty-control"><button data-qty="minus" type="button" aria-label="Уменьшить">−</button><span>${item.qty}</span><button data-qty="plus" type="button" aria-label="Увеличить" ${item.qty >= Core.MAX_QUANTITY ? "disabled" : ""}>+</button></div>` : unknown ? '<small class="unavailable-note">Не удалось проверить наличие. Попробуй обновить каталог.</small>' : '<small class="unavailable-note">Удали эту позицию или выбери доступный размер.</small>'}</div><div class="cart-line-end"><strong>${ready ? rubles(priceNumber(product.price) * item.qty) : unknown ? "Наличие уточняется" : "Недоступно"}</strong><button class="remove-line" data-remove-key="${escapeHTML(item.key)}" type="button">УДАЛИТЬ</button></div></div>`;
     }).join("");
     if (unavailable) {
       state.cartStep = "items";
@@ -1046,6 +1099,7 @@
     const preorderItems = state.cart.map(item => productById(item.id)).filter(product => product && /предзаказ/i.test(`${product.badge || ""} ${product.stock_label || ""}`));
     $("#cartPreorderNote").classList.toggle("hidden", !preorderItems.length);
     renderCheckoutGift();
+    renderCartDeliveryProfile();
     renderDeliverySummary();
   }
 
@@ -1507,7 +1561,7 @@
       if (typeof tg.setBackgroundColor === "function") tg.setBackgroundColor("#0c0c0e");
       if (tg.MainButton) tg.MainButton.hide();
       if (tg.BackButton && typeof tg.BackButton.onClick === "function") {
-        tg.BackButton.onClick(() => closeTopModal());
+        tg.BackButton.onClick(() => handleBackNavigation());
       }
       const user = telegramUser();
       if (user && user.first_name) {
@@ -1640,6 +1694,7 @@
       renderMascotGift();
       renderReturnVisit();
       loadClubState();
+      handleInitialDeepLink();
     } catch (_) {
       $("#catalogError").classList.remove("hidden");
       renderProducts();
@@ -1650,6 +1705,70 @@
       if (state.currentProduct) updatePurchaseSummary();
       $("#catalogStatus").classList.add("hidden");
       $("#productGrid").setAttribute("aria-busy", "false");
+    }
+  }
+
+  let initialDeepLinkHandled = false;
+
+  function handleInitialDeepLink() {
+    if (initialDeepLinkHandled) return;
+    const params = new URLSearchParams(window.location.search || "");
+    const rawTarget = (params.get("product") || params.get("item") || (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || "").trim();
+    if (!rawTarget) return;
+    initialDeepLinkHandled = true;
+    const normalized = rawTarget.replace(/^(product_|item_)/i, "");
+    const dismissWelcomeNow = () => {
+      const welcome = $("#welcome");
+      if (welcome && !welcome.classList.contains("hidden")) {
+        welcome.classList.add("hidden");
+        welcome.classList.remove("is-leaving");
+        stopWelcomeVideo();
+        document.body.classList.remove("welcoming", "booting");
+        syncModalLayers();
+      }
+      prefetchReal3dAssets();
+    };
+    if (normalized === "stories" || normalized === "film") {
+      dismissWelcomeNow();
+      openStories(0);
+      return;
+    }
+    if (normalized === "club") {
+      dismissWelcomeNow();
+      scrollToId("club");
+      return;
+    }
+    const targetProduct = productById(normalized);
+    if (targetProduct) {
+      dismissWelcomeNow();
+      openProduct(targetProduct.id);
+    }
+  }
+
+  async function shareCurrentProduct() {
+    const product = state.currentProduct;
+    if (!product) return;
+    haptic("light");
+    const shareUrl = `${window.location.origin}/?product=${encodeURIComponent(product.id)}`;
+    const shareText = `«${product.name}» · СИЛА И ЧЕСТЬ (Выпуск 001)`;
+    if (tg && typeof tg.openTelegramLink === "function") {
+      const tgShare = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
+      tg.openTelegramLink(tgShare);
+      return;
+    }
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: shareText, text: shareText, url: shareUrl });
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      showToast("Ссылка на вещь скопирована.");
+    } catch (_) {
+      showToast(shareUrl);
     }
   }
 
@@ -2913,30 +3032,38 @@
     if (!ctx) return;
     try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (_) { /* fallback fonts */ }
     const product = (row.product_id && productById(row.product_id)) || (state.data.products || []).find(item => item.name === row.product_name);
-    ctx.fillStyle = "#0b0b0d";
+    // Editorial Monolith Collector's Passport
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, 1200);
+    bgGrad.addColorStop(0, "#0d0d10");
+    bgGrad.addColorStop(0.55, "#08080a");
+    bgGrad.addColorStop(1, "#050507");
+    ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, 900, 1200);
-    ctx.fillStyle = "#e10600";
-    ctx.fillRect(0, 0, 900, 14);
-    ctx.fillStyle = "#f4eee6";
-    ctx.font = "700 28px 'Sila Chest', Arial, sans-serif";
-    ctx.fillText("СИЛА И ЧЕСТЬ", 56, 78);
-    ctx.fillStyle = "#a49c8f";
-    ctx.font = "600 20px Arial, sans-serif";
-    ctx.fillText("ПЕРВЫЙ ДРОП · 001", 56, 112);
-    ctx.fillStyle = "#f4eee6";
-    ctx.font = "800 82px 'Sila Chest', Arial, sans-serif";
-    ctx.fillText("КАРТА", 52, 218);
-    ctx.fillText("ВЛАДЕЛЬЦА", 52, 302);
-    ctx.fillStyle = "#171719";
-    ctx.fillRect(56, 344, 788, 388);
-    ctx.strokeStyle = "rgba(255,255,255,.18)";
-    ctx.strokeRect(56, 344, 788, 388);
+    ctx.strokeStyle = "rgba(244, 239, 230, 0.14)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(24, 24, 852, 1152);
+    ctx.fillStyle = "#a91d15";
+    ctx.fillRect(24, 24, 852, 6);
+    ctx.fillStyle = "#f4efe6";
+    ctx.font = "700 28px 'Sila Chest', Georgia, serif";
+    ctx.fillText("СИЛА И ЧЕСТЬ", 56, 86);
+    ctx.fillStyle = "#9d968b";
+    ctx.font = "600 18px 'Manrope', -apple-system, sans-serif";
+    ctx.fillText("ПАСПОРТ ВЫПУСКА · 001", 56, 118);
+    ctx.fillStyle = "rgba(244, 239, 230, 0.08)";
+    ctx.font = "700 72px 'Sila Chest', Georgia, serif";
+    ctx.fillText("001", 726, 108);
+    ctx.fillStyle = "#f4efe6";
+    ctx.font = "700 76px 'Sila Chest', Georgia, serif";
+    ctx.fillText("КАРТА", 54, 218);
+    ctx.fillStyle = "#b9b1a5";
+    ctx.fillText("ВЛАДЕЛЬЦА.", 54, 298);
+    ctx.fillStyle = "#111114";
+    ctx.fillRect(56, 338, 788, 396);
     if (product) {
       try {
         const image = await loadCanvasImage(imageFor(product));
-        const box = { x: 56, y: 344, w: 788, h: 388 };
-        // Заполняем рамку целиком (кадрирование по верхней трети), иначе портретное фото
-        // висит узкой полосой посреди пустого чёрного прямоугольника.
+        const box = { x: 56, y: 338, w: 788, h: 396 };
         const scale = Math.max(box.w / image.naturalWidth, box.h / image.naturalHeight);
         const w = image.naturalWidth * scale;
         const h = image.naturalHeight * scale;
@@ -2944,27 +3071,40 @@
         ctx.beginPath();
         ctx.rect(box.x, box.y, box.w, box.h);
         ctx.clip();
-        ctx.drawImage(image, box.x + (box.w - w) / 2, box.y + (box.h - h) * 0.3, w, h);
+        ctx.drawImage(image, box.x + (box.w - w) / 2, box.y + (box.h - h) * 0.28, w, h);
+        const shade = ctx.createLinearGradient(0, box.y, 0, box.y + box.h);
+        shade.addColorStop(0, "rgba(8,8,10,0.12)");
+        shade.addColorStop(0.65, "rgba(8,8,10,0)");
+        shade.addColorStop(1, "rgba(8,8,10,0.72)");
+        ctx.fillStyle = shade;
+        ctx.fillRect(box.x, box.y, box.w, box.h);
         ctx.restore();
       } catch (_) { /* text card remains valid without the photo */ }
     }
-    let y = 798;
+    ctx.strokeStyle = "rgba(244, 239, 230, 0.16)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(56, 338, 788, 396);
+    let y = 796;
     const field = (label, value, big = false) => {
-      ctx.fillStyle = "#e10600";
-      ctx.font = "800 18px Arial, sans-serif";
+      ctx.fillStyle = "#c93b2f";
+      ctx.font = "700 16px 'Manrope', -apple-system, sans-serif";
       ctx.fillText(label, 56, y);
-      ctx.fillStyle = "#f4eee6";
-      ctx.font = big ? "800 44px 'Sila Chest', Arial, sans-serif" : "700 30px Arial, sans-serif";
-      y = wrapCanvasText(ctx, value || "—", 56, y + (big ? 48 : 38), 788, big ? 48 : 36, 2) + 28;
+      ctx.fillStyle = "#f4efe6";
+      ctx.font = big ? "700 44px 'Sila Chest', Georgia, serif" : "600 28px 'Manrope', -apple-system, sans-serif";
+      y = wrapCanvasText(ctx, value || "—", 56, y + (big ? 46 : 36), 788, big ? 48 : 34, 2) + 26;
     };
-    field("ВЕЩЬ", row.product_name || "Вещь бренда", true);
+    field("МОДЕЛЬ", row.product_name || "Вещь бренда", true);
     field("РАЗМЕР / ЗАКАЗ", `${row.size || "—"} · №${row.id || "—"}${row.quantity ? ` · ${row.quantity} шт.` : ""}`);
     const when = formatOrderWhen(row.created_at || row.at);
     field("СТАТУС", `${row.status_label || row.status || "зарегистрирован"}${when ? ` · ${when}` : ""}`);
-    if (row.gift) field("ПОДАРОК", `${row.gift.name || "Жетон"}${row.gift.serial_label ? ` · №${row.gift.serial_label}` : ""}`);
-    ctx.fillStyle = "#a49c8f";
-    ctx.font = "600 20px Arial, sans-serif";
-    ctx.fillText("СИЛА / ДИСЦИПЛИНА / ЧЕСТЬ", 56, 1146);
+    if (row.gift) field("ПОДАРОК ДРОПА", `${row.gift.name || "Жетон"}${row.gift.serial_label ? ` · №${row.gift.serial_label}` : ""}`);
+    ctx.fillStyle = "rgba(244, 239, 230, 0.12)";
+    ctx.fillRect(56, 1106, 788, 1);
+    ctx.fillStyle = "#9d968b";
+    ctx.font = "600 18px 'Manrope', -apple-system, sans-serif";
+    ctx.fillText("СИЛА  /  ДИСЦИПЛИНА  /  ЧЕСТЬ", 56, 1144);
+    ctx.fillStyle = "#f4efe6";
+    ctx.fillText("1993", 796, 1144);
     const link = $("#ownerDownload");
     if (state.ownerCardUrl) URL.revokeObjectURL(state.ownerCardUrl);
     if (canvas.toBlob) {
@@ -3539,9 +3679,29 @@
       state.profile.deliver = button.dataset.profileDeliver;
       $$("#profileDeliver .filter-chip").forEach(node => node.classList.toggle("active", node === button));
     });
+    $("#shareProductButton")?.addEventListener("click", shareCurrentProduct);
+    $("#cartDeliveryProfile")?.addEventListener("click", event => {
+      if (!event.target.closest("[data-cart-edit-profile]")) return;
+      closeModal("cartModal");
+      openProfile();
+      const details = $$("#profileModal details.profile-data")[1];
+      if (details) details.open = true;
+      window.setTimeout(() => {
+        const target = $("#profileCity")?.value ? $("#profileAddress") : ($("#profileName")?.value ? $("#profileCity") : $("#profileName"));
+        target?.focus({ preventScroll: false });
+      }, 120);
+      haptic("light");
+    });
     $("#cartContent").addEventListener("click", event => {
       if (event.target.closest("[data-cart-retry]")) { loadCatalog(); return; }
       if (event.target.closest("[data-cart-shop]")) { closeModal("cartModal"); scrollToId("catalog"); return; }
+      const openItem = event.target.closest("[data-cart-open]");
+      if (openItem && openItem.dataset.cartOpen) {
+        const pid = openItem.dataset.cartOpen;
+        closeModal("cartModal");
+        openProduct(pid);
+        return;
+      }
       const row = event.target.closest("[data-cart-key]");
       if (!row) return;
       const key = row.dataset.cartKey;
@@ -3553,8 +3713,10 @@
 
     $("#searchToggle").addEventListener("click", () => {
       $("#searchOverlay").classList.toggle("hidden");
-      $("#searchToggle").setAttribute("aria-expanded", String(!$("#searchOverlay").classList.contains("hidden")));
-      if (!$("#searchOverlay").classList.contains("hidden")) $("#searchInput").focus();
+      const open = !$("#searchOverlay").classList.contains("hidden");
+      $("#searchToggle").setAttribute("aria-expanded", String(open));
+      syncBackButton();
+      if (open) $("#searchInput").focus();
     });
     let searchRenderTimer = null;
     $("#searchInput").addEventListener("input", event => {
@@ -3565,8 +3727,16 @@
     });
     $("#searchInput").addEventListener("keydown", event => {
       if (event.key === "Enter") {
-        $("#searchOverlay").classList.add("hidden");
-        $("#searchToggle").setAttribute("aria-expanded", "false");
+        const q = String($("#searchInput").value || "").trim().toLowerCase();
+        closeSearchOverlay();
+        if (/жетон/i.test(q) && productById("tag-sila-i-chest")) {
+          state.search = "";
+          $("#searchInput").value = "";
+          $("#clearSearch").classList.add("hidden");
+          renderProducts();
+          openProduct("tag-sila-i-chest");
+          return;
+        }
         scrollToId("catalog");
       }
     });
@@ -3577,12 +3747,20 @@
       renderProducts();
     });
     $$("[data-hint]").forEach(button => button.addEventListener("click", () => {
-      state.search = button.dataset.hint;
+      const hint = String(button.dataset.hint || "").trim();
+      closeSearchOverlay();
+      if (/жетон/i.test(hint) && productById("tag-sila-i-chest")) {
+        state.search = "";
+        $("#searchInput").value = "";
+        $("#clearSearch").classList.add("hidden");
+        renderProducts();
+        openProduct("tag-sila-i-chest");
+        return;
+      }
+      state.search = hint;
       $("#searchInput").value = state.search;
       $("#clearSearch").classList.remove("hidden");
       renderProducts();
-      $("#searchOverlay").classList.add("hidden");
-      $("#searchToggle").setAttribute("aria-expanded", "false");
       scrollToId("catalog");
     }));
 
@@ -3750,14 +3928,7 @@
         event.preventDefault(); stepMedia(event.key === "ArrowLeft" ? -1 : 1);
       }
       if (event.key !== "Escape") return;
-      const search = $("#searchOverlay");
-      if (search && !search.classList.contains("hidden") && !state.modalStack.length) {
-        search.classList.add("hidden");
-        $("#searchToggle").setAttribute("aria-expanded", "false");
-        $("#searchToggle").focus();
-        return;
-      }
-      closeTopModal();
+      handleBackNavigation();
     });
 
     const sections = ["home", "catalog", "manifesto", "channel"];
