@@ -3054,16 +3054,16 @@
     ctx.font = "700 72px 'Sila Chest', Georgia, serif";
     ctx.fillText("001", 726, 108);
     ctx.fillStyle = "#f4efe6";
-    ctx.font = "700 76px 'Sila Chest', Georgia, serif";
-    ctx.fillText("КАРТА", 54, 218);
+    ctx.font = "700 72px 'Sila Chest', Georgia, serif";
+    ctx.fillText("КАРТА", 54, 206);
     ctx.fillStyle = "#b9b1a5";
-    ctx.fillText("ВЛАДЕЛЬЦА.", 54, 298);
+    ctx.fillText("ВЛАДЕЛЬЦА.", 54, 280);
     ctx.fillStyle = "#111114";
-    ctx.fillRect(56, 338, 788, 396);
+    ctx.fillRect(56, 314, 788, 354);
     if (product) {
       try {
         const image = await loadCanvasImage(imageFor(product));
-        const box = { x: 56, y: 338, w: 788, h: 396 };
+        const box = { x: 56, y: 314, w: 788, h: 354 };
         const scale = Math.max(box.w / image.naturalWidth, box.h / image.naturalHeight);
         const w = image.naturalWidth * scale;
         const h = image.naturalHeight * scale;
@@ -3083,15 +3083,15 @@
     }
     ctx.strokeStyle = "rgba(244, 239, 230, 0.16)";
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(56, 338, 788, 396);
-    let y = 796;
+    ctx.strokeRect(56, 314, 788, 354);
+    let y = 720;
     const field = (label, value, big = false) => {
       ctx.fillStyle = "#c93b2f";
-      ctx.font = "700 16px 'Manrope', -apple-system, sans-serif";
+      ctx.font = "700 15px 'Manrope', -apple-system, sans-serif";
       ctx.fillText(label, 56, y);
       ctx.fillStyle = "#f4efe6";
-      ctx.font = big ? "700 44px 'Sila Chest', Georgia, serif" : "600 28px 'Manrope', -apple-system, sans-serif";
-      y = wrapCanvasText(ctx, value || "—", 56, y + (big ? 46 : 36), 788, big ? 48 : 34, 2) + 26;
+      ctx.font = big ? "700 42px 'Sila Chest', Georgia, serif" : "600 26px 'Manrope', -apple-system, sans-serif";
+      y = wrapCanvasText(ctx, value || "—", 56, y + (big ? 42 : 33), 788, big ? 44 : 32, 2) + 18;
     };
     field("МОДЕЛЬ", row.product_name || "Вещь бренда", true);
     field("РАЗМЕР / ЗАКАЗ", `${row.size || "—"} · №${row.id || "—"}${row.quantity ? ` · ${row.quantity} шт.` : ""}`);

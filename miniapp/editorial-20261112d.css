@@ -1376,6 +1376,8 @@ main .section-heading .section-kicker::before,
 }
 
 .cart-line-end {
+  grid-column: auto !important;
+  margin-top: 0 !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: flex-end !important;
