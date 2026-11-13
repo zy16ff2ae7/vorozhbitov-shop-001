@@ -3938,7 +3938,10 @@ class BrandBot:
 
     def send_welcome(self, chat_id: int, caption: str, keyboard: dict[str, Any] | None) -> None:
         """Send flagship Drop 001 campaign key-visual on /start (no gif/animation)."""
-        founder_photo = self.local_asset_path("assets/client/bot-welcome-drop001-20261112c.jpg")
+        founder_photo = (
+            self.local_asset_path("assets/client/bot-welcome-drop001-20261113.jpg")
+            or self.local_asset_path("assets/client/bot-welcome-drop001-20261112c.jpg")
+        )
         if founder_photo and founder_photo.is_file():
             try:
                 self._send_welcome_file(chat_id, founder_photo, caption, keyboard)
