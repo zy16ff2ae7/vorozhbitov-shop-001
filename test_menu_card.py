@@ -72,8 +72,19 @@ class InlineMenuTests(unittest.TestCase):
             _,mgr_payload=self.api.calls[-1]
             urls=[b.get('url','') for row in mgr_payload['reply_markup']['inline_keyboard'] for b in row]
             self.assertTrue(any('t.me/intellectual_sabotage?text=' in u for u in urls))
+            self.assertTrue(self.bot.route_callback('c5',500,500,'order_direct:tee-sila-i-chest'))
+            _,direct_payload=self.api.calls[-1]
+            size_urls=[b.get('url','') for row in direct_payload['reply_markup']['inline_keyboard'] for b in row if b.get('text') in {'S','M','L','XL','2XL','3XL'}]
+            self.assertEqual(len(size_urls),6)
+            self.assertTrue(all('t.me/intellectual_sabotage?text=' in u for u in size_urls))
         finally:
             if prev is None:os.environ.pop('ORDER_MANAGER_USERNAME',None)
             else:os.environ['ORDER_MANAGER_USERNAME']=prev
+
+    def test_price_edit_rejects_menu_button_text(self):
+        self.db.upsert_user({'id':1,'first_name':'Admin'})
+        self.db.set_state(1,'prod_edit',{'pid':'tee-sila-i-chest','field':'price'})
+        self.bot.handle_product_edit_text(1,1,'Первый дроп')
+        self.assertEqual(self.bot.catalog.get('tee-sila-i-chest')['price'],'4 200 ₽')
 
 if __name__=='__main__':unittest.main()

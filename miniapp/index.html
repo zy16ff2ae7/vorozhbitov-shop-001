@@ -170,11 +170,11 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
   </div>
 
   <section class="welcome" id="welcome" aria-label="Приветствие">
-    <video class="welcome-media" id="welcomeVideo" src="assets/video/welcome-seal-20261112b.mp4?v=20261112o" muted autoplay loop playsinline webkit-playsinline preload="auto" disablepictureinpicture disableremoteplayback aria-hidden="true"></video>
-    <img class="welcome-media" id="welcomeFallback" src="assets/video/welcome-poster-20261112b.jpg?v=20261112o" alt="Никита Ворожбитов в фирменной футболке">
+    <video class="welcome-media hidden" id="welcomeVideo" muted playsinline webkit-playsinline preload="none" disablepictureinpicture disableremoteplayback aria-hidden="true"></video>
+    <img class="welcome-media" id="welcomeFallback" src="assets/drop/hero-founder-editorial-20261112d.webp" alt="Никита Ворожбитов в фирменной футболке">
     <div class="welcome-shade"></div>
-    <div class="welcome-top-controls">
-      <button class="welcome-motion is-active" id="welcomeMotion" type="button" aria-pressed="true" aria-label="Выключить приветственное видео"><span id="welcomeFrameCount" aria-hidden="true">ВИДЕО ВКЛ</span><span id="welcomeMotionIcon" aria-hidden="true">Ⅱ</span></button>
+    <div class="welcome-top-controls hidden">
+      <button class="welcome-motion" id="welcomeMotion" type="button" aria-pressed="false" aria-label="Выключить приветственное видео"><span id="welcomeFrameCount" aria-hidden="true">ВИДЕО ВЫКЛ</span><span id="welcomeMotionIcon" aria-hidden="true">▶</span></button>
       <button class="welcome-sound" id="welcomeSound" type="button" aria-pressed="false" aria-label="Включить фоновую музыку бренда">МУЗЫКА ВЫКЛ</button>
     </div>
     <div class="welcome-frame">
@@ -221,7 +221,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
         <span class="brand-type"><strong class="brand-wordmark">СИЛА И ЧЕСТЬ</strong><small>ПЕРВЫЙ ДРОП 001</small></span>
       </a>
       <div class="top-actions">
-        <button class="icon-button sound-trigger" id="topbarSoundBtn" type="button" aria-pressed="false" aria-label="Включить фоновую музыку" title="Фоновая музыка">
+        <button class="icon-button sound-trigger hidden" id="topbarSoundBtn" type="button" aria-pressed="false" aria-label="Включить фоновую музыку" title="Фоновая музыка">
           <span class="sound-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
         </button>
         <button class="icon-button" id="searchToggle" type="button" aria-label="Поиск" aria-expanded="false" aria-controls="searchOverlay"><span class="icon" data-icon="search"></span></button>
@@ -252,7 +252,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
             <img class="hero-layer hero-layer-fallback" src="assets/drop/hero-founder-editorial-20261112d.webp" alt="Никита Ворожбитов в футболке «СИЛА И ЧЕСТЬ»" fetchpriority="high" decoding="async" id="heroFallback" width="1202" height="1503">
           </div>
           <div class="hero-shade"></div>
-          <div class="hero-live" id="heroLiveBadge" role="button" tabindex="0" aria-label="Смотреть историю выпуска 001"><span class="pulse-dot"></span> <span id="heroLiveText"><small>ОСНОВАТЕЛЬ</small><strong>НИКИТА ВОРОЖБИТОВ</strong></span><span class="hero-story-pill" aria-hidden="true">▶ ИСТОРИЯ 001</span></div>
+          <div class="hero-live" id="heroLiveBadge" aria-label="Основатель Никита Ворожбитов"><span class="pulse-dot"></span> <span id="heroLiveText"><small>ОСНОВАТЕЛЬ</small><strong>НИКИТА ВОРОЖБИТОВ</strong></span></div>
         </div>
         <div class="hero-copy">
           <div class="eyebrow"><span>ОДЕЖДА С ХАРАКТЕРОМ</span><span>ДРОП 001</span></div>
@@ -311,7 +311,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
             <h2>ПЕРВЫЙ<br><em>ДРОП.</em></h2>
           </div>
           <div class="catalog-heading-meta">
-            <button class="compare-trigger" id="openCompareBtn" type="button" aria-haspopup="dialog">СРАВНИТЬ КРОЙ ⇄</button>
+            <button class="compare-trigger hidden" id="openCompareBtn" type="button" aria-haspopup="dialog">СРАВНИТЬ КРОЙ ⇄</button>
             <span class="item-count" id="productCount">— ВЕЩИ</span>
           </div>
         </div>
@@ -417,16 +417,16 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
         </div>
         <div class="manifesto-body">
           <h2>СИЛА —<br>В ДЕЛЕ.</h2>
-          <p class="founder-name">НИКИТА ВОРОЖБИТОВ <span>Основатель «СИЛА И ЧЕСТЬ»</span></p><p>Дисциплина начинается с простых вещей. Приходить. Делать. Держать слово.</p><p class="founder-context">В первом выпуске две модели из плотного хлопка 240–260 г/м²: «СИЛА И ЧЕСТЬ» прямого свободного кроя и «ВЗГЛЯД» с прилегающей атлетической посадкой по фигуре.</p>
+          <p class="founder-name">НИКИТА ВОРОЖБИТОВ <span>Основатель «СИЛА И ЧЕСТЬ»</span></p><p>Дисциплина начинается с простых вещей. Приходить. Делать. Держать слово.</p><p class="founder-context">В первом выпуске две модели прямого свободного кроя из плотного хлопка 240–260 г/м²: «СИЛА И ЧЕСТЬ» и «ВЗГЛЯД», а также стальной нумерованный жетон в подарок первой сотне.</p>
           <div class="founder-word-card" id="founderWordCard">
             <div class="founder-word-head">
               <span class="founder-word-kicker"><span class="pulse-dot"></span> ПРЯМАЯ РЕЧЬ ОСНОВАТЕЛЯ</span>
-              <button type="button" class="founder-audio-btn" id="founderAudioBtn" aria-pressed="false">▶ ПОД МУЗЫКУ БРЕНДА</button>
+              <button type="button" class="founder-audio-btn hidden" id="founderAudioBtn" aria-pressed="false">▶ ПОД МУЗЫКУ БРЕНДА</button>
             </div>
             <blockquote class="founder-word-quote" id="founderWordQuote">«Я не хотел делать мерч на один вечер. Каждая вещь этого выпуска сшита так, чтобы держать форму после зала, дороги и сотни стирок — за неё не стыдно отвечать своим именем».</blockquote>
             <audio id="founderVoiceAudio" class="hidden" preload="none"></audio>
           </div>
-          <div class="craft-compare" id="craftCompare" aria-label="Сравнение цехового чертежа и готового отшива">
+          <div class="craft-compare hidden" id="craftCompare" aria-label="Сравнение цехового чертежа и готового отшива">
             <div class="craft-compare-head">
               <span class="section-kicker">ОТ ЧЕРТЕЖА К ВЕЩИ</span>
               <small id="craftCompareHint">Тяни ползунок ⇄</small>
@@ -483,7 +483,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
 
 
       <section class="community-entry section-pad" aria-labelledby="communityEntryTitle"><div><span class="section-kicker">НА СВОИХ / В ЖИЗНИ</span><h2 id="communityEntryTitle">ПОСАДКА<br>В ЖИЗНИ.</h2><p>Фотографии в вещах бренда. Посмотри посадку и открой понравившуюся модель.</p></div><button type="button" class="button button-ghost" id="openCommunityFromHome">СМОТРЕТЬ ОБРАЗЫ ↗</button></section>
-      <section class="club-section section-pad" id="club" aria-labelledby="clubTitle">
+      <section class="club-section section-pad hidden" id="club" aria-labelledby="clubTitle">
         <div class="section-heading compact">
           <div>
             <span class="section-kicker">03 / КЛУБ ДИСЦИПЛИНЫ</span>
@@ -556,7 +556,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
           </details>
           <details>
             <summary><span>04</span> Что с размером?</summary>
-            <p>В карточке вещи работает подбор по росту и весу с учётом кроя («СИЛА И ЧЕСТЬ» — прямой свободный, «ВЗГЛЯД» — прилегающий по фигуре), а также полная таблица обхватов в сантиметрах.</p>
+            <p>Обе футболки первого выпуска («СИЛА И ЧЕСТЬ» и «ВЗГЛЯД») имеют прямой свободный крой. В карточке вещи работает подбор по росту и весу, а также полная таблица обхватов в сантиметрах.</p>
           </details>
           <details>
             <summary><span>05</span> Как смотреть вещь с разных сторон?</summary>
@@ -599,7 +599,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
             <h2 id="communityTitle">СВОИ<br><em>В ДЕЛЕ.</em></h2>
           </div>
         </div>
-        <p class="community-lead">Лукбук первого выпуска на Никите Ворожбитове и живые кадры своих людей. Носишь «СИЛА И ЧЕСТЬ» — пришли своё фото в чат магазина.</p>
+        <p class="community-lead">Основатель бренда «СИЛА И ЧЕСТЬ» и живые кадры своих людей. Носишь «СИЛА И ЧЕСТЬ» — пришли своё фото в чат магазина.</p>
         <div class="community-grid" id="communityGrid"></div>
         <div class="community-cta">
           <div>
@@ -618,7 +618,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
           <button class="stage-btn active" id="stagePhoto" data-stage="photo" role="tab" aria-selected="true" aria-controls="sheetImage" type="button">ФОТО</button>
           <button class="stage-btn" id="stage3d" data-stage="3d" role="tab" aria-selected="false" aria-controls="view3d" type="button">3D</button>
           <button class="stage-btn hidden" id="stageVideo" data-stage="video" role="tab" aria-selected="false" aria-controls="sheetVideo" type="button">360° ВИДЕО</button>
-        </div><div class="product-head-actions"><button class="sheet-story-btn" id="storyProductButton" type="button" aria-label="Поделиться в Telegram Stories" title="В Telegram Stories">СТОРИС ↗</button><button class="sheet-share" id="shareProductButton" type="button" aria-label="Поделиться вещью" title="Поделиться"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h3v3"/><path d="M16 4 9.5 10.5"/><path d="M15 11.5V15a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3.5"/></svg></button><button class="sheet-close" data-close="productModal" type="button" aria-label="Закрыть">×</button></div></div><div class="product-scroll" id="productScroll">
+        </div><div class="product-head-actions"><button class="sheet-story-btn hidden" id="storyProductButton" type="button" aria-label="Поделиться в Telegram Stories" title="В Telegram Stories">СТОРИС ↗</button><button class="sheet-share" id="shareProductButton" type="button" aria-label="Поделиться вещью" title="Поделиться"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h3v3"/><path d="M16 4 9.5 10.5"/><path d="M15 11.5V15a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3.5"/></svg></button><button class="sheet-close" data-close="productModal" type="button" aria-label="Закрыть">×</button></div></div><div class="product-scroll" id="productScroll">
       <div class="sheet-handle" aria-hidden="true"></div>
 
       <div class="sheet-image image-frame" id="sheetImageFrame">
@@ -744,7 +744,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
           </div>
         </div>
 
-        <button class="button button-ghost full-button" id="waitlistButton" type="button">ЖДАТЬ РАЗМЕР</button>
+        <button class="button button-ghost full-button hidden" id="waitlistButton" type="button">ЖДАТЬ РАЗМЕР</button>
         <blockquote class="sign-block" id="sheetSign">—</blockquote>
         <details class="product-more"><summary>О ВЕЩИ <span aria-hidden="true">+</span></summary><p class="sheet-description" id="sheetDescription">—</p></details>
         <section class="product-care" aria-label="Уход и возврат">
@@ -825,7 +825,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
         <p class="form-note">Сохраняется в облаке Telegram и на устройстве — автоматически подставляется в заказ.</p>
 
         </details>
-        <div class="registry-box" id="registryBox">
+        <div class="registry-box hidden" id="registryBox">
           <div class="registry-head">
             <span class="section-kicker">РЕЕСТР ВЫПУСКА 001</span>
             <strong>ПРОВЕРКА ПОДЛИННОСТИ</strong>
@@ -837,7 +837,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
           </div>
           <div class="registry-result hidden" id="registryResult" role="status" aria-live="polite"></div>
         </div>
-        <div class="homescreen-card" id="homeScreenCard">
+        <div class="homescreen-card hidden" id="homeScreenCard">
           <div>
             <small>БЫСТРЫЙ ДОСТУП</small>
             <strong>Иконка «СИЛА И ЧЕСТЬ» на экран</strong>
@@ -848,7 +848,7 @@ button:focus-visible, summary:focus-visible { outline:2px solid #cf5146; outline
         <div class="profile-stats profile-stats-single">
           <button type="button" id="profileCartBtn"><strong id="profileCartN">0</strong><span>в корзине</span></button>
         </div>
-        <div class="profile-club" id="profileClub">
+        <div class="profile-club hidden" id="profileClub">
           <div>
             <small>КЛУБ ДИСЦИПЛИНЫ</small>
             <strong id="profileClubRank">НОВИЧОК · 0 / 7</strong>

@@ -6,7 +6,7 @@
     brand: { name: "СИЛА И ЧЕСТЬ", descriptor: "Сила и честь", drop: "ВЫПУСК 001" },
     channel_url: "https://t.me/sila_i_chestb",
     privacy_url: "",
-    media: { welcome_motion: true },
+    media: { welcome_motion: false },
     drop_event: {}, film: [], club: {}, community: [],
     categories: [], products: []
   };
@@ -61,7 +61,7 @@
     upcomingProducts: [],
     giftWrap: loadJSON("vorozhbitov_gift_wrap", { enabled: false, motto: "Сила", recipient: "" }),
     bundleSize: "L",
-    hotspotsVisible: true,
+    hotspotsVisible: false,
     activeHotspot: -1,
     soundEnabled: false
   };
@@ -808,36 +808,7 @@
   function syncBundleCard() {
     const card = $("#bundleCard");
     if (!card) return;
-    const sila = productById("tee-sila-i-chest");
-    const vzglyad = productById("tee-vzglyad");
-    const canBundle = Boolean(
-      state.catalogReady &&
-      sila && vzglyad &&
-      Core.buyable(sila) && Core.buyable(vzglyad) &&
-      Core.available(sila) && Core.available(vzglyad) &&
-      state.category === "all" &&
-      !state.search.trim()
-    );
-    card.classList.toggle("hidden", !canBundle);
-    if (!canBundle) return;
-    const vzSet = new Set((vzglyad.sizes || []).map(s => normalizeBodySize(s)));
-    const commonSizes = (sila.sizes || []).filter(s => vzSet.has(normalizeBodySize(s)));
-    if (!commonSizes.length) {
-      card.classList.add("hidden");
-      return;
-    }
-    const pref = normalizeBodySize(state.profile?.size || "");
-    if (!commonSizes.includes(state.bundleSize)) {
-      state.bundleSize = commonSizes.find(s => normalizeBodySize(s) === pref) || (commonSizes.includes("L") ? "L" : commonSizes[0]);
-    }
-    const sizeBox = $("#bundleSizes");
-    if (sizeBox) {
-      sizeBox.innerHTML = commonSizes.map(size => `<button type="button" data-bundle-size="${escapeHTML(size)}" class="${state.bundleSize === size ? "active" : ""}" aria-pressed="${state.bundleSize === size}">${escapeHTML(size)}${pref && normalizeBodySize(size) === pref ? '<small class="my-size-dot">МОЙ</small>' : ""}</button>`).join("");
-    }
-    const totalEl = $("#bundleTotalPrice");
-    if (totalEl) {
-      totalEl.textContent = rubles(priceNumber(sila.price) + priceNumber(vzglyad.price));
-    }
+    card.classList.add("hidden");
   }
 
   function addBundleToCart() {
@@ -922,40 +893,8 @@
   function renderUpcomingDrop() {
     const section = $("#upcomingSection");
     const grid = $("#upcomingGrid");
-    if (!section || !grid) return;
-    const enabled = Boolean(state.data && state.data.show_upcoming_drop === true);
-    const items = enabled && Array.isArray(state.upcomingProducts) ? state.upcomingProducts : [];
-    section.classList.toggle("hidden", !items.length);
-    if (!items.length) {
-      grid.innerHTML = "";
-      return;
-    }
-    const waitlisted = new Set(loadJSON("vorozhbitov_waitlist", []));
-    const prefCanon = normalizeBodySize(state.profile?.size || "L");
-    grid.innerHTML = items.map(item => {
-      const sizes = Array.isArray(item.sizes) && item.sizes.length ? item.sizes : ["ONE SIZE"];
-      let activeSize = upcomingSelectedSizes.get(item.id);
-      if (!activeSize || !sizes.includes(activeSize)) {
-        activeSize = sizes.find(s => normalizeBodySize(s) === prefCanon) || sizes[Math.min(2, sizes.length - 1)] || sizes[0];
-        upcomingSelectedSizes.set(item.id, activeSize);
-      }
-      const isSaved = waitlisted.has(`${item.id}::${activeSize}`);
-      return `<article class="upcoming-card" data-upcoming-id="${escapeHTML(item.id)}">
-        <div class="upcoming-media">
-          <img src="${escapeHTML(imageFor(item))}" alt="${escapeHTML(item.name)}" loading="lazy" decoding="async">
-          <span class="upcoming-badge">${escapeHTML(item.badge || "ВЫПУСК 002")}</span>
-        </div>
-        <div class="upcoming-body">
-          <div class="upcoming-meta"><span>${escapeHTML(item.fit || "В разработке")}</span><strong>${escapeHTML(item.price || "Скоро")}</strong></div>
-          <h3>${escapeHTML(item.name)}</h3>
-          <p>${escapeHTML(item.description || "")}</p>
-          <div class="upcoming-sizes" role="group" aria-label="Размер для уведомления">
-            ${sizes.map(sz => `<button type="button" data-upcoming-size="${escapeHTML(sz)}" class="${sz === activeSize ? "active" : ""}">${escapeHTML(sz)}</button>`).join("")}
-          </div>
-          <button type="button" class="button ${isSaved ? "button-ghost is-saved" : "button-outline"} full-button" data-upcoming-waitlist="${escapeHTML(item.id)}">${isSaved ? `В ЛИСТЕ ОЖИДАНИЯ · ${escapeHTML(activeSize)} ✓` : `УЗНАТЬ ПЕРВЫМ · ${escapeHTML(activeSize)}`}</button>
-        </div>
-      </article>`;
-    }).join("");
+    if (section) section.classList.add("hidden");
+    if (grid) grid.innerHTML = "";
   }
 
   async function submitUpcomingWaitlist(productId, buttonEl) {
@@ -1001,8 +940,7 @@
     $("#emptyState").classList.toggle("hidden", products.length > 0 || !state.catalogReady);
     const compareBtn = $("#openCompareBtn");
     if (compareBtn) {
-      const hasBothTees = Boolean(productById("tee-sila-i-chest") && productById("tee-vzglyad"));
-      compareBtn.classList.toggle("hidden", !hasBothTees);
+      compareBtn.classList.add("hidden");
     }
     syncBundleCard();
     iconize(root);
@@ -1097,25 +1035,9 @@
   }
 
   function syncHotspots() {
-    const layer = $("#stageHotspots");
-    const toggle = $("#hotspotToggle");
-    const product = state.currentProduct;
-    if (!layer || !toggle) return;
-    const spots = (product && PRODUCT_HOTSPOTS[product.id]) || [];
-    const eligible = Boolean(spots.length && state.stage === "photo" && state.galleryGroup === "studio" && state.galleryIndex === 0);
-    toggle.classList.toggle("hidden", !eligible);
-    if (!eligible) {
-      layer.classList.add("hidden");
-      $("#hotspotCard")?.classList.add("hidden");
-      return;
-    }
-    toggle.textContent = state.hotspotsVisible ? `УЗЛЫ 0${spots.length}` : "УЗЛЫ СКРЫТЫ";
-    toggle.setAttribute("aria-pressed", String(state.hotspotsVisible));
-    layer.classList.toggle("hidden", !state.hotspotsVisible);
-    if (state.hotspotsVisible) {
-      layer.innerHTML = spots.map((spot, idx) => `<button type="button" class="hotspot-pin ${state.activeHotspot === idx ? "active" : ""}" style="left:${spot.x}%;top:${spot.y}%;" data-hotspot-idx="${idx}" aria-label="Узел ${escapeHTML(spot.code)}: ${escapeHTML(spot.title)}"><span>${escapeHTML(spot.code)}</span></button>`).join("");
-    }
-    renderHotspotCard();
+    $("#stageHotspots")?.classList.add("hidden");
+    $("#hotspotToggle")?.classList.add("hidden");
+    $("#hotspotCard")?.classList.add("hidden");
   }
 
   function renderGallery(product) {
@@ -1232,11 +1154,8 @@
   function renderBodySizeGuide(product) {
     const rows = bodySizeRows(product);
     const range = values => values.join("–");
-    const isFitted = product && product.id === "tee-vzglyad";
     const activeCanon = state.selectedSize ? normalizeBodySize(state.selectedSize) : "";
-    const cutNote = isFitted
-      ? "У модели «ВЗГЛЯД» прилегающий атлетический крой: ширина указана по груди изделия от подмышки до подмышки (см). Для плотной посадки по фигуре бери свой размер, для свободной — на 1 размер больше."
-      : "Ширина указана по груди изделия от подмышки до подмышки (см). У модели «СИЛА И ЧЕСТЬ» прямой свободный крой — бери свой базовый размер по росту и весу.";
+    const cutNote = "Ширина указана по груди изделия от подмышки до подмышки (см). Обе модели первого дропа («СИЛА И ЧЕСТЬ» и «ВЗГЛЯД») имеют прямой свободный крой — бери свой базовый размер по росту и весу.";
     $("#measurementTable").innerHTML = rows.length ? `<div class="measurement-table garment-measurements" role="table" aria-label="Промеры изделия и ориентиры по росту и весу"><div class="measurement-head" role="row"><span>РАЗМЕР</span><span>ШИРИНА</span><span>РОСТ, СМ</span><span>ВЕС, КГ</span></div>${rows.map(row => `<div role="row" class="${activeCanon && row.canon === activeCanon ? "is-selected-row" : ""}"><strong>${escapeHTML(row.size)}</strong><span>${escapeHTML(String(row.width))} см</span><span>${range(row.height)}</span><span>${range(row.weight)}</span></div>`).join("")}</div><p class="size-guide-note">${escapeHTML(cutNote)}</p>` : "<p class=\"size-guide-note\">Таблица для этой вещи пока недоступна.</p>";
   }
 
@@ -2335,11 +2254,9 @@
 
   function mediaConfig() {
     const media = (state.data && state.data.media) || {};
-    const staleLoop = !media.welcome_loop || media.welcome_loop.includes("welcome-real-fighter-20261028.mp4") || media.welcome_loop.includes("welcome-seal-20261029.mp4") || media.welcome_loop.includes("welcome-loop-20261112a.mp4") || media.welcome_loop === "assets/video/welcome-seal-20261112b.mp4" || media.welcome_loop.includes("v=20261112k") || media.welcome_loop.includes("v=20261112l") || media.welcome_loop.includes("v=20261112m") || media.welcome_loop.includes("v=20261112n");
-    const stalePoster = !media.welcome_poster || media.welcome_poster.includes("welcome-real-fighter-20261028.jpg") || media.welcome_poster.includes("welcome-seal-20261029.jpg") || media.welcome_poster.includes("welcome-poster-20261112a.jpg") || media.welcome_poster === "assets/video/welcome-poster-20261112b.jpg" || media.welcome_poster.includes("v=20261112k") || media.welcome_poster.includes("v=20261112l") || media.welcome_poster.includes("v=20261112m") || media.welcome_poster.includes("v=20261112n");
     return {
-      welcomeLoop: media.welcome_motion === false ? "" : (staleLoop ? "assets/video/welcome-seal-20261112b.mp4?v=20261112o" : media.welcome_loop),
-      welcomePoster: stalePoster ? "assets/video/welcome-poster-20261112b.jpg?v=20261112o" : media.welcome_poster
+      welcomeLoop: media.welcome_motion === true && media.welcome_loop ? media.welcome_loop : "",
+      welcomePoster: media.welcome_poster || "assets/drop/hero-founder-editorial-20261112d.webp"
     };
   }
 
@@ -3532,25 +3449,21 @@
     } else {
       setFitChoice(state.fitChoice || "regular");
     }
-    const isFitted = product.id === "tee-vzglyad";
+    const isFitted = false;
     if ($("#smartSizerSubtitle")) {
-      $("#smartSizerSubtitle").textContent = isFitted
-        ? "У «ВЗГЛЯДА» прилегающий атлетический крой — сидит плотно по торсу"
-        : "У «СИЛА И ЧЕСТЬ» прямой свободный крой — выбери желаемую посадку";
+      $("#smartSizerSubtitle").textContent = "Прямой свободный крой — выбери желаемую посадку";
     }
-    if ($("#adviceOversizeType")) $("#adviceOversizeType").textContent = isFitted ? "Комфортно · Свободнее" : "Свободно · Оверсайз";
-    if ($("#adviceOversizePill")) $("#adviceOversizePill").textContent = isFitted ? "+1 РАЗМЕР" : "ОВЕРСАЙЗ";
+    if ($("#adviceOversizeType")) $("#adviceOversizeType").textContent = "Свободно · Оверсайз";
+    if ($("#adviceOversizePill")) $("#adviceOversizePill").textContent = "ОВЕРСАЙЗ";
     if ($("#adviceOversizeText")) {
-      $("#adviceOversizeText").textContent = isFitted
-        ? "На размер больше — если не любишь плотную посадку в обтяжку."
-        : "Больше воздуха в плечах и груди — расслабленный силуэт.";
+      $("#adviceOversizeText").textContent = "Больше воздуха в плечах и груди — расслабленный силуэт.";
     }
     updateCombatSizer();
   }
   function updateCombatSizer() {
     const root = $("#smartSizer"), product = state.currentProduct; if (!root || !product || root.classList.contains("hidden")) return;
     $("#sizerHeightVal").textContent = String(combatSizer.height); $("#sizerWeightVal").textContent = String(combatSizer.weight);
-    const isFitted = product.id === "tee-vzglyad";
+    const isFitted = false;
     const fitMode = state.fitChoice === "close" ? "close" : "regular";
     const preferOversize = state.fitChoice === "oversize" || (isFitted && state.fitChoice !== "close" && state.fitChoice !== "regular");
     $("#adviceFitCard")?.classList.toggle("is-recommended", !preferOversize && state.fitChoice !== "oversize");
@@ -3941,10 +3854,8 @@
     const entries = (Array.isArray(state.data.community) ? state.data.community : [])
       .filter(item => item && typeof item.image === "string" && item.image);
     if (!entries.length) {
-      for (const [id, image] of [["tee-sila-i-chest", "assets/drop/hero-founder-editorial-20261112d.webp"], ["tee-vzglyad", "assets/client/vzglyad-nikita-front-20261111c.webp"]]) {
-        const product = productById(id);
-        if (product) entries.push({image, name:"Никита Ворожбитов", caption:product.name, city:"НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ", product_id:id});
-      }
+      const product = productById("tee-sila-i-chest");
+      if (product) entries.push({image:"assets/drop/tee-real-8272.jpg", name:"Никита Ворожбитов", caption:"ОСНОВАТЕЛЬ", city:"НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ", product_id:"tee-sila-i-chest"});
     }
     if (!entries.length) {
       grid.innerHTML = `<div class="community-empty"><span>ПЕРВЫЙ ВЫПУСК</span><strong>Стань первым своим.</strong><span>Здесь появятся фотографии покупателей первого дропа.</span></div>`;
@@ -4275,20 +4186,6 @@
       }
     });
     if ($("#dropFilmButton")) $("#dropFilmButton").addEventListener("click", () => openStories(0));
-    const heroLiveBadge = $("#heroLiveBadge");
-    if (heroLiveBadge) {
-      const triggerHeroStories = event => {
-        event.stopPropagation();
-        openStories(0);
-      };
-      heroLiveBadge.addEventListener("click", triggerHeroStories);
-      heroLiveBadge.addEventListener("keydown", event => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          triggerHeroStories(event);
-        }
-      });
-    }
     $("#zoomProduct").addEventListener("click", zoomProduct);
     $("#mediaPrev").addEventListener("click", () => stepMedia(-1));
     $("#mediaNext").addEventListener("click", () => stepMedia(1));

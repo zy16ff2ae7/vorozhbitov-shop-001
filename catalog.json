@@ -3,8 +3,8 @@
     "name": "СИЛА И ЧЕСТЬ",
     "descriptor": "сила и честь / городская форма",
     "drop": "ПЕРВЫЙ ДРОП",
-    "welcome_image": "assets/client/bot-welcome-drop001-20261112c.jpg",
-    "store_image": "assets/client/bot-welcome-drop001-20261112c.jpg"
+    "welcome_image": "assets/client/bot-welcome-drop001-20261113.jpg",
+    "store_image": "assets/client/bot-welcome-drop001-20261113.jpg"
   },
   "categories": [
     {
@@ -41,14 +41,14 @@
       "description": "Чёрная футболка первого тиража. Принт «СИЛА И ЧЕСТЬ» на груди. На спине — аппликация с монограммой у горловины и длинный узкий клинок с потёртой фактурой, отпечатанный на тесьме.",
       "signature": "В первом дропе — 100 жетонов в подарок, пока они есть. Со второго дропа подарочных жетонов не будет.",
       "photo_url": "",
-      "image": "assets/client/sila-front-studio-20261111c.webp",
+      "image": "assets/client/sila-front-studio-20261113.webp",
       "images": [
-        "assets/client/sila-front-studio-20261111c.webp",
-        "assets/client/sila-back-studio-20261111c.webp",
-        "assets/client/sila-detail-chest-20261112l.webp",
-        "assets/client/sila-detail-collar-20261111c.webp",
-        "assets/client/sila-detail-blade-20261111c.webp",
-        "assets/client/sila-detail-hemtag-20261111c.webp"
+        "assets/client/sila-front-studio-20261113.webp",
+        "assets/client/sila-back-studio-20261113.webp",
+        "assets/client/sila-detail-chest-20261113.webp",
+        "assets/client/sila-detail-collar-20261113.webp",
+        "assets/client/sila-detail-fabric-20261113.webp",
+        "assets/client/sila-detail-hemtag-20261113.webp"
       ],
       "badge": "ВЫПУСК 001",
       "material": "95% хлопок / 5% лайкра · плотность 240–260 г/м²",
@@ -62,37 +62,33 @@
       "stock_label": "Первый тираж",
       "active": true,
       "spin": [
-        "assets/client/sila-front-studio-20261111c.webp",
-        "assets/client/sila-back-studio-20261111c.webp"
+        "assets/client/sila-front-studio-20261113.webp",
+        "assets/client/sila-back-studio-20261113.webp"
       ],
       "image_labels": [
-        "Спереди · студия",
-        "Сзади · клинок и планка НВ",
-        "Макро · принт СИЛА И ЧЕСТЬ и ворот",
-        "Макро · горловина и планка НВ",
-        "Макро · клинок на тесьме",
+        "Спереди · живая футболка",
+        "Сзади · планка НВ и клинок",
+        "Макро · принт СИЛА И ЧЕСТЬ",
+        "Макро · планка НВ у горловины",
+        "Макро · плотный хлопок 240–260 г/м²",
         "Макро · жаккардовая бирка НВ"
       ],
       "featured": true,
       "media_note": "360° и предметные ракурсы — визуализация по материалам бренда. Посадка и мелкие детали могут отличаться.",
       "video": "assets/client/sila-studio-12s-20261111d.mp4",
-      "card_image": "assets/client/sila-front-studio-20261111c.webp",
+      "card_image": "assets/client/sila-front-studio-20261113.webp",
       "spin_labels": [
         "Спереди · 0°",
         "Сзади · 180°"
       ],
       "spin_kind": "visualization",
       "source_images": [
-        "assets/drop/hero-founder-editorial-20261112d.webp",
-        "assets/client/sila-nikita-back-20261111c.webp",
-        "assets/client/sila-production-back-20261111c.webp",
-        "assets/client/sila-collage-20261111c.jpg"
+        "assets/drop/tee-real-8272.jpg",
+        "assets/client/sila-production-back-20261111c.webp"
       ],
       "source_labels": [
-        "Никита Ворожбитов · посадка спереди",
-        "Никита Ворожбитов · посадка со спины",
-        "Цех · реальный пошив и планка НВ",
-        "Студийная раскладка · детали"
+        "Основатель · живое фото",
+        "Цех · реальный пошив и планка НВ"
       ],
       "measurements": [
         {
@@ -145,7 +141,7 @@
         }
       ],
       "measurements_verified": true,
-      "bot_image": "assets/client/sila-collage-20261111c.jpg",
+      "bot_image": "assets/client/sila-collage-20261113.jpg",
       "stock_by_size": {
         "S": 13,
         "M": 30,
@@ -168,22 +164,21 @@
         "2XL",
         "3XL"
       ],
-      "description": "Футболка «ВЗГЛЯД» из первого дропа бренда «СИЛА И ЧЕСТЬ». Прилегающий атлетический крой — сидит плотно по плечам и торсу (если любишь свободнее, бери на размер больше). Доступна по предзаказу.",
+      "description": "Футболка «ВЗГЛЯД» из первого дропа бренда «СИЛА И ЧЕСТЬ». Прямой свободный крой — плотный премиальный хлопок 240–260 г/м². Доступна по предзаказу.",
       "signature": "В первом дропе — 100 жетонов в подарок, пока они есть. Со второго дропа подарочных жетонов не будет.",
       "photo_url": "",
-      "image": "assets/client/vzglyad-front-studio-20261111c.webp",
+      "image": "assets/client/vzglyad-front-studio-20261113.webp",
       "images": [
-        "assets/client/vzglyad-front-studio-20261111c.webp",
-        "assets/client/vzglyad-back-studio-20261111c.webp",
-        "assets/client/vzglyad-front-angle-studio-20261111c.webp",
-        "assets/client/vzglyad-back-angle-studio-20261111c.webp",
-        "assets/client/vzglyad-detail-front-20261112l.webp",
-        "assets/client/vzglyad-detail-back-20261112l.webp",
-        "assets/client/sila-detail-hemtag-20261111c.webp"
+        "assets/client/vzglyad-front-studio-20261113.webp",
+        "assets/client/vzglyad-back-studio-20261113.webp",
+        "assets/client/vzglyad-detail-front-20261113.webp",
+        "assets/client/vzglyad-detail-back-20261113.webp",
+        "assets/client/sila-detail-fabric-20261113.webp",
+        "assets/client/sila-detail-hemtag-20261113.webp"
       ],
       "badge": "ПРЕДЗАКАЗ",
       "material": "95% хлопок / 5% лайкра · плотность 240–260 г/м²",
-      "fit": "Прилегающий атлетический крой",
+      "fit": "Прямой свободный крой",
       "details": [
         "Фирменный стальной жетон — в подарок первой сотне заказов первого дропа",
         "На груди: принт «ВЗГЛЯД», девиз «СИЛА И ЧЕСТЬ» и монограмма НВ с мечом",
@@ -193,42 +188,29 @@
       "stock_label": "Предзаказ",
       "active": true,
       "spin": [
-        "assets/client/vzglyad-front-studio-20261111c.webp",
-        "assets/client/vzglyad-front-angle-studio-20261111c.webp",
-        "assets/client/vzglyad-back-studio-20261111c.webp",
-        "assets/client/vzglyad-back-angle-studio-20261111c.webp"
+        "assets/client/vzglyad-front-studio-20261113.webp",
+        "assets/client/vzglyad-back-studio-20261113.webp"
       ],
       "image_labels": [
-        "Спереди · студия",
-        "Сзади · 10 принципов",
-        "Спереди · ракурс и плечо",
-        "Сзади · ракурс",
-        "Макро · принт ВЗГЛЯД и ворот",
+        "Спереди · живая футболка",
+        "Сзади · 10 принципов и меч НВ",
+        "Макро · принт ВЗГЛЯД",
         "Макро · 10 принципов и меч НВ",
+        "Макро · плотный хлопок 240–260 г/м²",
         "Макро · жаккардовая бирка НВ"
       ],
       "featured": false,
       "media_note": "360° и предметные ракурсы — визуализация по материалам бренда. Посадка и мелкие детали могут отличаться.",
-      "card_image": "assets/client/vzglyad-front-studio-20261111c.webp",
+      "card_image": "assets/client/vzglyad-front-studio-20261113.webp",
       "video": "assets/client/vzglyad-studio-12s-20261111d.mp4",
       "spin_labels": [
         "Спереди · 0°",
-        "Спереди сбоку · 45°",
-        "Сзади · 180°",
-        "Сзади сбоку · 225°"
+        "Сзади · 180°"
       ],
       "spin_kind": "visualization",
-      "source_images": [
-        "assets/client/vzglyad-nikita-front-20261111c.webp",
-        "assets/client/vzglyad-nikita-back-20261111c.webp",
-        "assets/client/vzglyad-collage-20261111c.jpg"
-      ],
-      "source_labels": [
-        "Никита Ворожбитов · посадка спереди",
-        "Никита Ворожбитов · посадка со спины",
-        "Студийная раскладка · 10 принципов"
-      ],
-      "bot_image": "assets/client/vzglyad-collage-20261111c.jpg",
+      "source_images": [],
+      "source_labels": [],
+      "bot_image": "assets/client/vzglyad-collage-20261113.jpg",
       "measurements": [
         {
           "size": "S",
@@ -353,7 +335,7 @@
       "source_labels": [
         "Исходный макет · принты и детали"
       ],
-      "upcoming": true,
+      "upcoming": false,
       "subtitle": "Плотный хлопок 250 г/м² · Выпуск 002"
     },
     {
@@ -440,7 +422,7 @@
         "assets/spin/honor-06.jpg",
         "assets/spin/honor-07.jpg"
       ],
-      "upcoming": true,
+      "upcoming": false,
       "subtitle": "Плотный футер 460 г/м² · Выпуск 002"
     },
     {
@@ -737,32 +719,20 @@
         "assets/v-cap.jpg",
         "assets/logo-cap.jpg"
       ],
-      "upcoming": true,
+      "upcoming": false,
       "subtitle": "Плотный хлопок · 6 клиньев · Выпуск 002"
     }
   ],
   "lookbook": [
     {
-      "image": "assets/drop/hero-founder-editorial-20261112d.webp",
-      "caption": "СИЛА И ЧЕСТЬ · НА ОСНОВАТЕЛЕ"
-    },
-    {
-      "image": "assets/client/sila-back-studio-20261111c.webp",
-      "caption": "СИЛА И ЧЕСТЬ · КЛИНОК НА СПИНЕ"
-    },
-    {
-      "image": "assets/client/vzglyad-nikita-front-20261111c.webp",
-      "caption": "ВЗГЛЯД · ПЕРЕД"
-    },
-    {
-      "image": "assets/client/vzglyad-nikita-back-20261111c.webp",
-      "caption": "ВЗГЛЯД · 10 ПРИНЦИПОВ"
+      "image": "assets/drop/tee-real-8272.jpg",
+      "caption": "ОСНОВАТЕЛЬ"
     }
   ],
   "media": {
-    "welcome_loop": "assets/video/welcome-seal-20261112b.mp4?v=20261112o",
+    "welcome_loop": "",
     "welcome_poster": "assets/video/welcome-poster-20261112b.jpg?v=20261112o",
-    "teaser": "assets/video/power-drop-001-20261111f.mp4?v=20261112o",
+    "teaser": "",
     "teaser_poster": "assets/video/power-drop-poster-20261111e.jpg?v=20261112o",
     "teaser_title": "СИЛА И ЧЕСТЬ",
     "teaser_caption": "Выпуск 001 · СИЛА И ЧЕСТЬ / ВЗГЛЯД · Первые 100 — жетон в подарок",
@@ -771,7 +741,7 @@
     "hero_image": "assets/drop/hero-founder-editorial-20261112d.webp",
     "hero_background": "assets/drop/hero-founder-editorial-20261112d.webp",
     "hero_subject": "assets/drop/hero-founder-editorial-20261112d.webp",
-    "welcome_motion": true,
+    "welcome_motion": false,
     "welcome_image": "assets/video/welcome-poster-20261112b.jpg?v=20261112o"
   },
   "drop_event": {
@@ -782,51 +752,7 @@
     "ends_at": "",
     "note": "Статус и размеры ниже берутся из живого каталога — без придуманных остатков."
   },
-  "film": [
-    {
-      "video": "assets/video/power-drop-001-20261111f.mp4?v=20261112o",
-      "poster": "assets/video/power-drop-poster-20261111e.jpg?v=20261112o",
-      "image": "assets/video/power-drop-poster-20261111e.jpg?v=20261112o",
-      "kicker": "01 / ТИЗЕР ВЫПУСКА 001",
-      "title": "СИЛА И ЧЕСТЬ",
-      "text": "Две футболки первого дропа из плотного хлопка 240–260 г/м² и нумерованный стальной жетон в подарок первой сотне.",
-      "cta": "catalog"
-    },
-    {
-      "image": "assets/drop/hero-founder-editorial-20261112d.webp",
-      "kicker": "02 / ОСНОВАТЕЛЬ",
-      "title": "НИКИТА ВОРОЖБИТОВ",
-      "text": "Основатель бренда «СИЛА И ЧЕСТЬ». Форма для тех, кто выбирает характер и дисциплину каждый день."
-    },
-    {
-      "image": "assets/client/sila-front-studio-20261111c.webp",
-      "kicker": "03 / ВЫПУСК 001",
-      "title": "СИЛА И ЧЕСТЬ",
-      "text": "Плотный чёрный хлопок 240–260 г/м², уставной шрифт на груди и жаккардовая бирка НВ на подоле.",
-      "product_id": "tee-sila-i-chest"
-    },
-    {
-      "image": "assets/client/sila-back-studio-20261111c.webp",
-      "kicker": "04 / ДЕТАЛЬ СПИНЫ",
-      "title": "КЛИНОК НА ТЕСЬМЕ",
-      "text": "Вертикальная планка с монограммой НВ от шва горловины и узкий стальной клинок вдоль позвоночника.",
-      "product_id": "tee-sila-i-chest"
-    },
-    {
-      "image": "assets/client/vzglyad-front-studio-20261111c.webp",
-      "kicker": "05 / ПРЕДЗАКАЗ",
-      "title": "ВЗГЛЯД",
-      "text": "Принт «ВЗГЛЯД» на груди и десять принципов на спине вокруг монограммы с мечом.",
-      "product_id": "tee-vzglyad"
-    },
-    {
-      "image": "assets/client/tag-hero-studio-20261111c.webp",
-      "kicker": "06 / ПЕРВАЯ СОТНЯ",
-      "title": "ЖЕТОН В ПОДАРОК",
-      "text": "Первые 100 заказов первого дропа получают именной нумерованный стальной жетон бесплатно.",
-      "cta": "catalog"
-    }
-  ],
+  "film": [],
   "club": {
     "title": "7 ДНЕЙ СЛОВА",
     "subtitle": "Клуб дисциплины СИЛА И ЧЕСТЬ",
@@ -843,35 +769,11 @@
   },
   "community": [
     {
-      "image": "assets/drop/hero-founder-editorial-20261112d.webp",
-      "name": "Никита Ворожбитов",
-      "caption": "СИЛА И ЧЕСТЬ · посадка спереди",
-      "city": "НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ",
+      "image": "assets/drop/tee-real-8272.jpg",
+      "name": "Основатель",
+      "caption": "СИЛА И ЧЕСТЬ",
+      "city": "ОСНОВАТЕЛЬ",
       "fit_note": "Прямой свободный крой · хлопок 240–260 г/м²",
-      "product_id": "tee-sila-i-chest"
-    },
-    {
-      "image": "assets/client/vzglyad-nikita-front-20261111c.webp",
-      "name": "Никита Ворожбитов",
-      "caption": "ВЗГЛЯД · посадка спереди",
-      "city": "НИКИТА ВОРОЖБИТОВ · ВЫПУСК 001",
-      "fit_note": "Прилегающий атлетический крой по фигуре",
-      "product_id": "tee-vzglyad"
-    },
-    {
-      "image": "assets/client/vzglyad-nikita-back-20261111c.webp",
-      "name": "Никита Ворожбитов",
-      "caption": "ВЗГЛЯД · 10 принципов со спины",
-      "city": "НИКИТА ВОРОЖБИТОВ · ВЫПУСК 001",
-      "fit_note": "Прилегающий крой · спина с монограммой НВ",
-      "product_id": "tee-vzglyad"
-    },
-    {
-      "image": "assets/client/sila-nikita-back-20261111c.webp",
-      "name": "Никита Ворожбитов",
-      "caption": "СИЛА И ЧЕСТЬ · клинок на спине",
-      "city": "НИКИТА ВОРОЖБИТОВ · ОСНОВАТЕЛЬ",
-      "fit_note": "Прямой свободный крой · планка НВ и клинок на тесьме",
       "product_id": "tee-sila-i-chest"
     }
   ],

@@ -3901,7 +3901,7 @@ class BrandBot:
                 return ""
             return f"\n\nНовости — в канале «{brand}». Там узнаёшь первым."
         if kind == "size":
-            return "\n\nНет размера? Нажми «Ждать размер» — напишем, когда вернётся."
+            return "\n\nЕсли сомневаешься в посадке — напиши менеджеру, подскажем по росту и весу."
         return "\n\nОткрой витрину и смотри, что осталось."
 
     def channel_link(self) -> str:
@@ -4277,24 +4277,20 @@ class BrandBot:
             f"{seal_mark} <b>О БРЕНДЕ · {esc(self.settings.brand_name)}</b>\n\n"
             "Бренд Никиты Ворожбитова. Городская форма для тех, кто выбирает дисциплину, слово и характер каждый день.\n\n"
             "<b>ВЫПУСК 001:</b>\n"
-            "• <b>«СИЛА И ЧЕСТЬ»</b> — плотный чёрный хлопок 240–260 г/м², уставной шрифт на груди, шеврон НВ у горловины и состаренный стальной клинок вдоль спины.\n"
-            "• <b>«ВЗГЛЯД»</b> — принт на груди и круг из 10 принципов братства вокруг монограммы НВ с мечом на спине (предзаказ).\n"
+            "• <b>«СИЛА И ЧЕСТЬ»</b> — плотный чёрный хлопок 240–260 г/м², прямой свободный крой, уставной шрифт на груди, шеврон НВ у горловины и состаренный стальной клинок вдоль спины.\n"
+            "• <b>«ВЗГЛЯД»</b> — плотный чёрный хлопок 240–260 г/м², прямой свободный крой, принт на груди и круг из 10 принципов братства вокруг монограммы НВ с мечом на спине (предзаказ).\n"
             f"• {tag_mark} <b>Стальной жетон № 00001–00100</b> — лазерная гравировка с двух сторон, в подарок первой сотне заказов первого дропа.\n\n"
             "Обе футболки можно покрутить в интерактивном <b>3D 360°</b> прямо в витрине."
             + (f"\n\n{ICON['support']} Связь с менеджером: @{esc(self.settings.support_username)}" if self.settings.support_username else "")
             + self.cta("channel"),
-            inline_keyboard([[("▶ Тизер выпуска", "teaser")]] + self.channel_rows() + nav_rows(("Главное меню", "menu"))),
+            inline_keyboard(self.channel_rows() + nav_rows(("Главное меню", "menu"))),
         )
 
     def account_menu(self, user_id: int) -> dict[str, Any]:
-        """Кабинет покупателя: покупки и лист ожидания."""
+        """Кабинет покупателя: покупки и связь с менеджером."""
         rows = [
             [(icon("orders", "Мои покупки"), "my_orders")],
         ]
-        waiting = self.db.waitlist_for_user(user_id)
-        if waiting:
-            label = "Жду размер" if len(waiting) == 1 else f"Жду размер ({len(waiting)})"
-            rows.append([(icon("wait", label), "waits")])
         rows.extend(self.channel_rows())
         rows.extend(nav_rows(("Главное меню", "menu")))
         return inline_keyboard(rows)
@@ -4636,16 +4632,9 @@ class BrandBot:
             rows = [
                 [(order_label, f"order_direct:{product_id}")],
             ]
-            extra_row: list[tuple[str, str]] = []
-            if str(product.get("video") or "").strip():
-                extra_row.append((icon("looks", "360°-видео"), f"pvid:{product_id}"))
-            extra_row.append((icon("size", "Размеры"), f"size_guide:product:{product_id}"))
-            rows.append(extra_row)
-            rows.append([(icon("wait", "Ждать размер"), f"wait:{product_id}")])
         else:
             rows = [
-                [(icon("support", "Написать менеджеру →"), "support")],
-                [(icon("wait", "Ждать размер"), f"wait:{product_id}")],
+                [(order_label, f"order_direct:{product_id}")],
             ]
         if self.is_admin(user_id):
             rows.append([(icon("tools", "Править вещь"), f"eedit:{product_id}")])
@@ -4699,8 +4688,26 @@ class BrandBot:
             inline_keyboard(rows),
         )
 
+    def manager_order_url(self, user_id: int, product: dict[str, Any], size: str) -> str:
+        """Build direct https://t.me/<manager>?text=... URL for immediate 1-tap size checkout."""
+        user = self.db.get_user(user_id)
+        phone = str(user["phone"] or "") if user else ""
+        verb = "предзаказ" if product.get("badge") == "ПРЕДЗАКАЗ" or "предзаказ" in str(product.get("stock_label", "")).lower() else "заказ"
+        gift = self.gift_for_checkout()
+        gift_line = "• Подарок: ЖЕТОН (первые 100 жетонов к дропу 001, со 2-го дропа в подарок не будет)\n" if gift else ""
+        message = (
+            f"Здравствуйте! Хочу оформить {verb}:\n"
+            f"• {product['name']} · размер {size} · 1 шт. · {product['price']}\n"
+            f"{gift_line}"
+            f"Телефон: {phone or 'укажу в чате'}"
+        )
+        return (
+            f"https://t.me/{order_manager_username()}?text="
+            f"{urllib.parse.quote(message, safe='')}"
+        )
+
     def choose_manager_size(self, chat_id: int, user_id: int, product_id: str) -> None:
-        """Main checkout: size first, then a prefilled manager chat, never an invoice."""
+        """Main checkout: tapping a size button opens the prefilled manager chat directly."""
         product = self.catalog.get(product_id)
         if not product or product.get("gift"):
             self.product_missing(chat_id, "Эту вещь нельзя оформить отдельно.")
@@ -4716,15 +4723,14 @@ class BrandBot:
             return
         sizes = [str(size) for size in product["sizes"]]
         rows = [
-            [(size, f"msize:{product_id}:{size}") for size in sizes[index:index + 4]]
+            [(size, self.manager_order_url(user_id, product, size)) for size in sizes[index:index + 4]]
             for index in range(0, len(sizes), 4)
         ]
-        rows.append([(icon("size", "Таблица размеров"), f"size_guide:order_direct:{product_id}")])
         rows.extend(nav_rows((str(product["name"]), f"product:{product_id}")))
         self.api.send_message(
             chat_id,
-            f"<b>ОФОРМИТЬ ЗАКАЗ</b>\n\n{esc(str(product['name']))}\n"
-            "Выбери размер. Затем откроется Telegram-чат с менеджером и готовым текстом заказа.",
+            f"<b>ОФОРМИТЬ ЗАКАЗ</b>\n\n{esc(str(product['name']))} · {esc(str(product['price']))}\n"
+            "Выбери размер — сразу откроется чат с менеджером и готовым текстом заказа.",
             inline_keyboard(rows),
         )
 
@@ -4797,8 +4803,7 @@ class BrandBot:
                 "Цена этой вещи записана так, что счёт по ней не выставить.\n"
                 "Напиши менеджеру — оформим вручную, без потери места в очереди.",
                 inline_keyboard(
-                    [[(icon("support", "Поддержка →"), "support")],
-                     [(icon("wait", "Ждать размер"), f"wait:{product_id}")]]
+                    [[(icon("support", "Поддержка →"), "support")]]
                     + nav_rows((str(product["name"]), f"product:{product_id}"))
                 ),
             )
@@ -5794,7 +5799,7 @@ class BrandBot:
             "<b>2XL / XXL</b> · 69 см · 190–200 см · 102–118 кг (грудь 120–128)\n"
             "<b>3XL</b> · 72 см · 196–206 см · 114–136 кг (грудь 128–136)\n\n"
             "• <b>СИЛА И ЧЕСТЬ</b> — прямой свободный крой.\n"
-            "• <b>ВЗГЛЯД</b> — прилегающий крой по фигуре (если хочешь свободнее, бери на размер выше)."
+            "• <b>ВЗГЛЯД</b> — прямой свободный крой."
         )
         back: tuple[str, str] | None = None
         target_product: dict[str, Any] | None = None
@@ -6352,6 +6357,9 @@ class BrandBot:
             self.admin_edit_product(chat_id, pid)
             return True
         value = " ".join(text.split())
+        if value.lower() in {"первый дроп", "размеры", "канал", "корзина", "заказы", "магазин", "помощь", "о бренде", "витрина"}:
+            self.db.clear_state(user_id)
+            return False
         if field == "sizes":
             sizes = [part.strip() for part in value.split(",") if part.strip()]
             if not sizes or len(sizes) > 8 or any(len(part) > 12 for part in sizes):
@@ -6364,8 +6372,8 @@ class BrandBot:
             change: dict[str, Any] = {"sizes": sizes}
             label = f"Размеры: {', '.join(sizes)}"
         elif field == "price":
-            if not value or len(value) > 40:
-                self.api.send_message(chat_id, "Цена — короткая строка: 4 900 или 4 900 - 5 200.")
+            if not value or len(value) > 40 or not re.search(r"\d", value):
+                self.api.send_message(chat_id, "Цена — короткая строка с суммой: 4 200 ₽ или 3 900 ₽.")
                 return True
             change = {"price": value}
             label = f"Цена: {value}"
@@ -8424,9 +8432,9 @@ class BrandBot:
             (
                 "tee-vzglyad",
                 "Футболка «ВЗГЛЯД» · 3 900 ₽",
-                "Прилегающий атлетический крой · 10 принципов на спине · Предзаказ",
+                "Прямой свободный крой · 10 принципов на спине · Предзаказ",
                 f"{origin}/assets/client/vzglyad-collage-20261111c.jpg",
-                f"<b>ВЗГЛЯД · ВЫПУСК 001</b>\nПрилегающий атлетический крой · Хлопок 250 г/м² · 3 900 ₽\nПредзаказ первого дропа бренда Никиты Ворожбитова.",
+                f"<b>ВЗГЛЯД · ВЫПУСК 001</b>\nПрямой свободный крой · Хлопок 250 г/м² · 3 900 ₽\nПредзаказ первого дропа бренда Никиты Ворожбитова.",
             ),
             (
                 "tag-sila-i-chest",
